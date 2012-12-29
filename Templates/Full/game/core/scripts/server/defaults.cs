@@ -53,7 +53,7 @@ $Pref::Server::AdminPassword = "";
 
 // Misc server settings.
 $Pref::Server::MaxPlayers = 64;
-$Pref::Server::TimeLimit = 20;               // In minutes
+$Pref::Server::TimeLimit = 0;               // In minutes
 $Pref::Server::KickBanTime = 300;            // specified in seconds
 $Pref::Server::BanTime = 1800;               // specified in seconds
 $Pref::Server::FloodProtectionEnabled = 1;
