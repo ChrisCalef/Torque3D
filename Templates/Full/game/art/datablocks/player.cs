@@ -484,13 +484,13 @@ datablock PlayerData(DefaultPlayerData)
    computeCRC = false;
 
    // Third person shape
-   shapeFile = "art/shapes/actors/Soldier/soldier_rigged.dae";
+   shapeFile = "art/shapes/actors/Soldier/soldier_rigged.dts";//soldier_rigged.dae
    cameraMaxDist = 3;
    allowImageStateAnimation = true;
 
    // First person arms
    imageAnimPrefixFP = "soldier";
-   shapeNameFP[0] = "art/shapes/actors/Soldier/FP/FP_SoldierArms.DAE";
+   shapeNameFP[0] = "art/shapes/actors/Soldier/FP/FP_SoldierArms.dts";//FP_SoldierArms.dae
 
    canObserve = 1;
    cmdCategory = "Clients";
