@@ -72,9 +72,21 @@ new TerrainMaterial()
    diffuseSize = "200";
 };
 
-new TerrainMaterial()
+//new TerrainMaterial()
+//{
+   //internalName = "sand";
+   //diffuseMap = "art/terrains/Example/sand";
+   //detailMap = "art/terrains/Example/sand_d";
+   //detailSize = "10";
+   //detailDistance = "100";
+   //isManaged = "1";
+   //detailBrightness = "1";
+   //Enabled = "1";
+   //diffuseSize = "200";
+//};
+
+new Material(sand)
 {
-   internalName = "sand";
    diffuseMap = "art/terrains/Example/sand";
    detailMap = "art/terrains/Example/sand_d";
    detailSize = "10";
@@ -84,4 +96,3 @@ new TerrainMaterial()
    Enabled = "1";
    diffuseSize = "200";
 };
-
