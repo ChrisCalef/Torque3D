@@ -54,6 +54,10 @@ protected:
 
 public:
 
+	//Ecstasy Motion
+	F32		mScaleFactor;//This is scale factor to convert the incoming file to meters, for Torque.  
+								//(*Not* the same thing as FBX unit scale factor, which is in centimeters.) 
+
    AppNode();
    virtual ~AppNode();
 

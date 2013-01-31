@@ -85,6 +85,7 @@ public:
    static const double MinFrameRate;
    static const double MaxFrameRate;
    static const double AppGroundFrameRate;
+	bool mHasSequences;//Ecstasy Motion, appSequences.size() crashes if none.
 
 protected:
    // Variables used during loading that must be held until the shape is deleted
@@ -111,6 +112,8 @@ protected:
 
    // Collect the nodes, objects and sequences for the scene
    virtual void enumerateScene() = 0;
+   virtual void postEnumerateScene() = 0;
+
    bool processNode(AppNode* node);
    virtual bool ignoreNode(const String& name) { return false; }
    virtual bool ignoreMesh(const String& name) { return false; }
@@ -179,5 +182,68 @@ public:
 
    TSShape* generateShape(const Torque::Path& path);
 };
+
+
+//TEMP: This is embarrassing but I ran into trouble with undefined externals when I tried to put
+//these things in the right way, for now tacking them here..
+
+//QuatTypes.h
+typedef struct {F32 x, y, z, w;} Quat; /* Quaternion */
+enum QuatPart {X, Y, Z, W};
+typedef F32 HMatrix[4][4]; /* Right-handed, for column vectors */
+typedef Quat EulerAngles;    /* (x,y,z)=ang 1,2,3, w=order code  */
+
+//EulerAngles.h
+#define EulFrmS	     0
+#define EulFrmR	     1
+#define EulFrm(ord)  ((unsigned)(ord)&1)
+#define EulRepNo     0
+#define EulRepYes    1
+#define EulRep(ord)  (((unsigned)(ord)>>1)&1)
+#define EulParEven   0
+#define EulParOdd    1
+#define EulPar(ord)  (((unsigned)(ord)>>2)&1)
+#define EulSafe	     "\000\001\002\000"
+#define EulNext	     "\001\002\000\001"
+#define EulAxI(ord)  ((int)(EulSafe[(((unsigned)(ord)>>3)&3)]))
+#define EulAxJ(ord)  ((int)(EulNext[EulAxI(ord)+(EulPar(ord)==EulParOdd)]))
+#define EulAxK(ord)  ((int)(EulNext[EulAxI(ord)+(EulPar(ord)!=EulParOdd)]))
+#define EulAxH(ord)  ((EulRep(ord)==EulRepNo)?EulAxK(ord):EulAxI(ord))
+    /* EulGetOrd unpacks all useful information about order simultaneously. */
+#define EulGetOrd(ord,i,j,k,h,n,s,f) {unsigned o=ord;f=o&1;o>>=1;s=o&1;o>>=1;n=o&1;o>>=1;i=EulSafe[o&3];j=EulNext[i+n];k=EulNext[i+1-n];h=s?k:i;}
+    /* EulOrd creates an order value between 0 and 23 from 4-tuple choices. */
+#define EulOrd(i,p,r,f)	   (((((((i)<<1)+(p))<<1)+(r))<<1)+(f))
+    /* Static axes */
+#define EulOrdXYZs    EulOrd(X,EulParEven,EulRepNo,EulFrmS)
+#define EulOrdXYXs    EulOrd(X,EulParEven,EulRepYes,EulFrmS)
+#define EulOrdXZYs    EulOrd(X,EulParOdd,EulRepNo,EulFrmS)
+#define EulOrdXZXs    EulOrd(X,EulParOdd,EulRepYes,EulFrmS)
+#define EulOrdYZXs    EulOrd(Y,EulParEven,EulRepNo,EulFrmS)
+#define EulOrdYZYs    EulOrd(Y,EulParEven,EulRepYes,EulFrmS)
+#define EulOrdYXZs    EulOrd(Y,EulParOdd,EulRepNo,EulFrmS)
+#define EulOrdYXYs    EulOrd(Y,EulParOdd,EulRepYes,EulFrmS)
+#define EulOrdZXYs    EulOrd(Z,EulParEven,EulRepNo,EulFrmS)
+#define EulOrdZXZs    EulOrd(Z,EulParEven,EulRepYes,EulFrmS)
+#define EulOrdZYXs    EulOrd(Z,EulParOdd,EulRepNo,EulFrmS)
+#define EulOrdZYZs    EulOrd(Z,EulParOdd,EulRepYes,EulFrmS)
+    /* Rotating axes */
+#define EulOrdZYXr    EulOrd(X,EulParEven,EulRepNo,EulFrmR)
+#define EulOrdXYXr    EulOrd(X,EulParEven,EulRepYes,EulFrmR)
+#define EulOrdYZXr    EulOrd(X,EulParOdd,EulRepNo,EulFrmR)
+#define EulOrdXZXr    EulOrd(X,EulParOdd,EulRepYes,EulFrmR)
+#define EulOrdXZYr    EulOrd(Y,EulParEven,EulRepNo,EulFrmR)
+#define EulOrdYZYr    EulOrd(Y,EulParEven,EulRepYes,EulFrmR)
+#define EulOrdZXYr    EulOrd(Y,EulParOdd,EulRepNo,EulFrmR)
+#define EulOrdYXYr    EulOrd(Y,EulParOdd,EulRepYes,EulFrmR)
+#define EulOrdYXZr    EulOrd(Z,EulParEven,EulRepNo,EulFrmR)
+#define EulOrdZXZr    EulOrd(Z,EulParEven,EulRepYes,EulFrmR)
+#define EulOrdXYZr    EulOrd(Z,EulParOdd,EulRepNo,EulFrmR)
+#define EulOrdZYZr    EulOrd(Z,EulParOdd,EulRepYes,EulFrmR)
+
+EulerAngles Eul_(F32 ai, F32 aj, F32 ah, S32 order);
+Quat Eul_ToQuat(EulerAngles ea);
+void Eul_ToHMatrix(EulerAngles ea, HMatrix M);
+EulerAngles Eul_FromHMatrix(HMatrix M, S32 order);
+EulerAngles Eul_FromQuat(Quat q, S32 order);
 
 #endif // _TSSHAPE_LOADER_H_

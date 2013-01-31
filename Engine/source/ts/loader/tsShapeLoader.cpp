@@ -22,6 +22,7 @@
 
 #include "platform/platform.h"
 #include "ts/loader/tsShapeLoader.h"
+#include "ts/fbx/fbxShapeLoader.h"
 
 #include "core/volume.h"
 #include "materials/materialList.h"
@@ -39,6 +40,19 @@ Torque::Path TSShapeLoader::shapePath;
 
 //------------------------------------------------------------------------------
 // Utility functions
+
+static bool isEqualQ16(const QuatF& a, const QuatF& b)
+{   
+   U16 MAX_VAL = 0x7fff;
+
+   // convert components to 16 bit, then test for equality
+   S16 x, y, z, w;
+   x = ((S16)(a.x * F32(MAX_VAL))) - ((S16)(b.x * F32(MAX_VAL)));
+   y = ((S16)(a.y * F32(MAX_VAL))) - ((S16)(b.y * F32(MAX_VAL)));
+   z = ((S16)(a.z * F32(MAX_VAL))) - ((S16)(b.z * F32(MAX_VAL)));
+   w = ((S16)(a.w * F32(MAX_VAL))) - ((S16)(b.w * F32(MAX_VAL)));
+   return (x==0) && (y==0) && (z==0) && (w==0);
+}
 
 void TSShapeLoader::zapScale(MatrixF& mat)
 {
@@ -147,6 +161,8 @@ TSShape* TSShapeLoader::generateShape(const Torque::Path& path)
 
    // Create objects (meshes and details)
    generateObjects();
+
+	postEnumerateScene();//Ecstasy Motion, needed it for FBX Clusters.
 
    // Generate initial object states and node transforms
    generateDefaultStates();
@@ -583,6 +599,14 @@ void TSShapeLoader::generateDefaultStates()
       Point3F trans, scale;
       generateNodeTransform(appNodes[iNode], DefaultTime, false, 0, rot, trans, srot, scale);
 
+		Point3F in; in.zero();//Ecstasy Motion, fix handedness.
+		Point3F out; out.zero();
+		in = trans;
+		out.x = -in.x;
+		out.y = in.z;
+		out.z = in.y;
+		trans = out;
+
       // Add default node translation and rotation
       addNodeRotation(rot, true);
       addNodeTranslation(trans, true);
@@ -695,6 +719,7 @@ void TSShapeLoader::generateMaterialList()
       updateProgress(Load_GenerateMaterials, "Generating materials...", AppMesh::appMaterials.size(), iMat);
 
       AppMaterial* appMat = AppMesh::appMaterials[iMat];
+		Con::printf("Material name:  %s",appMat->getName().c_str());
       shape->materialList->push_back(appMat->getName(), appMat->getFlags(), U32(-1), U32(-1), U32(-1), 1.0f, appMat->getReflectance());
    }
 }
@@ -705,12 +730,31 @@ void TSShapeLoader::generateMaterialList()
 
 void TSShapeLoader::generateSequences()
 {
+	FbxAppSequence *appSeq = NULL;
+	Con::printf("generating sequences: %d",appSequences.size());
    for (int iSeq = 0; iSeq < appSequences.size(); iSeq++)
    {
       updateProgress(Load_GenerateSequences, "Generating sequences...", appSequences.size(), iSeq);
 
       // Initialize the sequence
       appSequences[iSeq]->setActive(true);
+		Con::printf("setActive: %d",iSeq);
+		
+      F32 kDuration = appSequences[iSeq]->getEnd() - appSequences[iSeq]->getStart();
+		if (kDuration <= 0)
+		{
+			Con::printf("OOPS, duration is less than or equal to zero, this is not a happy anim.");
+			return;
+		} else {
+			Con::printf("anim has duration of: %f",kDuration);
+		}
+		//Ecstasy Motion, FBX
+		appSeq = dynamic_cast<FbxAppSequence*>(appSequences[iSeq]);
+		if (appSeq && (appSeq->seqKeyframes==0))
+		{
+			Con::printf("OOPS, fbx sequence has no keyframes, this is not a happy anim.");
+			return;
+		}
 
       shape->sequences.increment();
       TSShape::Sequence& seq = shape->sequences.last();
@@ -722,8 +766,18 @@ void TSShapeLoader::generateSequences()
 
       // Compute duration and number of keyframes (then adjust time between frames to match)
       seq.duration = appSequences[iSeq]->getEnd() - appSequences[iSeq]->getStart();
-      seq.numKeyframes = (S32)(seq.duration * appSequences[iSeq]->fps + 0.5f) + 1;
 
+		if (appSeq)
+			seq.numKeyframes = appSeq->seqKeyframes;
+		else
+	      seq.numKeyframes = seq.duration / appSequences[iSeq]->delta + 0.5f;
+
+		if (seq.numKeyframes > 0)
+	      appSequences[iSeq]->delta = seq.duration / seq.numKeyframes;
+		else
+			appSequences[iSeq]->delta = 1.0;//ERROR CONDITION, at least this is not dividing by zero.
+
+		Con::printf("numKeyframes:  %d   delta  %f",seq.numKeyframes,appSequences[iSeq]->delta);
       seq.sourceData.start = 0;
       seq.sourceData.end = seq.numKeyframes-1;
       seq.sourceData.total = seq.numKeyframes;
@@ -803,10 +857,10 @@ void TSShapeLoader::setRotationMembership(TSShape::Sequence& seq)
 
 void TSShapeLoader::setTranslationMembership(TSShape::Sequence& seq)
 {
-   for (int iNode = 0; iNode < appNodes.size(); iNode++)
-   {
-      // Check if any of the node translations are different to
-      // the default translation
+   //for (int iNode = 0; iNode < appNodes.size(); iNode++)
+	for (int iNode = 0; iNode < 1; iNode++)//TEMP: mostly we don't need translations anywhere except the
+   {//root node, but this should still work... unfortunately getting serious differences between defaultTrans
+		//and nodeTransCache for finger & toe data, sidestepping it for now.
       Point3F& defaultTrans = shape->defaultTranslations[iNode];
 
       for (int iFrame = 0; iFrame < seq.numKeyframes; iFrame++)
@@ -823,6 +877,7 @@ void TSShapeLoader::setTranslationMembership(TSShape::Sequence& seq)
 void TSShapeLoader::setScaleMembership(TSShape::Sequence& seq)
 {
    Point3F unitScale(1,1,1);
+   QuatF unitRot(0,0,0,1);
 
    U32 arbitraryScaleCount = 0;
    U32 alignedScaleCount = 0;
@@ -837,7 +892,7 @@ void TSShapeLoader::setScaleMembership(TSShape::Sequence& seq)
          if (!unitScale.equal(scale))
          {
             // Determine what type of scale this is
-            if (!nodeScaleRotCache[iNode][iFrame].isIdentity())
+            if (!isEqualQ16(unitRot, nodeScaleRotCache[iNode][iFrame]))
                arbitraryScaleCount++;
             else if (scale.x != scale.y || scale.y != scale.z)
                alignedScaleCount++;
@@ -916,16 +971,32 @@ void TSShapeLoader::fillNodeTransformCache(TSShape::Sequence& seq, const AppSequ
       nodeScaleCache[i] = new Point3F[seq.numKeyframes];
 
    // get the node transforms for every frame
-   for (int iFrame = 0; iFrame < seq.numKeyframes; iFrame++)
+	F32 time = appSeq->getStart();
+	F32 duration = appSeq->getEnd();
+	for (int iFrame = 0; iFrame < seq.numKeyframes; iFrame++, time += appSeq->delta)
    {
-      F32 time = appSeq->getStart() + seq.duration * iFrame / getMax(1, seq.numKeyframes - 1);
+		S32 frame = (S32)(time/duration * (F32)seq.numKeyframes);	
+
       for (int iNode = 0; iNode < appNodes.size(); iNode++)
       {
+			//Con::printf("calling generateNodeTransform, time = %f, duration %f,  frame = %d, keyframes %d",
+			//	time,duration,frame,seq.numKeyframes);
+
+			//ARGH, this is the wrong way, but what I thought was the right way didn't work...
+			FbxShapeLoader* fsl = NULL;
+			fsl = dynamic_cast<FbxShapeLoader*>(this);
+			if (fsl)
+			{
+				fsl->fbxGenerateNodeTransform(appNodes[iNode], frame, seq.isBlend(), appSeq->getBlendRefTime(),
+					nodeRotCache[iNode][iFrame], nodeTransCache[iNode][iFrame],
+					nodeScaleRotCache[iNode][iFrame], nodeScaleCache[iNode][iFrame]);
+			} else {
          generateNodeTransform(appNodes[iNode], time, seq.isBlend(), appSeq->getBlendRefTime(),
                                nodeRotCache[iNode][iFrame], nodeTransCache[iNode][iFrame],
                                nodeScaleRotCache[iNode][iFrame], nodeScaleCache[iNode][iFrame]);
       }
    }
+}
 }
 
 void TSShapeLoader::addNodeRotation(QuatF& rot, bool defaultVal)
@@ -1030,15 +1101,17 @@ void TSShapeLoader::generateGroundAnimation(TSShape::Sequence& seq, const AppSeq
    seq.numGroundFrames = (S32)((seq.duration + 0.25f/AppGroundFrameRate) * AppGroundFrameRate);
 
    seq.flags |= TSShape::MakePath;
+   F32 time = appSeq->getStart();
+   F32 delta = seq.duration / seq.numGroundFrames;
 
    // Get ground transform at the start of the sequence
-   MatrixF invStartMat = boundsNode->getNodeTransform(appSeq->getStart());
+   MatrixF invStartMat = boundsNode->getNodeTransform(time);
    zapScale(invStartMat);
    invStartMat.inverse();
 
-   for (int iFrame = 0; iFrame < seq.numGroundFrames; iFrame++)
+   for (int iFrame = 0; iFrame < seq.numGroundFrames; iFrame++, time += delta)
    {
-      F32 time = appSeq->getStart() + seq.duration * iFrame / getMax(1, seq.numGroundFrames - 1);
+      //F32 time = appSeq->getStart() + seq.duration * iFrame / getMax(1, seq.numGroundFrames - 1);
 
       // Determine delta bounds node transform at 't'
       MatrixF mat = boundsNode->getNodeTransform(time);
