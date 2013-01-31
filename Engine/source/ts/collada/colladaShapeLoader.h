@@ -48,6 +48,8 @@ public:
    ~ColladaShapeLoader();
 
    void enumerateScene();
+	void postEnumerateScene();//Ecstasy Motion, needed it for FBX Clusters.
+
    bool ignoreNode(const String& name);
    bool ignoreMesh(const String& name);
    void computeBounds(Box3F& bounds);
