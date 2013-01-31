@@ -29,6 +29,8 @@ exec("./colorPicker.ed.gui");
 exec("./materialSelector.ed.gui");
 exec("./scriptEditorDlg.ed.gui");
 exec("./colladaImport.ed.gui");
+exec("./fbxImport.ed.gui");
+exec("./fbxImport.ed.cs");
 exec("./EditorLoadingGui.gui");
 exec("./GuiEaseEditDlg.ed.gui");
 exec("./GuiEaseEditDlg.ed.cs");
