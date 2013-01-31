@@ -234,10 +234,11 @@ protected:
    DECLARE_CALLBACK( void, onUnload, () );
    ///@}
 
-   virtual void      _onLoad( TSShape* shape );
    virtual void      _onUnload();
 
 public:
+
+   virtual void      _onLoad( TSShape* shape );//(Ecstasy: Sorry, but I need this outside of the class, and I'm in a hurry.)_
 
    TSShape*                mShape;        // Edited shape; NULL while not loaded; not a Resource<TSShape> as we don't want it to prevent from unloading.
    ColladaUtils::ImportOptions   mOptions;

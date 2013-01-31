@@ -99,6 +99,11 @@ void TSThread::selectKeyframes(F32 pos, const TSSequence * seq, S32 * k1, S32 * 
 
          S32 kfIdx1 = (S32) kf;
 
+			if (kfIdx1>=seq->numKeyframes)
+			{
+				S32 myPain=0;
+				myPain++;
+			}
          // following assert could happen if pos1<1 && pos1==1...paradoxically...
          AssertFatal(kfIdx1<seq->numKeyframes,"TSThread::selectKeyFrames: invalid keyframe!");
 
@@ -180,6 +185,8 @@ void TSThread::setSequence(S32 seq, F32 toPos)
       pos = 0.9999f;
 
    // select keyframes
+	if (getSequence()->numKeyframes<=0)
+		return;//Ecstasy Motion, problems re: FBX
    selectKeyframes(pos,getSequence(),&keyNum1,&keyNum2,&keyPos);
 }
 
@@ -396,7 +403,12 @@ void TSThread::advancePos(F32 delta)
       path.end = pos;
 
       animateTriggers(); // do this automatically...no need for user to call it
-
+		
+		if ((pos != pos)||(pos<0)||(pos>1.0)||((getSequence()->isCyclic())&&(pos==1.0)))
+		{
+			S32 myPain=0;
+			myPain++;
+		}
       AssertFatal(pos>=0.0f && pos<=1.0f,"TSThread::advancePos (1)");
       AssertFatal(!getSequence()->isCyclic() || pos<1.0f,"TSThread::advancePos (2)");
    }
@@ -416,12 +428,16 @@ void TSThread::advancePos(F32 delta)
       AssertFatal(!getSequence()->isCyclic() || pos<1.0f,"TSThread::advancePos (4)");
    }
 
+	if (getSequence()->numKeyframes<=0)
+		return;
    // select keyframes
    selectKeyframes(pos,getSequence(),&keyNum1,&keyNum2,&keyPos);
 }
 
 void TSThread::advanceTime(F32 delta)
 {
+	if (getDuration()!=getDuration())
+		return;//Having a problem related to FBX changes from Ecstasy Motion.
    advancePos(timeScale * delta / getDuration());
 }
 

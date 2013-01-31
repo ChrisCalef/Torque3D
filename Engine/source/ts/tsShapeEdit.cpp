@@ -2083,6 +2083,8 @@ bool TSShape::setSequenceGroundSpeed(const String& seqName, const Point3F& trans
       return false;
    }
    TSShape::Sequence& seq = sequences[seqIndex];
+	if (seq.numGroundFrames<0)
+		return false;//Ecstasy Motion FBX - this is crashing on soldier import with swim anim, groundframes undefined.
 
    // Determine how many ground-frames to generate (FPS=10, at least 1 frame)
    const F32 groundFrameRate = 10.0f;
