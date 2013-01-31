@@ -633,14 +633,14 @@ function GameCore::loadOut(%game, %player)
    %player.setInventory(DeployableTurret, %player.maxInventory(DeployableTurret));
    %player.addToWeaponCycle(DeployableTurret);
    
-   if (%player.getDatablock().mainWeapon.image !$= "")
-   {
-      %player.mountImage(%player.getDatablock().mainWeapon.image, 0);
-   }
-   else
-   {
-      %player.mountImage(Lurker, 0);
-   }
+   //if (%player.getDatablock().mainWeapon.image !$= "")
+   //{
+      //%player.mountImage(%player.getDatablock().mainWeapon.image, 0);
+   //}
+   //else
+   //{
+      //%player.mountImage(Lurker, 0);
+   //}
 }
 
 // Customized kill message for falling deaths
