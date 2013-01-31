@@ -389,7 +389,13 @@ template<class T> inline void Vector<T>::insert(U32 index,const T& x)
 }
 
 template<class T> inline void Vector<T>::erase(U32 index)
-{
+{	
+	if (index >= mElementCount)
+	{
+		U32 myPain = 0;//Ecstasy Motion having recurring problems with calling sequences
+		myPain++;// indices outside of the array.  Debugging very unhelpful in this situation
+		//Setting a line here that we can put a breakpoint on.
+	}
    AssertFatal(index < mElementCount, "Vector<T>::erase - out of bounds index!");
 
    destructInPlace(&mArray[index]);
@@ -423,6 +429,12 @@ template<class T> inline bool Vector<T>::remove( const T& x )
 
 template<class T> inline void Vector<T>::erase(U32 index, U32 count)
 {
+	if (index >= mElementCount)
+	{
+		U32 myPain = 0;//Ecstasy Motion having recurring problems with calling sequences
+		myPain++;// indices outside of the array.  Debugging very unhelpful in this situation
+		//Setting a line here that we can put a breakpoint on.
+	}
    AssertFatal(index < mElementCount, "Vector<T>::erase - out of bounds index!");
    AssertFatal(count > 0, "Vector<T>::erase - count must be greater than zero!");
    AssertFatal(index+count <= mElementCount, "Vector<T>::erase - out of bounds count!");
@@ -680,12 +692,24 @@ template<class T> inline void Vector<T>::pop_back()
 
 template<class T> inline T& Vector<T>::operator[](U32 index)
 {
+	if (index >= mElementCount)
+	{
+		U32 myPain = 0;//Ecstasy Motion having recurring problems with calling sequences
+		myPain++;// indices outside of the array.  Debugging very unhelpful in this situation
+		//Setting a line here that we can put a breakpoint on.
+	}
    AssertFatal(index < mElementCount, "Vector<T>::operator[] - out of bounds array access!");
    return mArray[index];
 }
 
 template<class T> inline const T& Vector<T>::operator[](U32 index) const
 {
+	if (index >= mElementCount)
+	{
+		U32 myPain = 0;//Ecstasy Motion having recurring problems with calling sequences
+		myPain++;// indices outside of the array.  Debugging very unhelpful in this situation
+		//Setting a line here that we can put a breakpoint on.
+	}
    AssertFatal(index < mElementCount, "Vector<T>::operator[] - out of bounds array access!");
    return mArray[index];
 }
