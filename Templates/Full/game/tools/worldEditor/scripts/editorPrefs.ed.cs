@@ -29,6 +29,7 @@ EditorSettings.setDefaultValue(  "currentEditor",           "WorldEditorInspecto
 EditorSettings.setDefaultValue(  "dropType",                "screenCenter"    );
 EditorSettings.setDefaultValue(  "undoLimit",               "40"              );
 EditorSettings.setDefaultValue(  "forceLoadDAE",            "0"               );
+EditorSettings.setDefaultValue(  "forceLoadFBX",            "0"               );
 EditorSettings.setDefaultValue(  "displayType",             $EditTsCtrl::DisplayTypePerspective );
 EditorSettings.setDefaultValue(  "orthoFOV",                "50" );
 EditorSettings.setDefaultValue(  "orthoShowGrid",           "1" );
