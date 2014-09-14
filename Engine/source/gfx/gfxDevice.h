@@ -209,6 +209,12 @@ public:
       
       /// The device is about to finish rendering a frame
       deEndOfFrame,
+
+      /// The device has started rendering a frame's field (such as for side-by-side rendering)
+      deStartOfField,
+
+      /// The device is about to finish rendering a frame's field
+      deEndOfField,
    };
 
    typedef Signal <bool (GFXDeviceEventType)> DeviceEventSignal;
@@ -231,6 +237,13 @@ private:
    //--------------------------------------------------------------------------
    // Core GFX interface
    //--------------------------------------------------------------------------
+public:
+   enum GFXDeviceRenderStyles
+   {
+      RS_Standard          = 0,
+      RS_StereoSideBySide  = (1<<0),
+   };
+
 private:
 
    /// Adapter for this device.
@@ -253,6 +266,15 @@ protected:
 
    /// Set if we're in a mode where we want rendering to occur.
    bool mAllowRender;
+
+   /// The style of rendering that is to be performed, based on GFXDeviceRenderStyles
+   U32 mCurrentRenderStyle;
+
+   /// The current projection offset.  May be used during side-by-side rendering, for example.
+   Point2F mCurrentProjectionOffset;
+
+   /// Eye offset used when using a stereo rendering style
+   Point3F mStereoEyeOffset;
 
    /// This will allow querying to see if a device is initialized and ready to
    /// have operations performed on it.
@@ -285,6 +307,24 @@ public:
 
    inline bool allowRender() const { return mAllowRender; }
    
+   /// Retrieve the current rendering style based on GFXDeviceRenderStyles
+   U32 getCurrentRenderStyle() const { return mCurrentRenderStyle; }
+
+   /// Set the current rendering style, based on GFXDeviceRenderStyles
+   void setCurrentRenderStyle(U32 style) { mCurrentRenderStyle = style; }
+
+   /// Set the current projection offset used during stereo rendering
+   const Point2F& getCurrentProjectionOffset() { return mCurrentProjectionOffset; }
+
+   /// Get the current projection offset used during stereo rendering
+   void setCurrentProjectionOffset(const Point2F& offset) { mCurrentProjectionOffset = offset; }
+
+   /// Get the current eye offset used during stereo rendering
+   const Point3F& getStereoEyeOffset() { return mStereoEyeOffset; }
+
+   /// Set the current eye offset used during stereo rendering
+   void setStereoEyeOffset(const Point3F& offset) { mStereoEyeOffset = offset; }
+
    GFXCardProfiler* getCardProfiler() const { return mCardProfiler; }
 
    /// Returns active graphics adapter type.
@@ -661,7 +701,7 @@ public:
    void popActiveRenderTarget();
 
    /// Assign a new active render target.
-   void setActiveRenderTarget( GFXTarget *target );
+   void setActiveRenderTarget( GFXTarget *target, bool updateViewport=true );
 
    /// Returns the current active render target.
    inline GFXTarget* getActiveRenderTarget() { return mCurrentRT; }
@@ -701,6 +741,8 @@ public:
    virtual void clear( U32 flags, ColorI color, F32 z, U32 stencil ) = 0;
    virtual bool beginScene();
    virtual void endScene();
+   virtual void beginField();
+   virtual void endField();
 
    virtual GFXTexHandle & getFrontBuffer(){ return mFrontBuffer[mCurrentFrontBufferIdx]; }
 

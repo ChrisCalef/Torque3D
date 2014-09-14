@@ -20,6 +20,23 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
+// ----------------------------------------------------------------------------
+// Sample grass
+// ----------------------------------------------------------------------------
+
+singleton Material(TerrainFX_grass1)  
+{  
+   mapTo = "grass1";  
+   footstepSoundId = 0;  
+   terrainMaterials = "1";  
+   ShowDust = "1";  
+   showFootprints = "1"; 
+   materialTag0 = "Terrain"; 
+   effectColor[0] = "0.42 0.42 0 1";
+   effectColor[1] = "0.42 0.42 0 1";
+   impactSoundId = "0";
+};  
+
 new TerrainMaterial()
 {
    internalName = "grass1";
@@ -32,18 +49,16 @@ new TerrainMaterial()
    diffuseSize = "200";
 };
 
-new TerrainMaterial()
-{
-   internalName = "rocktest";
-   diffuseMap = "art/terrains/Example/rocktest";
-   detailMap = "art/terrains/Example/rocktest_d";
-   detailSize = "10";
-   detailDistance = "100";
-   isManaged = "1";
-   detailBrightness = "1";
-   Enabled = "1";
-   diffuseSize = "400";
-};
+singleton Material(TerrainFX_grass1dry)  
+{  
+   mapTo = "grass1-dry";  
+   footstepSoundId = 0;  
+   terrainMaterials = "1";  
+   ShowDust = "1";  
+   showFootprints = "1";
+   materialTag0 = "Terrain";  
+   effectColor[0] = "0.63 0.55 0 1";
+};  
 
 new TerrainMaterial()
 {
@@ -59,6 +74,18 @@ new TerrainMaterial()
    detailStrength = "2";
 };
 
+singleton Material(TerrainFX_dirt_grass)  
+{  
+   mapTo = "dirt_grass";  
+   footstepSoundId = 0;  
+   terrainMaterials = "1";  
+   ShowDust = "1";  
+   showFootprints = "1";
+   materialTag0 = "Terrain";  
+   effectColor[0] = "0.63 0.55 0 1";
+   effectColor[1] = "0.63 0.55 0 0";
+};  
+
 new TerrainMaterial()
 {
    internalName = "dirt_grass";
@@ -72,6 +99,53 @@ new TerrainMaterial()
    diffuseSize = "200";
 };
 
+// ----------------------------------------------------------------------------
+// Sample rock
+// ----------------------------------------------------------------------------
+
+singleton Material(TerrainFX_rocktest)  
+{  
+   mapTo = "rocktest";  
+   footstepSoundId = "1";  
+   terrainMaterials = "1";  
+   ShowDust = "1";  
+   showFootprints = "1"; 
+   materialTag0 = "Terrain"; 
+   impactSoundId = "1";
+   effectColor[0] = "0.25 0.25 0.25 1";
+   effectColor[1] = "0.25 0.25 0.25 0";
+};  
+
+new TerrainMaterial()
+{
+   internalName = "rocktest";
+   diffuseMap = "art/terrains/Example/rocktest";
+   detailMap = "art/terrains/Example/rocktest_d";
+   detailSize = "10";
+   detailDistance = "100";
+   isManaged = "1";
+   detailBrightness = "1";
+   Enabled = "1";
+   diffuseSize = "400";
+};
+
+// ----------------------------------------------------------------------------
+// Sample sand
+// ----------------------------------------------------------------------------
+
+singleton Material(TerrainFX_sand)  
+{  
+   mapTo = "sand";  
+   footstepSoundId = "3";  
+   terrainMaterials = "1";  
+   ShowDust = "1";  
+   showFootprints = "1"; 
+   materialTag0 = "Terrain";  
+   specularPower[0] = "1";
+   effectColor[0] = "0.84 0.71 0.5 1";
+   effectColor[1] = "0.84 0.71 0.5 0.349";
+};  
+
 new TerrainMaterial()
 {
    internalName = "sand";
@@ -84,4 +158,3 @@ new TerrainMaterial()
    Enabled = "1";
    diffuseSize = "200";
 };
-

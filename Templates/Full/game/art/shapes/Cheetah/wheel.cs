@@ -22,7 +22,7 @@
 
 singleton TSShapeConstructor(WheelDae)
 {
-   baseShape = "./wheel.dae";
+   baseShape = "./wheel.DAE";
    lodType = "TrailingNumber";
    neverImport = "null	EnvironmentAmbientLight";
    matNamePrefix = "";
@@ -32,7 +32,6 @@ singleton TSShapeConstructor(WheelDae)
 
 function WheelDae::onLoad(%this)
 {
-   %this.removeNode("EnvironmentAmbientLight");
    %this.removeNode("Tread_LOD100");
    %this.removeNode("Tread_LOD2");
    %this.removeNode("Tread_LOD300");
