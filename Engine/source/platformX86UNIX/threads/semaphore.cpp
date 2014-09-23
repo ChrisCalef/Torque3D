@@ -22,7 +22,7 @@
 
 #include "platformX86UNIX/platformX86UNIX.h"
 #include "platform/threads/semaphore.h"
-//MGT: converted SDL to OS semaphores to remove dependency on SDL in dedicated server
+
 #include <unistd.h>     
 #include <sys/types.h>  
 #include <errno.h>      

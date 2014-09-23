@@ -19,7 +19,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
-//MGT: not needed on dedicated and help removal of SDL
+
+// Not needed on dedicated (SDL is not not linked against when dedicated)
+
 #ifndef TORQUE_DEDICATED
 #include "console/console.h"
 #include "platformX86UNIX/platformX86UNIX.h"
@@ -455,4 +457,7 @@ void PollRedbookDevices()
 #endif	// !defined(__FreeBSD__)
 }
 #endif
+<<<<<<< HEAD
 //MGT: end
+=======
+>>>>>>> upstream/development

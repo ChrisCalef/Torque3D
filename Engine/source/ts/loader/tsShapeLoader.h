@@ -45,6 +45,19 @@
 class TSShapeLoader
 {
 
+// Supported Format List
+protected:
+   struct ShapeFormat
+   {
+      String mName;
+      String mExtension;
+   };
+   static Vector<ShapeFormat> smFormats;
+public:
+   static void addFormat(String name, String extension);
+   static String getFormatExtensions();
+   static String getFormatFilters();
+
 public:
    enum eLoadPhases
    {
@@ -63,7 +76,7 @@ public:
       Load_Complete = NumLoadPhases
    };
 
-   static void updateProgress(int major, const char* msg, int numMinor=0, int minor=0);
+   static void updateProgress(S32 major, const char* msg, S32 numMinor=0, S32 minor=0);
 
 protected:
    struct Subshape
@@ -85,7 +98,10 @@ public:
    static const double MinFrameRate;
    static const double MaxFrameRate;
    static const double AppGroundFrameRate;
-	bool mHasSequences;//Ecstasy Motion, appSequences.size() crashes if none.
+   static const F64 MinFrameRate;
+   static const F64 MaxFrameRate;
+   static const F64 AppGroundFrameRate;
+   bool mHasSequences;//Ecstasy Motion, appSequences.size() crashes if none.
 
 protected:
    // Variables used during loading that must be held until the shape is deleted

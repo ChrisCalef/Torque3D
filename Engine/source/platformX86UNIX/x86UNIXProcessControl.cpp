@@ -30,7 +30,7 @@
 #include <unistd.h>
 #include <signal.h>
 
-#ifndef DEDICATED
+#ifndef TORQUE_DEDICATED
 #include <SDL/SDL.h>
 #endif
 
@@ -80,11 +80,11 @@ void Cleanup(bool minimal)
    }
 
    StdConsole::destroy();
-//MGT: removed SDL from dedicated
+
 #ifndef TORQUE_DEDICATED   
    SDL_Quit();
 #endif
-//MGT: end
+
 }
 
 //-----------------------------------------------------------------------------
