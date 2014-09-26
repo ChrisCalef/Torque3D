@@ -264,31 +264,40 @@
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 			>
 			<File
+			   RelativePath="..\..\..\..\..\Engine\lib\lpng\example.c">
+			</File>
+			<File
 			   RelativePath="..\..\..\..\..\Engine\lib\lpng\png.c">
 			</File>
 			<File
 			   RelativePath="..\..\..\..\..\Engine\lib\lpng\png.h">
 			</File>
 			<File
-			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngasmrd.h">
+			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngconf.h">
 			</File>
 			<File
-			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngconf.h">
+			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngdebug.h">
 			</File>
 			<File
 			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngerror.c">
 			</File>
 			<File
-			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pnggccrd.c">
+			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngget.c">
 			</File>
 			<File
-			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngget.c">
+			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pnginfo.h">
+			</File>
+			<File
+			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pnglibconf.h">
 			</File>
 			<File
 			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngmem.c">
 			</File>
 			<File
 			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngpread.c">
+			</File>
+			<File
+			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngpriv.h">
 			</File>
 			<File
 			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngread.c">
@@ -306,10 +315,13 @@
 			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngset.c">
 			</File>
 			<File
-			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngtrans.c">
+			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngstruct.h">
 			</File>
 			<File
-			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngvcrd.c">
+			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngtest.c">
+			</File>
+			<File
+			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngtrans.c">
 			</File>
 			<File
 			   RelativePath="..\..\..\..\..\Engine\lib\lpng\pngwio.c">

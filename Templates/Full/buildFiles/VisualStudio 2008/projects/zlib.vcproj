@@ -282,7 +282,19 @@
 			   RelativePath="..\..\..\..\..\Engine\lib\zlib\deflate.h">
 			</File>
 			<File
-			   RelativePath="..\..\..\..\..\Engine\lib\zlib\gzio.c">
+			   RelativePath="..\..\..\..\..\Engine\lib\zlib\gzclose.c">
+			</File>
+			<File
+			   RelativePath="..\..\..\..\..\Engine\lib\zlib\gzguts.h">
+			</File>
+			<File
+			   RelativePath="..\..\..\..\..\Engine\lib\zlib\gzlib.c">
+			</File>
+			<File
+			   RelativePath="..\..\..\..\..\Engine\lib\zlib\gzread.c">
+			</File>
+			<File
+			   RelativePath="..\..\..\..\..\Engine\lib\zlib\gzwrite.c">
 			</File>
 			<File
 			   RelativePath="..\..\..\..\..\Engine\lib\zlib\infback.c">

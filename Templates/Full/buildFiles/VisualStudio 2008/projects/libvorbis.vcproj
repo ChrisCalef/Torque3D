@@ -409,6 +409,9 @@
 						Name="coupled"
 						Filter="">
 						<File
+						   RelativePath="..\..\..\..\..\Engine\lib\libvorbis\lib\books\coupled\res_books_51.h">
+						</File>
+						<File
 						   RelativePath="..\..\..\..\..\Engine\lib\libvorbis\lib\books\coupled\res_books_stereo.h">
 						</File>
 					</Filter>
@@ -452,6 +455,9 @@
 					   RelativePath="..\..\..\..\..\Engine\lib\libvorbis\lib\modes\residue_44.h">
 					</File>
 					<File
+					   RelativePath="..\..\..\..\..\Engine\lib\libvorbis\lib\modes\residue_44p51.h">
+					</File>
+					<File
 					   RelativePath="..\..\..\..\..\Engine\lib\libvorbis\lib\modes\residue_44u.h">
 					</File>
 					<File
@@ -471,6 +477,9 @@
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\lib\libvorbis\lib\modes\setup_44.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\lib\libvorbis\lib\modes\setup_44p51.h">
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\lib\libvorbis\lib\modes\setup_44u.h">
