@@ -114,11 +114,12 @@ IMPLEMENT_CALLBACK( ShapeBaseData, onTrigger, void, ( ShapeBase* obj, S32 index,
    "@param index Index of the trigger that changed\n"
    "@param state New state of the trigger\n" );
 
-IMPLEMENT_CALLBACK( ShapeBaseData, onEndSequence, void, ( ShapeBase* obj, S32 slot ), ( obj, slot ),
+IMPLEMENT_CALLBACK(ShapeBaseData, onEndSequence, void, (ShapeBase* obj, S32 slot, const char* name), (obj, slot, name),
    "@brief Called when a thread playing a non-cyclic sequence reaches the end of the "
    "sequence.\n\n"
    "@param obj The ShapeBase object\n"
-   "@param slot Thread slot that finished playing\n" );
+   "@param slot Thread slot that finished playing\n"
+   "@param name Thread name that finished playing\n");
 
 IMPLEMENT_CALLBACK( ShapeBaseData, onForceUncloak, void, ( ShapeBase* obj, const char* reason ), ( obj, reason ),
    "@brief Called when the object is forced to uncloak.\n\n"
@@ -2154,13 +2155,13 @@ bool ShapeBase::setThreadSequence(U32 slot, S32 seq, bool reset)
       if (reset) {
          st.state = Thread::Play;
          st.atEnd = false;
-		 st.timescale = 1.f;
-		 st.position = 0.f;
+         st.timescale = 1.f;
+         st.position = 0.f;
       }
       if (mShapeInstance) {
          if (!st.thread)
             st.thread = mShapeInstance->addThread();
-         mShapeInstance->setSequence(st.thread,seq,0);
+         mShapeInstance->setSequence(st.thread,seq,st.position);
          updateThread(st);
       }
       return true;
@@ -2175,17 +2176,11 @@ void ShapeBase::updateThread(Thread& st)
 		case Thread::Stop:
 			{
 				mShapeInstance->setTimeScale( st.thread, 1.f );
-				mShapeInstance->setPos( st.thread, ( st.timescale > 0.f ) ? 0.0f : 1.0f );
+				mShapeInstance->setPos( st.thread, ( st.timescale > 0.f ) ? 1.0f : 0.0f );
 			} // Drop through to pause state
 
 		case Thread::Pause:
 			{
-				if ( st.position != -1.f )
-				{
-					mShapeInstance->setTimeScale( st.thread, 1.f );
-					mShapeInstance->setPos( st.thread, st.position );
-				}
-
 				mShapeInstance->setTimeScale( st.thread, 0.f );
 			} break;
 
@@ -2330,7 +2325,7 @@ void ShapeBase::advanceThreads(F32 dt)
             st.atEnd = true;
             updateThread(st);
             if (!isGhost()) {
-               mDataBlock->onEndSequence_callback( this, i );
+               mDataBlock->onEndSequence_callback(this, i, this->getThreadSequenceName(i));
             }
          }
 
@@ -2339,6 +2334,7 @@ void ShapeBase::advanceThreads(F32 dt)
          if(st.thread)
          {
             mShapeInstance->advanceTime(dt,st.thread);
+            st.position = mShapeInstance->getPos(st.thread);
          }
       }
    }
@@ -3039,9 +3035,9 @@ void ShapeBase::unpackUpdate(NetConnection *con, BitStream *stream)
          if (stream->readFlag()) {
             Thread& st = mScriptThread[i];
             U32 seq = stream->readInt(ThreadSequenceBits);
-            st.state = stream->readInt(2);
-			stream->read( &st.timescale );
-			stream->read( &st.position );
+            st.state = Thread::State(stream->readInt(2));
+            stream->read( &st.timescale );
+            stream->read( &st.position );
             st.atEnd = stream->readFlag();
             if (st.sequence != seq && st.state != Thread::Destroy)
                setThreadSequence(i,seq,false);
