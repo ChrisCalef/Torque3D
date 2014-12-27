@@ -470,10 +470,10 @@ ConsoleValueRef CodeBlock::exec(U32 ip, const char *functionName, Namespace *thi
             dSprintf(traceBuffer + dStrlen(traceBuffer), sizeof(traceBuffer) - dStrlen(traceBuffer),
                "%s(", thisFunctionName);
          }
-         for(i = 0; i < argc; i++)
+         for(i = 0; i < wantedArgc; i++)
          {
             dStrcat(traceBuffer, argv[i+1]);
-            if(i != argc - 1)
+            if(i != wantedArgc - 1)
                dStrcat(traceBuffer, ", ");
          }
          dStrcat(traceBuffer, ")");
@@ -533,9 +533,16 @@ ConsoleValueRef CodeBlock::exec(U32 ip, const char *functionName, Namespace *thi
       }
    }
 
-   // Reset the console stack frame which at this point will contain 
-   // either nothing or argv[] which we just copied
-   CSTK.resetFrame();
+   bool doResetValueStack = !gEvalState.mResetLocked;
+   gEvalState.mResetLocked = true;
+   
+   if (gEvalState.mShouldReset)
+   {
+      // Ensure all stacks are clean in case anything became unbalanced during the previous execution
+      STR.clearFrames();
+      CSTK.clearFrames();
+      gEvalState.mShouldReset = false;
+   }
 
    // Grab the state of the telenet debugger here once
    // so that the push and pop frames are always balanced.
@@ -1831,10 +1838,13 @@ breakContinue:
                   floatStack[++_FLT] = (F32)ret;
                }
                else if(code[ip] == OP_STR_TO_NONE)
+               {
+                  STR.setStringValue(ret.getStringValue());
                   ip++;
+               }
                else
                   STR.setStringValue((const char*)ret);
-			   
+
                // This will clear everything including returnValue
                CSTK.popFrame();
                STR.clearFunctionOffset();
@@ -2216,20 +2226,19 @@ execFinished:
          Con::printf("%s", traceBuffer);
       }
    }
-   else
-   {
-      delete[] globalStrings;
-      globalStringsMaxLen = 0;
 
-      delete[] globalFloats;
-      globalStrings = NULL;
-      globalFloats = NULL;
-   }
    smCurrentCodeBlock = saveCodeBlock;
    if(saveCodeBlock && saveCodeBlock->name)
    {
       Con::gCurrentFile = saveCodeBlock->name;
       Con::gCurrentRoot = saveCodeBlock->modPath;
+   }
+
+   // Mark the reset flag for the next run if we've finished execution
+   if (doResetValueStack)
+   {
+      gEvalState.mShouldReset = true;
+      gEvalState.mResetLocked = false;
    }
 
    decRefCount();
