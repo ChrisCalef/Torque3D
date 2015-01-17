@@ -80,7 +80,7 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="x3daudio.lib COMCTL32.LIB COMDLG32.LIB USER32.LIB ADVAPI32.LIB GDI32.LIB WINMM.LIB WSOCK32.LIB vfw32.lib Imm32.lib d3d9.lib d3dx9.lib DxErr.lib ole32.lib shell32.lib oleaut32.lib version.lib "
             
-                           OutputFile="../../../game/Full_DEBUG.dll"
+                           OutputFile="../../../game/Full_DEBUG DLL.dll"
                         
 				LinkIncremental="2"
 				SuppressStartupBanner="true"
@@ -186,21 +186,21 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="x3daudio.lib COMCTL32.LIB COMDLG32.LIB USER32.LIB ADVAPI32.LIB GDI32.LIB WINMM.LIB WSOCK32.LIB vfw32.lib Imm32.lib d3d9.lib d3dx9.lib DxErr.lib ole32.lib shell32.lib oleaut32.lib version.lib "
             
-                           OutputFile="../../../game/Full_OPTIMIZEDDEBUG.dll"
+                           OutputFile="../../../game/Full_OPTIMIZEDDEBUG DLL.dll"
             
-				LinkIncremental="1"
-				SuppressStartupBanner="true"
-				AdditionalLibraryDirectories="../../../../../Engine/lib/SDL/win32;../../../../../Engine/lib/unicode;../../../../../Engine/lib/directx8;../../Link/VC2k8.$(ConfigurationName).$(PlatformName);"
-				IgnoreDefaultLibraryNames="LIBC,LIBCD"
-				ModuleDefinitionFile="../../../../../Engine/lib/Torque3D/msvc/torque3d.def"
-				GenerateDebugInformation="true"
-				ProgramDatabaseFile="$(OutDir)/$(ProjectName)_OPTIMIZEDDEBUG.pdb"
-				SubSystem="2"
-				TargetMachine="1"
-				RandomizedBaseAddress="1"
-				DataExecutionPrevention="0"
-			/>
-         <Tool
+              LinkIncremental="1"
+              SuppressStartupBanner="true"
+              AdditionalLibraryDirectories="../../../../../Engine/lib/SDL/win32;../../../../../Engine/lib/unicode;../../../../../Engine/lib/directx8;../../Link/VC2k8.$(ConfigurationName).$(PlatformName);"
+              IgnoreDefaultLibraryNames="LIBC,LIBCD"
+              ModuleDefinitionFile="../../../../../Engine/lib/Torque3D/msvc/torque3d.def"
+              GenerateDebugInformation="true"
+              ProgramDatabaseFile="$(OutDir)/$(ProjectName)_OPTIMIZEDDEBUG.pdb"
+              SubSystem="2"
+              TargetMachine="1"
+              RandomizedBaseAddress="1"
+              DataExecutionPrevention="0"
+        />
+        <Tool
 				Name="VCALinkTool"
 			/>
          <Tool
@@ -291,7 +291,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="x3daudio.lib COMCTL32.LIB COMDLG32.LIB USER32.LIB ADVAPI32.LIB GDI32.LIB WINMM.LIB WSOCK32.LIB vfw32.lib Imm32.lib d3d9.lib d3dx9.lib DxErr.lib ole32.lib shell32.lib oleaut32.lib version.lib "
-				OutputFile="../../../game/Full.dll"
+				OutputFile="../../../game/Full DLL.dll"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				AdditionalLibraryDirectories="../../../../../Engine/lib/SDL/win32;../../../../../Engine/lib/unicode;../../../../../Engine/lib/directx8;../../Link/VC2k8.$(ConfigurationName).$(PlatformName);"
@@ -1004,6 +1004,9 @@
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\app\net\net.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\app\net\net.h">
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\app\net\netTest.cpp">
@@ -2709,6 +2712,12 @@
 						   RelativePath="..\..\..\..\..\Engine\source\gfx\video\theoraTexture.h">
 						</File>
 						<File
+						   RelativePath="..\..\..\..\..\Engine\source\gfx\video\theoraTextureObject.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\gfx\video\theoraTextureObject.h">
+						</File>
+						<File
 						   RelativePath="..\..\..\..\..\Engine\source\gfx\video\videoCapture.cpp">
 						</File>
 						<File
@@ -3445,82 +3454,6 @@
 					</File>
 				</Filter>
 				<Filter
-					Name="interior"
-					Filter="">
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\forceField.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\forceField.h">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interior.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interior.h">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorCollision.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorDebug.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorInstance.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorInstance.h">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorIO.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorLMManager.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorLMManager.h">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorRender.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorRes.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorRes.h">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorResObjects.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorResObjects.h">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorSimpleMesh.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorSimpleMesh.h">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorSubObject.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\interiorSubObject.h">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\mirrorSubObject.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\mirrorSubObject.h">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\pathedInterior.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\interior\pathedInterior.h">
-					</File>
-				</Filter>
-				<Filter
 					Name="lighting"
 					Filter="">
 					<File
@@ -3611,12 +3544,6 @@
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\lighting\basic\basicSceneObjectLightingPlugin.h">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\lighting\basic\blInteriorSystem.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\lighting\basic\blInteriorSystem.h">
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\lighting\basic\blTerrainSystem.cpp">
@@ -3914,21 +3841,21 @@
 							Name="Debug|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 						<FileConfiguration
 							Name="Optimized Debug|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 						<FileConfiguration
 							Name="Release|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-					         CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+					         CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 					</File>
@@ -3944,21 +3871,21 @@
 							Name="Debug|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 						<FileConfiguration
 							Name="Optimized Debug|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 						<FileConfiguration
 							Name="Release|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-					         CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+					         CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 					</File>
@@ -3968,21 +3895,21 @@
 							Name="Debug|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 						<FileConfiguration
 							Name="Optimized Debug|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 						<FileConfiguration
 							Name="Release|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-					         CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+					         CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 					</File>
@@ -4092,6 +4019,9 @@
 						Name="test"
 						Filter="">
 						<File
+						   RelativePath="..\..\..\..\..\Engine\source\math\test\mQuatTest.cpp">
+						</File>
+						<File
 						   RelativePath="..\..\..\..\..\Engine\source\math\test\testMathPlane.cpp">
 						</File>
 						<File
@@ -4140,9 +4070,6 @@
 					Name="platform"
 					Filter="">
 					<File
-					   RelativePath="..\..\..\..\..\Engine\source\platform\event.h">
-					</File>
-					<File
 					   RelativePath="..\..\..\..\..\Engine\source\platform\platform.cpp">
 					</File>
 					<File
@@ -4169,21 +4096,21 @@
 							Name="Debug|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 						<FileConfiguration
 							Name="Optimized Debug|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+								CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 						<FileConfiguration
 							Name="Release|Win32">
 							<Tool
 								Name="VCCustomBuildTool"
-					         CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasmw.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
+					         CommandLine="&quot;..\..\..\..\..\Engine\bin\nasm\nasm.exe&quot; -f win32 &quot;$(InputPath)&quot; -o &quot;$(IntDir)/$(InputName).obj&quot;"
 								Outputs="$(IntDir)/$(InputName).obj"/>
 						</FileConfiguration>
 					</File>
@@ -4296,7 +4223,7 @@
 					   RelativePath="..\..\..\..\..\Engine\source\platform\types.visualc.h">
 					</File>
 					<File
-					   RelativePath="..\..\..\..\..\Engine\source\platform\types.win32.h">
+					   RelativePath="..\..\..\..\..\Engine\source\platform\types.win.h">
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\platform\types.xenon.h">
@@ -4336,6 +4263,19 @@
 						</File>
 					</Filter>
 					<Filter
+						Name="input"
+						Filter="">
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\platform\input\event.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\platform\input\event.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\platform\input\IInputDevice.h">
+						</File>
+					</Filter>
+					<Filter
 						Name="menus"
 						Filter="">
 						<File
@@ -4362,6 +4302,13 @@
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\platform\nativeDialogs\msgBox.h">
+						</File>
+					</Filter>
+					<Filter
+						Name="output"
+						Filter="">
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\platform\output\IDisplayDevice.h">
 						</File>
 					</Filter>
 					<Filter

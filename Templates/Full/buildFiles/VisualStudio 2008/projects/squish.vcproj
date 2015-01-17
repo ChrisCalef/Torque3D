@@ -335,15 +335,6 @@
 			<File
 			   RelativePath="..\..\..\..\..\Engine\lib\squish\squish.h">
 			</File>
-			<File
-			   RelativePath="..\..\..\..\..\Engine\lib\squish\squishMath.cpp">
-			</File>
-			<File
-			   RelativePath="..\..\..\..\..\Engine\lib\squish\squishMath.h">
-			</File>
-			<File
-			   RelativePath="..\..\..\..\..\Engine\lib\squish\squishOmp.cpp">
-			</File>
 		</Filter>
 	</Files>
 	<Globals>

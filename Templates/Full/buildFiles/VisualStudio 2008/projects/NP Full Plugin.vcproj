@@ -80,7 +80,7 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="COMCTL32.LIB COMDLG32.LIB USER32.LIB ADVAPI32.LIB GDI32.LIB WINMM.LIB WSOCK32.LIB vfw32.lib Imm32.lib UnicoWS.lib opengl32.lib glu32.lib ole32.lib shell32.lib oleaut32.lib version.lib "
             
-            				   OutputFile="../../../game/NP Full Plugin.dll"
+            				   OutputFile="../../../game/NP Full Plugin DLL.dll"
                         
 				LinkIncremental="2"
 				SuppressStartupBanner="true"
@@ -186,21 +186,21 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="COMCTL32.LIB COMDLG32.LIB USER32.LIB ADVAPI32.LIB GDI32.LIB WINMM.LIB WSOCK32.LIB vfw32.lib Imm32.lib UnicoWS.lib opengl32.lib glu32.lib ole32.lib shell32.lib oleaut32.lib version.lib "
             
-            				   OutputFile="../../../game/NP Full Plugin.dll"
+            				   OutputFile="../../../game/NP Full Plugin DLL.dll"
             
-				LinkIncremental="1"
-				SuppressStartupBanner="true"
-				AdditionalLibraryDirectories="../../../../../Engine/lib/SDL/win32;../../../../../Engine/lib/unicode;../../Link/VC2k8.$(ConfigurationName).$(PlatformName);"
-				IgnoreDefaultLibraryNames="LIBC,LIBCD"
-				ModuleDefinitionFile="../../../web/source/npplugin/windows/npWebGamePlugin.def"
-				GenerateDebugInformation="true"
-				ProgramDatabaseFile="$(OutDir)/$(ProjectName)_OPTIMIZEDDEBUG.pdb"
-				SubSystem="2"
-				TargetMachine="1"
-				RandomizedBaseAddress="1"
-				DataExecutionPrevention="0"
-			/>
-         <Tool
+              LinkIncremental="1"
+              SuppressStartupBanner="true"
+              AdditionalLibraryDirectories="../../../../../Engine/lib/SDL/win32;../../../../../Engine/lib/unicode;../../Link/VC2k8.$(ConfigurationName).$(PlatformName);"
+              IgnoreDefaultLibraryNames="LIBC,LIBCD"
+              ModuleDefinitionFile="../../../web/source/npplugin/windows/npWebGamePlugin.def"
+              GenerateDebugInformation="true"
+              ProgramDatabaseFile="$(OutDir)/$(ProjectName)_OPTIMIZEDDEBUG.pdb"
+              SubSystem="2"
+              TargetMachine="1"
+              RandomizedBaseAddress="1"
+              DataExecutionPrevention="0"
+        />
+        <Tool
 				Name="VCALinkTool"
 			/>
          <Tool
@@ -291,7 +291,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="COMCTL32.LIB COMDLG32.LIB USER32.LIB ADVAPI32.LIB GDI32.LIB WINMM.LIB WSOCK32.LIB vfw32.lib Imm32.lib UnicoWS.lib opengl32.lib glu32.lib ole32.lib shell32.lib oleaut32.lib version.lib "
-				OutputFile="../../../game/NP Full Plugin.dll"
+				OutputFile="../../../game/NP Full Plugin DLL.dll"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				AdditionalLibraryDirectories="../../../../../Engine/lib/SDL/win32;../../../../../Engine/lib/unicode;../../Link/VC2k8.$(ConfigurationName).$(PlatformName);"
