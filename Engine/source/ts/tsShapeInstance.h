@@ -168,6 +168,10 @@ class TSShapeInstance
       MeshObjectInstance();
       virtual ~MeshObjectInstance() {}
 
+	  // andrewmac: Vertex Override
+	  TSMesh::TSMeshVertexArray* vertexOverride;
+	  void setVertexOverride( TSMesh::TSMeshVertexArray* val ) { vertexOverride = val; }
+
       void render( S32 objectDetail, TSMaterialList *, const TSRenderState &rdata, F32 alpha );
 
       /// Gets the mesh with specified detail level
@@ -204,6 +208,9 @@ class TSShapeInstance
    public:
 
    Vector<MeshObjectInstance> mMeshObjects;
+   
+   // andrewmac : Find Mesh Instances by name.
+   Vector<MeshObjectInstance*> findMeshInstances(const String& meshPrefix);
 
    /// storage space for node transforms
    Vector<MatrixF> mNodeTransforms;

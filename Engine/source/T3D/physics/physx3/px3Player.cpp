@@ -136,7 +136,7 @@ Point3F Px3Player::move( const VectorF &disp, CollisionList &outCol )
       return newPos;
    }
 
-   mWorld->releaseWriteLock();
+   mWorld->lockScene();
 
    mCollisionList = &outCol;
 
@@ -159,6 +159,8 @@ Point3F Px3Player::move( const VectorF &disp, CollisionList &outCol )
    newPos.z -= mOriginOffset;
 
    mCollisionList = NULL;
+
+   mWorld->unlockScene();
 
    return newPos;
 }
@@ -272,16 +274,18 @@ void Px3Player::enableCollision()
 {
    AssertFatal( mController, "Px3Player::enableCollision - The controller is null!" );
 
-   mWorld->releaseWriteLock();
+   mWorld->lockScene();
    px3GetFirstShape(mController->getActor())->setFlag(physx::PxShapeFlag::eSIMULATION_SHAPE,true);
+   mWorld->unlockScene();
 }
 
 void Px3Player::disableCollision()
 {
    AssertFatal( mController, "Px3Player::disableCollision - The controller is null!" );
 
-   mWorld->releaseWriteLock();
+   mWorld->lockScene();
 	px3GetFirstShape(mController->getActor())->setFlag(physx::PxShapeFlag::eSIMULATION_SHAPE,false); 
+   mWorld->unlockScene();
 }
 
 PhysicsWorld* Px3Player::getWorld()
@@ -293,7 +297,7 @@ void Px3Player::setTransform( const MatrixF &transform )
 {
    AssertFatal( mController, "Px3Player::setTransform - The controller is null!" );
 
-   mWorld->releaseWriteLock();
+   mWorld->lockScene();
 
    Point3F newPos = transform.getPosition();
    newPos.z += mOriginOffset;
@@ -302,6 +306,8 @@ void Px3Player::setTransform( const MatrixF &transform )
    
    if ( !(newPos - curPos ).isZero() )
       mController->setPosition( px3Cast<physx::PxExtendedVec3>(newPos) );
+
+   mWorld->unlockScene();
 }
 
 MatrixF& Px3Player::getTransform( MatrixF *outMatrix )

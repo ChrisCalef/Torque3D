@@ -36,13 +36,14 @@
 #include <foundation/PxTransform.h>
 
 //forward declare
-namespace physx{class PxGeometry;}
+namespace physx{class PxGeometry;class PxMaterial;}
 
 
 struct Px3CollisionDesc
 {
 	physx::PxGeometry *pGeometry;
 	physx::PxTransform pose;
+   Vector<physx::PxMaterial *> materials;
 };
 
 class Px3Collision : public PhysicsCollision
@@ -82,6 +83,11 @@ public:
                                  U32 blockSize,
                                  F32 metersPerSample,
                                  const MatrixF &localXfm );
+   virtual bool addHeightfield(  const U16 *heights,
+                                 const bool *holes,
+                                 U32 blockSize,
+                                 F32 metersPerSample,
+                                 const MatrixF &localXfm,const TerrainBlock *block );
 };
 
 #endif // _PX3COLLISION_H_

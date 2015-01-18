@@ -54,6 +54,11 @@ public:
    virtual PhysicsWorld* getWorld( const String &worldName ) const;
    virtual PhysicsWorld* getWorld() const;
    virtual U32 getWorldCount() const;
+
+   // andrewmac: Cloth		
+   virtual PhysicsCloth* createCloth(TSShapeInstance* shapeInst, const MatrixF &transform);
+
+   virtual PhysicsMaterial* createMaterial(const F32 restitution,const F32 staticFriction,const F32 dynamicFritction);
 };
 
 #endif  // _PX3PLUGIN_H_

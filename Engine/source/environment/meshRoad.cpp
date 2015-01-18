@@ -1737,25 +1737,29 @@ void MeshRoad::_generateSegments()
    if ( isClientObject() )
       _generateVerts();
 
-   if ( PHYSICSMGR )
-   {
-      ConcretePolyList polylist;
-      if ( buildPolyList( PLC_Collision, &polylist, getWorldBox(), getWorldSphere() ) )
-      {
-         polylist.triangulate();
+ if ( PHYSICSMGR )  
+    {  
+        ConcretePolyList polylist;  
+        if (buildPolyList(PLC_Collision, &polylist, getWorldBox(), getWorldSphere()))  
+        {  
+            polylist.triangulate();  
+  
+            PhysicsCollision *colShape = PHYSICSMGR->createCollision();  
+            colShape->addTriangleMesh( polylist.mVertexList.address(),   
+                polylist.mVertexList.size(),  
+                polylist.mIndexList.address(),  
+                polylist.mIndexList.size() / 3,  
+                MatrixF::Identity );  
+  
+            PhysicsWorld *world = PHYSICSMGR->getWorld( isServerObject() ? "server" : "client" );
+            
+            if(mPhysicsRep)
+               SAFE_DELETE( mPhysicsRep );
 
-         PhysicsCollision *colShape = PHYSICSMGR->createCollision();
-         colShape->addTriangleMesh( polylist.mVertexList.address(),
-            polylist.mVertexList.size(),
-            polylist.mIndexList.address(),
-            polylist.mIndexList.size() / 3,
-            MatrixF::Identity );
-
-         PhysicsWorld *world = PHYSICSMGR->getWorld( isServerObject() ? "server" : "client" );
-         mPhysicsRep = PHYSICSMGR->createBody();
-         mPhysicsRep->init( colShape, 0, 0, this, world );
-      }
-   }
+            mPhysicsRep = PHYSICSMGR->createBody();  
+            mPhysicsRep->init( colShape, 0, 0, this, world );  
+        }  
+    }  
 }
 
 void MeshRoad::_generateVerts()

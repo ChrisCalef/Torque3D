@@ -28,7 +28,10 @@
 #include "T3D/physics/physx3/px3.h"
 #include "T3D/physics/physx3/px3Casts.h"
 #include "T3D/physics/physx3/px3World.h"
+#include "T3D/physics/physx3/px3Material.h"
 #include "T3D/physics/physx3/px3Stream.h"
+#include "terrain/terrMaterial.h"
+#include "terrain/terrData.h"
 
 
 Px3Collision::Px3Collision()
@@ -211,6 +214,83 @@ bool Px3Collision::addHeightfield(   const U16 *heights,
 	desc->pose = pose2;
 
 	mColShapes.push_back(desc);
+
+   SAFE_DELETE(samples);
+	return true;
+}
+
+bool Px3Collision::addHeightfield(  const U16 *heights,
+                                 const bool *holes,
+                                 U32 blockSize,
+                                 F32 metersPerSample,
+                                 const MatrixF &localXfm,const TerrainBlock *block )
+{
+	const F32 heightScale = 0.03125f;
+	physx::PxHeightFieldSample* samples = (physx::PxHeightFieldSample*) new physx::PxHeightFieldSample[blockSize*blockSize];
+	memset(samples,0,blockSize*blockSize*sizeof(physx::PxHeightFieldSample));
+
+	physx::PxHeightFieldDesc heightFieldDesc;
+	heightFieldDesc.nbColumns = blockSize;
+	heightFieldDesc.nbRows = blockSize;
+	heightFieldDesc.thickness = -10.f;
+	heightFieldDesc.convexEdgeThreshold = 0;
+	heightFieldDesc.format = physx::PxHeightFieldFormat::eS16_TM;
+	heightFieldDesc.samples.data = samples;
+	heightFieldDesc.samples.stride = sizeof(physx::PxHeightFieldSample);
+
+	physx::PxU8 *currentByte = (physx::PxU8*)heightFieldDesc.samples.data;
+   for ( U32 row = 0; row < blockSize; row++ )        
+   {  
+      const U32 tess = ( row + 1 ) % 2;
+
+      for ( U32 column = 0; column < blockSize; column++ )            
+      {
+         physx::PxHeightFieldSample *currentSample = (physx::PxHeightFieldSample*)currentByte;
+
+         U32 index = ( blockSize - row - 1 ) + ( column * blockSize );
+         currentSample->height = (physx::PxI16)heights[ index ];
+         const TerrainSquare *ts = block->getFile()->findSquare( 0, row, column );
+
+         if ( holes && holes[ getMax( (S32)index - 1, 0 ) ] )     // row index for holes adjusted so PhysX collision shape better matches rendered terrain
+         {
+            currentSample->materialIndex0 = physx::PxHeightFieldMaterial::eHOLE;
+            currentSample->materialIndex1 = physx::PxHeightFieldMaterial::eHOLE;
+         }
+         else
+         {
+            currentSample->materialIndex0 =ts->triangle1.materialIndex;
+            currentSample->materialIndex1 =ts->triangle2.materialIndex;
+         }
+
+		int flag = ( column + tess ) % 2;
+		if(flag)
+			currentSample->clearTessFlag();
+		else
+			currentSample->setTessFlag();
+
+         currentByte += heightFieldDesc.samples.stride;    
+      }
+   }
+
+	physx::PxHeightField * hf = gPhysics3SDK->createHeightField(heightFieldDesc);
+	physx::PxHeightFieldGeometry *geom = new physx::PxHeightFieldGeometry(hf,physx::PxMeshGeometryFlags(),heightScale,metersPerSample,metersPerSample);
+		
+	physx::PxTransform pose= physx::PxTransform(physx::PxQuat(Float_HalfPi, physx::PxVec3(1, 0, 0 )));
+	physx::PxTransform pose1= physx::PxTransform(physx::PxQuat(Float_Pi, physx::PxVec3(0, 0, 1 )));
+	physx::PxTransform pose2 = pose1 * pose;
+	pose2.p = physx::PxVec3(( blockSize - 1 ) * metersPerSample, 0, 0 );
+	Px3CollisionDesc *desc = new Px3CollisionDesc;
+	desc->pGeometry = geom;
+	desc->pose = pose2;
+
+	mColShapes.push_back(desc);
+
+   for(U32 i=0;i < block->getMaterials().size();i++)
+   {
+      PhysicsMaterial *mat = block->getMaterials()[i]->getPhysicsMaterial();
+      physx::PxMaterial *physxMat = static_cast<Px3Material*>(mat)->getMaterial();
+      desc->materials.push_back(physxMat);
+   }
 
    SAFE_DELETE(samples);
 	return true;

@@ -50,9 +50,26 @@ physx::PxDefaultCpuDispatcher* Px3World::smCpuDispatcher=NULL;
 Px3ConsoleStream* Px3World::smErrorCallback = NULL;
 physx::PxVisualDebuggerConnection* Px3World::smPvdConnection=NULL;
 physx::PxDefaultAllocator Px3World::smMemoryAlloc;
-//Physics timing
-F32 Px3World::smPhysicsStepTime = 1.0f/(F32)TickMs;
+//Physics timing - fairly low, consider using 1/60.f
+F32 Px3World::smPhysicsStepTime = 1.0f/32.0f;
 U32 Px3World::smPhysicsMaxIterations = 4;
+
+//filter shader with support for CCD pairs
+static physx::PxFilterFlags sCcdFilterShader(
+        physx::PxFilterObjectAttributes attributes0,
+        physx::PxFilterData filterData0,
+        physx::PxFilterObjectAttributes attributes1,
+        physx::PxFilterData filterData1,
+        physx::PxPairFlags& pairFlags,
+        const void* constantBlock,
+        physx::PxU32 constantBlockSize)
+{
+        pairFlags = physx::PxPairFlag::eRESOLVE_CONTACTS;
+        pairFlags |= physx::PxPairFlag::eCCD_LINEAR;
+        return physx::PxFilterFlags();
+}
+
+
 
 Px3World::Px3World(): mScene( NULL ),
    mProcessList( NULL ),
@@ -62,7 +79,8 @@ Px3World::Px3World(): mScene( NULL ),
    mIsEnabled( false ),
    mEditorTimeScale( 1.0f ),
    mAccumulator( 0 ),
-   mControllerManager( NULL )
+   mControllerManager( NULL ),
+   mIsSceneLocked( false )
 {
 }
 
@@ -96,6 +114,9 @@ bool Px3World::restartSDK( bool destroyOnly, Px3World *clientWorld, Px3World *se
 
 	if(smCpuDispatcher)
 		smCpuDispatcher->release();
+
+	
+   	//PxCloseVehicleSDK();//WTF? this is not visible here, though it is in indieMotion???
 
    // Destroy the existing SDK.
 	if ( gPhysics3SDK )
@@ -151,6 +172,9 @@ bool Px3World::restartSDK( bool destroyOnly, Px3World *clientWorld, Px3World *se
 		Platform::forceShutdown( -1 );
 		return false;
 	}
+	
+	if (!PxInitVehicleSDK(*gPhysics3SDK)) Con::errorf("PxInitVehicleSDK failed!");
+	else Con::printf("PxInitVehicleSDK succeeded!!!");
 
 	smCooking = PxCreateCooking(PX_PHYSICS_VERSION, *smFoundation, physx::PxCookingParams(physx::PxTolerancesScale()));
 	if(!smCooking)
@@ -163,6 +187,7 @@ bool Px3World::restartSDK( bool destroyOnly, Px3World *clientWorld, Px3World *se
 		return false;
 	}
 
+   //just for testing-must remove, should really be enabled via console like physx 2 plugin
 #ifdef TORQUE_DEBUG
 	physx::PxVisualDebuggerConnectionFlags connectionFlags(physx::PxVisualDebuggerExt::getAllConnectionFlags());
 	smPvdConnection = physx::PxVisualDebuggerExt::createConnection(gPhysics3SDK->getPvdConnectionManager(), 
@@ -189,7 +214,7 @@ void Px3World::destroyWorld()
       mControllerManager->release();
       mControllerManager = NULL;
    }
-   
+
 	// Destroy the scene.
 	if ( mScene )
 	{
@@ -197,36 +222,38 @@ void Px3World::destroyWorld()
 		mScene->release();
 		mScene = NULL;
 	}
+	
 }
 
 bool Px3World::initWorld( bool isServer, ProcessList *processList )
 {
-   if ( !gPhysics3SDK )
-   {
-      Con::errorf( "Physx3World::init - PhysXSDK not initialized!" );
-      return false;
-   }
+	if ( !gPhysics3SDK )
+	{
+		Con::errorf( "Physx3World::init - PhysXSDK not initialized!" );
+		return false;
+	}
 
-   mIsServer = isServer;
+	mIsServer = isServer;
 	
-   physx::PxSceneDesc sceneDesc(gPhysics3SDK->getTolerancesScale());
+	physx::PxSceneDesc sceneDesc(gPhysics3SDK->getTolerancesScale());
 
-   sceneDesc.gravity = px3Cast<physx::PxVec3>(mGravity);
-   sceneDesc.userData = this;
-   if(!sceneDesc.cpuDispatcher)
-   {
-      //Create shared cpu dispatcher
+	sceneDesc.gravity = px3Cast<physx::PxVec3>(mGravity);
+	sceneDesc.userData = this;
+	if(!sceneDesc.cpuDispatcher)
+	{
+      //create shared cpu dispatcher
       if(!smCpuDispatcher)
-         smCpuDispatcher = physx::PxDefaultCpuDispatcherCreate(PHYSICSMGR->getThreadCount());
- 
-      sceneDesc.cpuDispatcher = smCpuDispatcher;
-      Con::printf("PhysX3 using Cpu: %d workers", smCpuDispatcher->getWorkerCount());
-   }
+		   smCpuDispatcher = physx::PxDefaultCpuDispatcherCreate(PHYSICSMGR->getThreadCount());
+
+		sceneDesc.cpuDispatcher = smCpuDispatcher;
+		Con::printf("PhysX3 using Cpu: %d workers", smCpuDispatcher->getWorkerCount());
+	}
 
  	
    sceneDesc.flags |= physx::PxSceneFlag::eENABLE_CCD;
    sceneDesc.flags |= physx::PxSceneFlag::eENABLE_ACTIVETRANSFORMS;
-   sceneDesc.filterShader  = physx::PxDefaultSimulationFilterShader;
+
+   sceneDesc.filterShader  = sCcdFilterShader;
 
 	mScene = gPhysics3SDK->createScene(sceneDesc);
 
@@ -307,32 +334,60 @@ void Px3World::getPhysicsResults()
   // Con::printf( "%s PhysXWorld::getPhysicsResults!", this == smClientWorld ? "Client" : "Server" );
 }
 
-void Px3World::releaseWriteLocks()
+void Px3World::lockScenes()
 {
 	Px3World *world = dynamic_cast<Px3World*>( PHYSICSMGR->getWorld( "server" ) );
 
 	if ( world )
-		world->releaseWriteLock();
+		world->lockScene();
 
 	world = dynamic_cast<Px3World*>( PHYSICSMGR->getWorld( "client" ) );
 
 	if ( world )
-		world->releaseWriteLock();
+		world->lockScene();
 }
 
-void Px3World::releaseWriteLock()
+void Px3World::unlockScenes()
 {
-	if ( !mScene || !mIsSimulating ) 
+	Px3World *world = dynamic_cast<Px3World*>( PHYSICSMGR->getWorld( "server" ) );
+
+	if ( world )
+		world->unlockScene();
+
+	world = dynamic_cast<Px3World*>( PHYSICSMGR->getWorld( "client" ) );
+
+	if ( world )
+		world->unlockScene();
+}
+
+void Px3World::lockScene()
+{
+	if ( !mScene ) 
 		return;
 
-	PROFILE_SCOPE(PxWorld_ReleaseWriteLock);
+   if(mIsSceneLocked)
+   {
+      Con::printf("Px3World: Attempting to lock a scene that is already locked.");
+      return;
+   }
 
-	// We use checkResults here to release the write lock
-	// but we do not change the simulation flag or increment
-	// the tick count... we may have gotten results, but the
-	// simulation hasn't really ticked!
-	mScene->checkResults( true );
-	//AssertFatal( mScene->isWritable(), "PhysX3World::releaseWriteLock() - We should have been writable now!" );
+	mScene->lockWrite();
+   mIsSceneLocked = true;
+}
+
+void Px3World::unlockScene()
+{
+	if ( !mScene ) 
+		return;
+
+   if(!mIsSceneLocked)
+   {
+      Con::printf("Px3World: Attempting to unlock a scene that is not locked.");
+      return;
+   }
+
+	mScene->unlockWrite();
+   mIsSceneLocked = false;
 }
 
 bool Px3World::castRay( const Point3F &startPnt, const Point3F &endPnt, RayInfo *ri, const Point3F &impulse )
@@ -472,9 +527,10 @@ physx::PxController* Px3World::createController( physx::PxControllerDesc &desc )
 		return NULL;
 
 	// We need the writelock!
-	releaseWriteLock();
+	lockScene();
 	physx::PxController* pController = mControllerManager->createController(desc);
 	AssertFatal( pController, "Px3World::createController - Got a null!" );
+   unlockScene();
 	return pController;
 }
 

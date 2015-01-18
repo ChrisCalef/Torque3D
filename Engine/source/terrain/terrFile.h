@@ -40,6 +40,12 @@ class TerrainMaterial;
 class FileStream;
 class GBitmap;
 
+struct TerrainTriangle
+{
+   U32 materialIndex;
+
+   TerrainTriangle():materialIndex(0){}
+};
 
 ///
 struct TerrainSquare
@@ -51,6 +57,9 @@ struct TerrainSquare
    U16 heightDeviance;
 
    U16 flags;
+
+   TerrainTriangle triangle1;
+   TerrainTriangle triangle2;
 
    enum 
    {
@@ -164,6 +173,7 @@ public:
    void setSize( U32 newResolution, bool clear );
 
    TerrainSquare* findSquare( U32 level, U32 x, U32 y ) const;
+   TerrainSquare* findSquare( U32 level, U32 index ) const;
    
    BaseMatInstance* getMaterialMapping( U32 index ) const;
    
@@ -191,8 +201,13 @@ public:
 
    /// Check if the given point is valid within the (non-tiled) terrain file.
    bool isPointInTerrain( U32 x, U32 y ) const;
+
 };
 
+inline TerrainSquare* TerrainFile::findSquare( U32 level, U32 index ) const
+{
+   return mGridMap[level] + index;
+}
 
 inline TerrainSquare* TerrainFile::findSquare( U32 level, U32 x, U32 y ) const
 {

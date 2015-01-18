@@ -52,7 +52,7 @@ void Px3Body::_releaseActor()
    if ( !mActor )
       return;
 
-   mWorld->releaseWriteLock();
+   mWorld->lockScene();
 
    mActor->userData = NULL;
 
@@ -66,6 +66,7 @@ void Px3Body::_releaseActor()
    }
 
    mColShape = NULL;
+   mWorld->unlockScene();
 }
 
 bool Px3Body::init(   PhysicsCollision *shape, 
@@ -123,7 +124,13 @@ bool Px3Body::init(   PhysicsCollision *shape,
 				Con::errorf("PhysX3 Dynamic Triangle Mesh is not supported.");
 			}
 	   }
-	   physx::PxShape * pShape = mActor->createShape(*desc->pGeometry,*mMaterial);
+      physx::PxShape * pShape = NULL;
+      //only heightfield have been implemented with material indexes. TriangleMesh is a TODO
+      if(desc->materials.size())
+         pShape = mActor->createShape(*desc->pGeometry,desc->materials.address(),(physx::PxU32)desc->materials.size());
+      else
+	      pShape = mActor->createShape(*desc->pGeometry,*mMaterial);
+
 	   physx::PxFilterData colData;
 	   if(isDebris)
 			colData.word0 = PX3_DEBRIS;
@@ -147,11 +154,14 @@ bool Px3Body::init(   PhysicsCollision *shape,
    {
 		physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
 		physx::PxRigidBodyExt::setMassAndUpdateInertia(*actor,mass);
+      if(mBodyFlags & BF_CCD)
+         actor->setRigidBodyFlag(physx::PxRigidBodyFlag::eENABLE_CCD, true);
+      else
+         actor->setRigidBodyFlag(physx::PxRigidBodyFlag::eENABLE_CCD, false);
    }
 
-    // This sucks, but it has to happen if we want
-   // to avoid write lock errors from PhysX right now.
-   mWorld->releaseWriteLock();
+
+   mWorld->lockScene();
 
    mWorld->getScene()->addActor(*mActor);
    mIsEnabled = true;
@@ -162,6 +172,8 @@ bool Px3Body::init(   PhysicsCollision *shape,
    mUserData.setObject( obj );
    mUserData.setBody( this );
    mActor->userData = &mUserData;
+
+   mWorld->unlockScene();
 
    return true;
 }
@@ -219,7 +231,7 @@ void Px3Body::getState( PhysicsState *outState )
    outState->linVelocity = px3Cast<Point3F>( actor->getLinearVelocity() ); 
    outState->angVelocity = px3Cast<Point3F>( actor->getAngularVelocity() );
    outState->sleeping = actor->isSleeping();
-   outState->momentum = px3Cast<Point3F>( (1.0f/actor->getMass()) * actor->getLinearVelocity() );
+   outState->momentum = px3Cast<Point3F>( (1.0f/actor->getMass()) * actor->getLinearVelocity() );//??
 
 }
 
@@ -350,9 +362,7 @@ void Px3Body::setSimulationEnabled( bool enabled )
    if(mBodyFlags & BF_TRIGGER)
       return;
   
-   // This sucks, but it has to happen if we want
-   // to avoid write lock errors from PhysX right now.
-   mWorld->releaseWriteLock();
+   mWorld->lockScene();
 
    U32 shapeCount = mActor->getNbShapes();
 	physx::PxShape **shapes = new physx::PxShape*[shapeCount];
@@ -363,21 +373,50 @@ void Px3Body::setSimulationEnabled( bool enabled )
    }
 
    delete [] shapes;
+
+   mWorld->unlockScene();
 }
+
+void Px3Body::moveKinematicTo( const MatrixF &transform )
+{
+   AssertFatal( mActor, "Px3Body::moveKinematicTo - The actor is null!" );
+
+   const bool isKinematic = mBodyFlags & BF_KINEMATIC;
+   if (!isKinematic )
+   {
+      Con::errorf("Px3Body::moveKinematicTo is only for kinematic bodies.");
+      return;
+   }   
+
+   mWorld->lockScene();
+
+   physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
+   actor->setKinematicTarget(px3Cast<physx::PxTransform>(transform));
+
+   mWorld->unlockScene();
+}
+
 void Px3Body::setTransform( const MatrixF &transform )
 {
    AssertFatal( mActor, "Px3Body::setTransform - The actor is null!" );
 
 
-   // This sucks, but it has to happen if we want
-   // to avoid write lock errors from PhysX right now.
-   mWorld->releaseWriteLock();
+   mWorld->lockScene();
 
+   //static actors must be removed from the scene before moving them
+   if(mIsStatic)
+   {
+      mWorld->getScene()->removeActor(*mActor);
+   }
    
    mActor->setGlobalPose(px3Cast<physx::PxTransform>(transform),false);
 
    if(mIsStatic)
-	   return;
+   {
+      mWorld->getScene()->addActor(*mActor);
+      mWorld->unlockScene();
+      return;
+   }
 
 	physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
 	bool kinematic = actor->getRigidDynamicFlags() & physx::PxRigidDynamicFlag::eKINEMATIC;
@@ -388,6 +427,8 @@ void Px3Body::setTransform( const MatrixF &transform )
       actor->setAngularVelocity( physx::PxVec3(0) );
       actor->wakeUp();
    }
+
+   mWorld->unlockScene();
 }
 
 void Px3Body::applyCorrection( const MatrixF &transform )
@@ -395,25 +436,25 @@ void Px3Body::applyCorrection( const MatrixF &transform )
    AssertFatal( mActor, "Px3Body::applyCorrection - The actor is null!" );
    AssertFatal( isDynamic(), "Px3Body::applyCorrection - This call is only for dynamics!" );
 
-   // This sucks, but it has to happen if we want
-   // to avoid write lock errors from PhysX right now.
-   mWorld->releaseWriteLock();
+   mWorld->lockScene();
 
    mActor->setGlobalPose( px3Cast<physx::PxTransform>(transform) ); 
+
+   mWorld->unlockScene();
 }
 
 void Px3Body::applyImpulse( const Point3F &origin, const Point3F &force )
 {
    AssertFatal( mActor, "Px3Body::applyImpulse - The actor is null!" );
 
-   // This sucks, but it has to happen if we want
-   // to avoid write lock errors from PhysX right now.
-   mWorld->releaseWriteLock();
+   mWorld->lockScene();
    physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
    if ( mIsEnabled && isDynamic() )
    physx::PxRigidBodyExt::addForceAtPos(*actor,px3Cast<physx::PxVec3>(force),
 												px3Cast<physx::PxVec3>(origin),
 												physx::PxForceMode::eIMPULSE);
+
+   mWorld->unlockScene();
 
 }
 

@@ -232,6 +232,12 @@ U32 PxPlugin::getWorldCount() const
    return mPhysicsWorldLookup.size(); 
 }
 
+PhysicsCloth* PxPlugin::createCloth(TSShapeInstance* shapeInst, const MatrixF &transform)
+{
+   Con::errorf("PxPlugin does not support PhysicsCloth at this stage");
+   return NULL;
+}
+
 void PxPlugin::_onDebugDrawEnabled( bool enabled )
 {   
    if ( !enabled )

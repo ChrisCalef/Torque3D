@@ -751,12 +751,14 @@ void TSShapeInstance::MeshObjectInstance::render(  S32 objectDetail,
    const U32 currTime = Sim::getCurrentTime();
    bool isSkinDirty = currTime != mLastTime;
 
-   mesh->render(  materials, 
-                  rdata, 
-                  isSkinDirty,
-                  *mTransforms, 
-                  mVertexBuffer,
-                  mPrimitiveBuffer );
+	// andrewmac: Vertex Override
+	mesh->render(  materials, 
+					rdata, 
+					isSkinDirty,
+					*mTransforms, 
+					mVertexBuffer,
+					mPrimitiveBuffer, 
+					vertexOverride );
 
    // Update the last render time.
    mLastTime = currTime;
@@ -766,7 +768,8 @@ void TSShapeInstance::MeshObjectInstance::render(  S32 objectDetail,
 
 TSShapeInstance::MeshObjectInstance::MeshObjectInstance() 
    : meshList(0), object(0), frame(0), matFrame(0),
-     visible(1.0f), forceHidden(false), mLastTime( 0 )
+     visible(1.0f), forceHidden(false), mLastTime( 0 ),
+	 vertexOverride(NULL) // andrewmac: vertex override.
 {
 }
 
@@ -793,5 +796,20 @@ bool TSShapeInstance::hasAccumulation()
          result = true;
    }
    return result;
+}
+
+// andremwac : Find Mesh Instances by name.
+Vector<TSShapeInstance::MeshObjectInstance*> TSShapeInstance::findMeshInstances(const String& meshPrefix)
+{
+	Vector<TSShapeInstance::MeshObjectInstance*> results;
+	for ( U32 i = 0; i < mMeshObjects.size(); i++ )
+    {
+		TSShapeInstance::MeshObjectInstance* mesh = &mMeshObjects[i];
+		if ( mShape->getMeshName(i).startsWith(meshPrefix) )
+		{
+			results.push_back(mesh);
+		}
+	}
+	return results;
 }
 

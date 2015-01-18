@@ -207,6 +207,8 @@ protected:
 
    void _updatePhysics();
 
+   void _updateTextureIndex();
+
    void _renderBlock( SceneRenderState *state );
    void _renderDebug( ObjectRenderInst *ri, SceneRenderState *state, BaseMatInstance *overrideMat );
 
@@ -459,6 +461,7 @@ public:
    U32 packUpdate   (NetConnection *conn, U32 mask, BitStream *stream);
    void unpackUpdate(NetConnection *conn,           BitStream *stream);
    void inspectPostApply();
+
 };
 
 #endif // _TERRDATA_H_

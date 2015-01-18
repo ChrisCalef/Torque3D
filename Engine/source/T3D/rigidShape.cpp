@@ -1093,7 +1093,7 @@ void RigidShape::updatePos(F32 dt)
       }
       else if (inLiquid && mWaterCoverage == 0.0f) 
       {
-		 onLeaveLiquid_callback(getIdString(), mLiquidType.c_str() );
+         onLeaveLiquid_callback(getIdString(), mLiquidType.c_str() );
          inLiquid = false;
       }
 

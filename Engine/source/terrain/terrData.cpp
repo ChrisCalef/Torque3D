@@ -1003,6 +1003,25 @@ void TerrainBlock::_rebuildQuadtree()
    mCell->createPrimBuffer( &mPrimBuffer );
 }
 
+void TerrainBlock::_updateTextureIndex()
+{
+   U32 blockSize = getBlockSize();
+
+   for ( U32 row = 0; row < blockSize; row++ )        
+   {  
+      for ( U32 column = 0; column < blockSize; column++ )            
+      {
+         U32 index = ( blockSize - row - 1 ) + ( column * blockSize );
+         U32 layerIndex1 = (U32)mFile->getLayerIndex(row,column);
+        // U32 layerIndex2 = (U32)mFile->getLayerIndex(row-1,column-1);
+
+         TerrainSquare *sq = mFile->findSquare( 0, index);
+         sq->triangle1.materialIndex = layerIndex1;
+         sq->triangle2.materialIndex = layerIndex1;
+      }
+   }
+}
+
 void TerrainBlock::_updatePhysics()
 {
    if ( !PHYSICSMGR )
@@ -1025,6 +1044,8 @@ void TerrainBlock::_updatePhysics()
    }
    else
    {
+      
+      _updateTextureIndex();
       // Get empty state of each vert
       bool *holes = new bool[ getBlockSize() * getBlockSize() ];
       for ( U32 row = 0; row < getBlockSize(); row++ )
@@ -1032,10 +1053,12 @@ void TerrainBlock::_updatePhysics()
             holes[ row + (column * getBlockSize()) ] = mFile->isEmptyAt( row, column );
 
       colShape = PHYSICSMGR->createCollision();
-      colShape->addHeightfield( mFile->getHeightMap().address(), holes, getBlockSize(), mSquareSize, MatrixF::Identity );
+      colShape->addHeightfield( mFile->getHeightMap().address(), holes, getBlockSize(), mSquareSize, MatrixF::Identity, this );
 
       delete [] holes;
    }
+
+   
 
    PhysicsWorld *world = PHYSICSMGR->getWorld( isServerObject() ? "server" : "client" );
    mPhysicsRep = PHYSICSMGR->createBody();
