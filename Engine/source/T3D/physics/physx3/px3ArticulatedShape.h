@@ -1,6 +1,9 @@
 //-----------------------------------------------------------------------------
 // Authors: 
 //        Chris Calef  -  indiemotionsoftware.com
+//        With credit to:
+//			timmy@deadlymatter.com
+//			Andrew MacIntyre - Aldyre Studios - aldyre.com
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -34,17 +37,6 @@
     #include "core/iTickable.h"
 #endif
 
-//-----------------------------------------------------------------------------
-// Px3ClothShape provides the ability to load a shape into torque and have 
-// individual mesh pieces appear as cloth in the world. The mesh must meet
-// the following criteria:
-//  1) Each mesh must be named Cloth-x or cloth-x where x is any positive
-//     integer.
-//  2) Every vertex must be weighted to either bone 0 or bone 1. Meaning two
-//     bones have to be created that each cloth mesh is weighed to. The
-//     vertices on bone 0 are treated as loose cloth, the ones on bone 1 are
-//     treated as fixed points.
-//-----------------------------------------------------------------------------
 
 class Px3ArticulatedShape : public PhysicsArticulatedShape
 {
