@@ -183,3 +183,5 @@ My Projects/
 Project Manager.exe
 projects.xml
 Qt*.dll
+Templates/Empty/web/source/activex/IEWebGamePlugin_i.h
+Templates/Full/web/source/activex/IEWebGamePlugin_i.h
