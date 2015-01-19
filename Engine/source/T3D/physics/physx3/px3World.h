@@ -35,7 +35,9 @@
 #ifndef _TVECTOR_H_
 #include "core/util/tVector.h"
 #endif
-
+#ifndef _SQLITEOBJECT_H_
+#include "console/SQLiteObject.h"
+#endif
 class Px3ConsoleStream;
 class Px3ContactReporter;
 class FixedStepper;
@@ -53,6 +55,7 @@ class Px3World : public PhysicsWorld
 protected:
 
 	physx::PxScene* mScene;
+	SQLiteObject* mSQL;
 	bool mIsEnabled;
 	bool mIsSimulating;
 	bool mIsServer;
