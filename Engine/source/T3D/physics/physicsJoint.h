@@ -144,54 +144,7 @@ public:
    virtual void setNewTarget(QuatF &)=0;
    virtual void clearMotor()=0;
    virtual void scaleMotorForce(F32)=0;
-   
-   virtual void setTwistLimit(F32)=0;
-   virtual void setSwingLimit(F32)=0;
-   virtual void setSwingLimit2(F32)=0;
-   
-   virtual void setMaxForce(F32)=0;
-   virtual void setMaxTorque(F32)=0;
-
-   virtual void setSwingSpring(F32)=0;
-   virtual void setTwistSpring(F32)=0;
-   virtual void setSpringDamper(F32)=0;
-   virtual void setSpringTargetAngle(F32)=0;
-   virtual void setMotorSpring(F32)=0;
-   virtual void setMotorDamper(F32)=0;
-
-   virtual void setAxisA(Point3F &)=0;
-   virtual void setAxisB(Point3F &)=0;
-   virtual void setNormalA(Point3F &)=0;
-   virtual void setNormalB(Point3F &)=0;
-
-   virtual void setLocalAnchor0(Point3F &)=0;
-   virtual void setLocalAnchor1(Point3F &)=0;
-   virtual void setLocalAxis0(Point3F &)=0;
-   virtual void setLocalAxis1(Point3F &)=0;
-   virtual void setLocalNormal0(Point3F &)=0;
-   virtual void setLocalNormal1(Point3F &)=0;
-
-   virtual void setGlobalAnchor(Point3F &)=0;
-   virtual void setGlobalAxis(Point3F &)=0;
-   virtual void setGlobalNormal(Point3F &)=0;
-
-   virtual void setLimitPoint(Point3F &)=0;
-   virtual void setLimitPlaneAnchor1(Point3F &)=0;
-   virtual void setLimitPlaneNormal1(Point3F &)=0;
-   virtual void setLimitPlaneAnchor2(Point3F &)=0;
-   virtual void setLimitPlaneNormal2(Point3F &)=0;
-   virtual void setLimitPlaneAnchor3(Point3F &)=0;
-   virtual void setLimitPlaneNormal3(Point3F &)=0;
-   virtual void setLimitPlaneAnchor4(Point3F &)=0;
-   virtual void setLimitPlaneNormal4(Point3F &)=0;
-
-   virtual physJointType getJointType()=0;
-   virtual void setJointType(physJointType)=0;
-
-   virtual bool getHW()=0;
-   virtual void setHW(bool b=true)=0;
    */
-
 };
 
 #endif // _T3D_PHYSICS_PHYSICSJOINT_H_

@@ -127,10 +127,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 		Con::printf("Couldn't find joint type: %d",jointType);
 	}
 
-	//mJoint->setBreakForce(jD->maxForce,jD->maxTorque);
-
-	//Now waitaminute...the above works, but how does it know... I guess the two actors are part of the same
-	//scene, so the joint has to be in that scene, without specifying it directly.
+	mJoint->setBreakForce(jD->maxForce,jD->maxTorque);
 
 	world->unlockScene();//This may be unnecessary(?)
 	//setup();
@@ -153,6 +150,7 @@ void Px3Joint::setMotorTarget(QuatF &target)
 
 	physx::PxD6Joint* d6joint = dynamic_cast<physx::PxD6Joint*>(mJoint);
 
+	//I don't think this works...
 	//d6joint->setDrivePosition(physx::PxTransform(physx::PxQuat(mMotorTarget.x,mMotorTarget.y,mMotorTarget.z,mMotorTarget.w)));
-	d6joint->setDriveVelocity(physx::PxVec3(0,0,0),physx::PxVec3(0,10,0));
+
 }
