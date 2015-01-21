@@ -117,6 +117,8 @@ public:
                               F32 staticFriction );
    virtual void applyCorrection( const MatrixF &xfm );
    virtual void applyImpulse( const Point3F &origin, const Point3F &force );
+
+   virtual physx::PxRigidActor* getActor();
 };
 
 #endif // _PX3BODY_H_

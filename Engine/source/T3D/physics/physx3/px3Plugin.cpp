@@ -29,6 +29,7 @@
 #include "T3D/physics/physx3/px3Body.h"
 #include "T3D/physics/physx3/px3Player.h"
 #include "T3D/physics/physx3/Cloth/px3ClothShape.h"
+#include "T3D/physics/physx3/px3Joint.h"
 
 #include "T3D/physics/physicsShape.h"
 #include "T3D/gameBase/gameProcess.h"
@@ -57,10 +58,39 @@ PhysicsPlugin* Px3Plugin::create()
 
 Px3Plugin::Px3Plugin()
 {
+	mSQL = new SQLiteObject();
+	if (mSQL->OpenDatabase("physicsData.db"))
+	{
+		char id_query[512];
+		int id,result;
+		sqlite_resultset *resultSet;
+
+		/*SELECT Customers.FirstName, Customers.LastName, SUM(Sales.SaleAmount) 
+		AS SalesPerCustomer
+		FROM Customers JOIN Sales ON Customers.CustomerID = Sales.CustomerID*/
+		sprintf(id_query,"SELECT id,name FROM px3Joint;");
+		result = mSQL->ExecuteSQL(id_query);
+		if (result==0)
+			return; 				
+		
+		resultSet = mSQL->GetResultSet(result);
+		Con::printf("OPENED SQLITE DATABASE: results: %d",resultSet->iNumRows);
+		for (U32 i=0;i<resultSet->iNumRows;i++)
+		{
+			id = dAtoi(resultSet->vRows[i]->vColumnValues[0]);
+			Con::printf("Result one: %d   %s",id,resultSet->vRows[i]->vColumnValues[1]);
+		}
+		//NOW, we're just gonna leave this connection open and use it for the life of the Px3Plugin object.
+	}
 }
 
 Px3Plugin::~Px3Plugin()
-{
+{	
+	if (mSQL)
+	{
+		mSQL->CloseDatabase();
+		delete mSQL;
+	}
 }
 
 void Px3Plugin::destroyPlugin()
@@ -240,4 +270,77 @@ PhysicsMaterial* Px3Plugin::createMaterial(const F32 restitution,const F32 stati
    Px3Material* material  = new Px3Material();
    material->create(restitution,staticFriction,dynamicFritction);
    return material;
+}
+
+PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID)
+{
+	PhysicsWorld *worldA,*worldB;
+	worldA = A->getWorld();
+	worldB = B->getWorld();
+	if (worldA!=worldB)
+	{
+		Con::errorf("Physics bodies are not in the same world!");
+		return NULL;
+	}
+
+	physx::PxRigidActor *actor1, *actor2;
+	actor1 = dynamic_cast<Px3Body*>(A)->getActor();
+	actor2 = dynamic_cast<Px3Body*>(B)->getActor();
+
+	char id_query[512];
+	S32 result;
+	sqlite_resultset *resultSet;
+
+	sprintf(id_query,"SELECT * FROM px3Joint WHERE id=%d;",jointID);
+	result = mSQL->ExecuteSQL(id_query);
+	if (result==0)
+		return NULL; 				
+
+	resultSet = mSQL->GetResultSet(result);
+	if (resultSet->iNumRows!=1)
+		return NULL;
+
+	physicsJointData jD;
+	int i=2;
+	F32 x,y,z;
+	
+	jD.jointType = (physicsJointType)dAtoi(resultSet->vRows[0]->vColumnValues[i++]);
+
+	F32 pi_over_180 = M_PI / 180.0f;//Where do we keep our Deg2Rad() logic, it exists doesn't it?
+
+	jD.twistLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]) * pi_over_180;
+	jD.swingLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]) * pi_over_180;
+	jD.swingLimit2 = dAtof(resultSet->vRows[0]->vColumnValues[i++]) * pi_over_180;
+
+	jD.xLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD.yLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD.zLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+
+	x = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	y = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	z = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD.localAxis = Point3F(x,y,z);
+
+	x = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	y = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	z = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD.localNormal = Point3F(x,y,z);
+
+	jD.swingSpring = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD.twistSpring = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD.springDamper = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	
+	jD.motorSpring = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD.motorDamper = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+
+	jD.maxForce = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD.maxTorque = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	
+	//And then later, the limit planes...
+
+	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&jD);
+	//NOW, where should I save this joint??
+
+
+	return NULL;
 }

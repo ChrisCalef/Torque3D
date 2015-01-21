@@ -41,7 +41,9 @@
 #include "lighting/lightQuery.h"
 #include "console/engineAPI.h"
 
+
 using namespace Torque;
+
 
 bool PhysicsShape::smNoCorrections = false;
 bool PhysicsShape::smNoSmoothing = false;
@@ -401,12 +403,15 @@ PhysicsShape::PhysicsShape()
    :  mPhysicsRep( NULL ),
       mDataBlock( NULL ),
       mWorld( NULL ),
+      mJoint( NULL ),
       mShapeInst( NULL ),
       mResetPos( MatrixF::Identity ),
       mDestroyed( false ),
       mPlayAmbient( false ),
       mAmbientThread( NULL ),
-      mAmbientSeq( -1 )
+      mAmbientSeq( -1 ),
+	  mHasGravity( true ),
+	  mIsDynamic( true )
 {
    mNetFlags.set( Ghostable | ScopeAlways );
    mTypeMask |= DynamicShapeObjectType;
@@ -429,6 +434,7 @@ void PhysicsShape::consoleInit()
      "@brief Determines if client-side shapes will attempt to smoothly transition to "
      "their new position after reciving a correction.\n\n"
      "If true, shapes will immediately render at the position they are corrected to.\n\n");
+      
 
    Parent::consoleInit();   
 }
@@ -441,6 +447,11 @@ void PhysicsShape::initPersistFields()
             "@brief Enables or disables playing of an ambient animation upon loading the shape.\n\n"
             "@note The ambient animation must be named \"ambient\"." );
    
+	  addField( "hasGravity", TypeBool, Offset( mHasGravity, PhysicsShape ),
+		  "@brief Turns off gravity for this object if set to false.\n\n");
+	  addField( "isDynamic", TypeBool, Offset( mIsDynamic, PhysicsShape ),
+		  "@brief Turns object kinematic if set to false.\n\n");
+
    endGroup( "PhysicsShape" );
 
    Parent::initPersistFields();   
@@ -463,6 +474,8 @@ U32 PhysicsShape::packUpdate( NetConnection *con, U32 mask, BitStream *stream )
    {
       stream->writeAffineTransform( getTransform() );
       stream->writeFlag( mPlayAmbient );
+      stream->writeFlag( mHasGravity );
+      stream->writeFlag( mIsDynamic );
 
       stream->writeFlag( mDestroyed );
 
@@ -525,6 +538,8 @@ void PhysicsShape::unpackUpdate( NetConnection *con, BitStream *stream )
       stream->readAffineTransform( &mat );
       setTransform( mat );
       mPlayAmbient = stream->readFlag();
+      mHasGravity = stream->readFlag();
+	  mIsDynamic = stream->readFlag();
 
       if ( isProperlyAdded() )
          _initAmbient();
@@ -736,10 +751,14 @@ bool PhysicsShape::_createShape()
    // it allows for us to enable/disable collision and having
    // all dynamic actors react correctly... waking up.
    // 
-   const bool isDynamic = mDataBlock->mass > 0.0f;
+   //const bool isDynamic = mDataBlock->mass > 0.0f;
+
+   //Now setting mIsDynamic from console at object creation, but 
+   //also still turn it off if mass is less than or equal to zero.
+   if (mDataBlock->mass <= 0.0f) mIsDynamic = false;
 
    // If we aren't dynamic we don't need to tick.   
-   setProcessTick( isDynamic || mPlayAmbient );
+   setProcessTick( mIsDynamic || mPlayAmbient );
 
    // If this is the client and we're a server only object then
    // we don't need any physics representation... we're done.
@@ -748,9 +767,15 @@ bool PhysicsShape::_createShape()
       return true;
 
    mWorld = PHYSICSMGR->getWorld( isServerObject() ? "server" : "client" );
-   U32 bodyFlags = isDynamic ? 0 : PhysicsBody::BF_KINEMATIC; 
+   U32 bodyFlags = mIsDynamic ? 0 : PhysicsBody::BF_KINEMATIC; 
    if(mDataBlock->ccdEnabled)
       bodyFlags |= PhysicsBody::BF_CCD;
+
+   if(mHasGravity)
+      bodyFlags |= PhysicsBody::BF_GRAVITY;
+   else
+	  bodyFlags &= ~PhysicsBody::BF_GRAVITY;
+
 
    mPhysicsRep = PHYSICSMGR->createBody();
    mPhysicsRep->init(   mDataBlock->colShape, 
@@ -761,7 +786,7 @@ bool PhysicsShape::_createShape()
 
    mPhysicsRep->setMaterial( mDataBlock->restitution, mDataBlock->dynamicFriction, mDataBlock->staticFriction );
    
-   if ( isDynamic )
+   if ( mIsDynamic )
    {
       mPhysicsRep->setDamping( mDataBlock->linearDamping, mDataBlock->angularDamping );
       mPhysicsRep->setSleepThreshold( mDataBlock->linearSleepThreshold, mDataBlock->angularSleepThreshold );
@@ -1156,6 +1181,11 @@ void PhysicsShape::restore()
    setMaskBits( DamageMask );
 }
 
+PhysicsBody* PhysicsShape::getPhysicsRep()
+{
+	return mPhysicsRep;
+}
+
 DefineEngineMethod( PhysicsShape, isDestroyed, bool, (),, 
    "@brief Returns if a PhysicsShape has been destroyed or not.\n\n" )
 {
@@ -1179,4 +1209,58 @@ DefineEngineMethod( PhysicsShape, restore, void, (),,
    "Has no effect if the shape is not destroyed.\n\n")
 {
    object->restore();
+}
+
+///////////////////////////////////////////////////////////////////////////////////
+
+DefineEngineMethod( PhysicsShape, jointAttach, void, (U32 objectID,U32 jointType),,
+   "@brief Attaches this object to the other object by creating a physx joint "
+   "of the given type.\n\n")
+{
+	U32 myID = object->getId();
+
+	Con::printf("executing jointAttach! myID: %d, objectID: %d, joint type %d",myID,objectID,jointType) ;
+	
+	SimObject *otherObj = Sim::findObject(objectID);
+	if (otherObj)
+		Con::printf("Identified the other object! %s",otherObj->getClassName());
+	if (strcmp(otherObj->getClassName(),"PhysicsShape"))
+		Con::printf("Other object is not a PhysicsShape!");
+	else
+	{
+		PhysicsBody *otherBody = dynamic_cast<PhysicsShape*>(otherObj)->getPhysicsRep();
+		Con::printf("Found other object's physics rep, mass = %f",otherBody->getMass());
+
+		PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(object->getPhysicsRep(),otherBody,jointType);
+		object->mJoint = kJoint;
+		object->setJointTarget(QuatF(0,0.707,0.707,0.0));
+	}
+}
+
+void PhysicsShape::setJointTarget(QuatF &target)
+{
+	if (mJoint)
+		mJoint->setMotorTarget(target);
+
+	Con::printf("physicsShape set motor target: %f %f %f %f",target.x,target.y,target.z,target.w);
+
+}
+
+
+DefineEngineMethod( PhysicsShape, setJointTarget, void, (F32 x,F32 y,F32 z,F32 w),,
+   "@brief Sets this object's joint motor drive to the target quat.\n\n")
+{
+	object->setJointTarget(QuatF(x,y,z,w));
+}
+
+DefineEngineMethod( PhysicsShape, applyImpulse, void, (Point3F pos,Point3F vec),,
+   "@brief Applies vec impulse to object at pos.\n\n")
+{
+   object->applyImpulse(pos,vec);
+}
+
+DefineEngineMethod( PhysicsShape, applyRadialImpulse, void, (Point3F origin,F32 radius,F32 magnitude),,
+   "@brief Applies vec impulse to object at pos.\n\n")
+{
+   object->applyRadialImpulse(origin,radius,magnitude);
 }

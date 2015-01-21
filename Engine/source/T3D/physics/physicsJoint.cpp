@@ -24,22 +24,5 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
-#ifndef _T3D_PHYSICS_PHYSICSCONSTRAINT_H_
-#define _T3D_PHYSICS_PHYSICSCONSTRAINT_H_
-
-#ifndef _T3D_PHYSICSCOMMON_H_
-#include "T3D/physics/physicsCommon.h"
-#endif
-#ifndef _T3D_PHYSICS_PHYSICSOBJECT_H_
-#include "T3D/physics/physicsObject.h"
-#endif
-
-
-class PhysicsConstraint
-{
-public:
-   virtual ~PhysicsConstraint() {}
-
-};
-
-#endif // _T3D_PHYSICS_PHYSICSCONSTRAINT_H_
+#include "platform/platform.h"
+#include "T3D/physics/physicsJoint.h"

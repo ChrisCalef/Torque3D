@@ -92,6 +92,7 @@ bool Px3Body::init(   PhysicsCollision *shape,
    const bool isKinematic = mBodyFlags & BF_KINEMATIC;
    const bool isTrigger = mBodyFlags & BF_TRIGGER;
    const bool isDebris = mBodyFlags & BF_DEBRIS;
+   const bool hasGravity = mBodyFlags & BF_GRAVITY;
 
    if ( isKinematic )
    {
@@ -108,7 +109,10 @@ bool Px3Body::init(   PhysicsCollision *shape,
    {
       mActor = gPhysics3SDK->createRigidStatic(physx::PxTransform(physx::PxIDENTITY()));
       mIsStatic = true;
-	}
+   }
+
+   if (hasGravity==false)
+		mActor->setActorFlag(physx::PxActorFlag::eDISABLE_GRAVITY,true);
 
    mMaterial = gPhysics3SDK->createMaterial(0.6f,0.4f,0.1f);
   
@@ -458,3 +462,7 @@ void Px3Body::applyImpulse( const Point3F &origin, const Point3F &force )
 
 }
 
+physx::PxRigidActor* Px3Body::getActor() 
+{ 
+   return mActor; 
+}

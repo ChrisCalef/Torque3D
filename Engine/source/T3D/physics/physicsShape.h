@@ -41,6 +41,9 @@
 #ifndef _SIMOBJECTREF_H_
    #include "console/simObjectRef.h"
 #endif
+#ifndef _T3D_PHYSICS_PHYSICSJOINT_H_
+   #include "T3D/physics/physicsJoint.h"
+#endif
 
 class TSShapeInstance;
 class PhysicsBody;
@@ -81,28 +84,13 @@ public:
    /// The shared unscaled collision shape.
    PhysicsCollisionRef colShape;
 
-   ///
    F32 mass;
-
-   /// 
    F32 dynamicFriction;
-
-   /// 
    F32 staticFriction;
-
-   ///
    F32 restitution;
-
-   ///
    F32 linearDamping;
-
-   ///
    F32 angularDamping;
-
-   /// 
    F32 linearSleepThreshold;
-
-   ///
    F32 angularSleepThreshold;
 
    // A scale applied to the normal linear and angular damping
@@ -190,6 +178,12 @@ protected:
    /// Is only assigned (non null) on the serverside PhysicsShape.
    SimObjectPtr< PhysicsShape > mDestroyedShape;
 
+   
+   // Disables gravity on this object if not set to true.
+   bool mHasGravity;
+   // Sets object to kinematic if true.
+   bool mIsDynamic;
+
    ///
    enum MaskBits 
    {
@@ -226,7 +220,7 @@ protected:
    static bool smNoSmoothing;
 
 public:
-
+	
    PhysicsShape();
    virtual ~PhysicsShape();
 
@@ -264,6 +258,11 @@ public:
    /// event occurs. This is automatically set in onAdd but some manipulators
    /// such as Prefab need to make use of this.
    void storeRestorePos();
+
+   PhysicsBody *getPhysicsRep();
+   PhysicsJoint *mJoint;
+   void setJointTarget(QuatF &target);
+
 };
 
 #endif // _PHYSICSSHAPE_H_

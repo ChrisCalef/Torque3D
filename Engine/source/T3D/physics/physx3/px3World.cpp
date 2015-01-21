@@ -82,39 +82,11 @@ Px3World::Px3World(): mScene( NULL ),
    mControllerManager( NULL ),
    mIsSceneLocked( false )
 {
-	mSQL = new SQLiteObject();
-	if (mSQL->OpenDatabase("Test.db"))
-	{
-		char id_query[512];
-		int id,result;
-		sqlite_resultset *resultSet;
-
-		/*SELECT Customers.FirstName, Customers.LastName, SUM(Sales.SaleAmount) 
-		AS SalesPerCustomer
-		FROM Customers JOIN Sales ON Customers.CustomerID = Sales.CustomerID*/
-		sprintf(id_query,"SELECT id,name FROM sample;");
-		result = mSQL->ExecuteSQL(id_query);
-		if (result==0)
-		{
-			mSQL->CloseDatabase();
-			delete mSQL;
-			return; 				
-		}
-		resultSet = mSQL->GetResultSet(result);
-		Con::printf("OPENED SQLITE DATABASE: results: %d",resultSet->iNumRows);
-		for (U32 i=0;i<resultSet->iNumRows;i++)
-		{
-			id = dAtoi(resultSet->vRows[i]->vColumnValues[0]);
-			Con::printf("Result one: %d   %s",id,resultSet->vRows[i]->vColumnValues[1]);
-		}
-		mSQL->CloseDatabase();
-		delete mSQL;
-	}
+	
 }
 
 Px3World::~Px3World()
 {
-	//delete mSQL;
 }
 
 physx::PxCooking *Px3World::getCooking()
@@ -279,17 +251,17 @@ bool Px3World::initWorld( bool isServer, ProcessList *processList )
 	}
 
  	
-   sceneDesc.flags |= physx::PxSceneFlag::eENABLE_CCD;
-   sceneDesc.flags |= physx::PxSceneFlag::eENABLE_ACTIVETRANSFORMS;
+	sceneDesc.flags |= physx::PxSceneFlag::eENABLE_CCD;
+	sceneDesc.flags |= physx::PxSceneFlag::eENABLE_ACTIVETRANSFORMS;
 
-   sceneDesc.filterShader  = sCcdFilterShader;
+	sceneDesc.filterShader  = sCcdFilterShader;
 
 	mScene = gPhysics3SDK->createScene(sceneDesc);
 
 	physx::PxDominanceGroupPair debrisDominance( 0.0f, 1.0f );
 	mScene->setDominanceGroupPair(0,31,debrisDominance);
 
-   mControllerManager = PxCreateControllerManager(*mScene);
+	mControllerManager = PxCreateControllerManager(*mScene);
 
 	AssertFatal( processList, "Px3World::init() - We need a process list to create the world!" );
 	mProcessList = processList;

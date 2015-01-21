@@ -24,33 +24,27 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
-#ifndef _PX3CONSTRAINT_H_
-#define _PX3CONSTRAINT_H_
+#ifndef _PX3JOINT_H_
+#define _PX3JOINT_H_
 
 #include "T3D/physics/physx3/px3.h"
 #include "T3D/physics/physx3/px3World.h"
 #include "T3D/physics/physx3/px3Plugin.h"
-#include "T3D/physics/physicsConstraint.h"
+#include "T3D/physics/physicsJoint.h"
 
 
 
-//-----------------------------------------------------------------------------
-// Px3ClothShape provides the ability to load a shape into torque and have 
-// individual mesh pieces appear as cloth in the world. The mesh must meet
-// the following criteria:
-//  1) Each mesh must be named Cloth-x or cloth-x where x is any positive
-//     integer.
-//  2) Every vertex must be weighted to either bone 0 or bone 1. Meaning two
-//     bones have to be created that each cloth mesh is weighed to. The
-//     vertices on bone 0 are treated as loose cloth, the ones on bone 1 are
-//     treated as fixed points.
-//-----------------------------------------------------------------------------
-
-class Px3Constraint : public PhysicsConstraint
+class Px3Joint : public PhysicsJoint
 {
-   Px3Constraint();
-   virtual ~Px3Constraint();
+public:
+   Px3Joint(physx::PxRigidActor*,physx::PxRigidActor*,Px3World*,physicsJointData *jD);
+   virtual ~Px3Joint();
+
+   physx::PxJoint *mJoint;
+   
+   virtual QuatF &getMotorTarget();
+   virtual void setMotorTarget(QuatF &);
    
 };
 
-#endif // _PX3CONSTRAINT_H_
+#endif // _PX3JOINT_H_

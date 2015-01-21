@@ -54,7 +54,9 @@ public:
       /// The body responds to contacts but does not push forces into others.
       BF_DEBRIS = BIT( 2 ),
       /// Marks the body to have continuous collision detection enabled
-      BF_CCD = BIT( 3 )
+      BF_CCD = BIT( 3 ),
+	  /// If not set, body has gravity turned off.
+	  BF_GRAVITY = BIT( 4 )
    };
 
    virtual void moveKinematicTo( const MatrixF &xfm ) = 0;

@@ -26,7 +26,7 @@
 namespace physx
 {
 	class PxRigidActor;
-   class PxShape;
+	class PxShape;
 }
 
 extern physx::PxShape* px3GetFirstShape(physx::PxRigidActor *actor);
