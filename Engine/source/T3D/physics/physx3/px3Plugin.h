@@ -26,18 +26,13 @@
 #ifndef _T3D_PHYSICS_PHYSICSPLUGIN_H_
 #include "T3D/physics/physicsPlugin.h"
 #endif
-#ifndef _SQLITEOBJECT_H_
-#include "console/SQLiteObject.h"
-#endif
 
 class Px3ClothShape;
 
 class Px3Plugin : public PhysicsPlugin
 {
 public:
-	SQLiteObject* mSQL;//Chris Calef: I'm addicted to using sqlite for storing physics and all other data. 
-					//Somebody should probably come along and make this all work with datablocks as well.
-
+	
    Px3Plugin();
    ~Px3Plugin();
 

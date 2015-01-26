@@ -43,7 +43,7 @@
 #endif
 
 #include "T3D/physics/physicsCloth.h"
-//#include "T3D/physics/physicsJoint.h"
+
 #include "ts/tsShapeInstance.h"
 
 class Player;
@@ -57,6 +57,7 @@ class PhysicsPlayer;
 class PhysicsCollision;
 class PhysicsMaterial;
 class PhysicsJoint;
+class SQLiteObject;
 
 typedef Delegate<PhysicsObject*( const SceneObject *)> CreatePhysicsObjectFn; 
 typedef Map<StringNoCase, CreatePhysicsObjectFn> CreateFnMap;
@@ -86,7 +87,10 @@ protected:
    /// Delegate method for debug drawing.
    static void _debugDraw( SceneManager *graph, const SceneRenderState *state );
 
+
 public:
+
+   static SQLiteObject* mSQL;//Hmmm
 
    /// Note this should go away when we have "real" singleplayer.
    static bool smSinglePlayer;

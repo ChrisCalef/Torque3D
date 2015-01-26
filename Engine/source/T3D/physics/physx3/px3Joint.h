@@ -42,6 +42,7 @@ public:
 
    physx::PxJoint *mJoint;
    
+   virtual void loadJointData(physicsJointData *jD);
    virtual QuatF &getMotorTarget();
    virtual void setMotorTarget(QuatF &);
    

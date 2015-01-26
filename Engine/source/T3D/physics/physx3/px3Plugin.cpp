@@ -34,7 +34,7 @@
 #include "T3D/physics/physicsShape.h"
 #include "T3D/gameBase/gameProcess.h"
 #include "core/util/tNamedFactory.h"
-
+#include "console/SQLiteObject.h"
 
 AFTER_MODULE_INIT( Sim )
 {
@@ -61,15 +61,12 @@ Px3Plugin::Px3Plugin()
 	mSQL = new SQLiteObject();
 	if (mSQL->OpenDatabase("physicsData.db"))
 	{
-		char id_query[512];
+		char select_query[512],insert_query[512];
 		int id,result;
 		sqlite_resultset *resultSet;
 
-		/*SELECT Customers.FirstName, Customers.LastName, SUM(Sales.SaleAmount) 
-		AS SalesPerCustomer
-		FROM Customers JOIN Sales ON Customers.CustomerID = Sales.CustomerID*/
-		sprintf(id_query,"SELECT id,name FROM px3Joint;");
-		result = mSQL->ExecuteSQL(id_query);
+		sprintf(select_query,"SELECT id,name FROM px3Joint;");
+		result = mSQL->ExecuteSQL(select_query);
 		if (result==0)
 			return; 				
 		
@@ -80,6 +77,20 @@ Px3Plugin::Px3Plugin()
 			id = dAtoi(resultSet->vRows[i]->vColumnValues[0]);
 			Con::printf("Result one: %d   %s",id,resultSet->vRows[i]->vColumnValues[1]);
 		}
+
+		//Now, as a one time thing, let's populate the physicsJoint and physicsShapePart tables using the old database.
+		//Ah, turnsLeaving the code here in case we ever have similar needs in the future.
+
+		//SQLiteObject *EM = new SQLiteObject();
+		//EM->OpenDatabase("ExampleScenes.db");
+		//sprintf(select_query,"SELECT * FROM fxFlexBodyPart;");
+		//result = mSQL->ExecuteSQL(id_query);
+		//Here, we would load all the data into variables and then insert them using the insert_query string,
+		//but it turned out it was easier to export/import using sqliteStudio export functions & SQL editor window.
+		//EM->CloseDatabase();
+		//delete EM;
+
+
 		//NOW, we're just gonna leave this connection open and use it for the life of the Px3Plugin object.
 	}
 }
@@ -301,9 +312,13 @@ PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID)
 		return NULL;
 
 	physicsJointData jD;
-	int i=2;
+	int i=0;
 	F32 x,y,z;
 	
+	jD.jointID = dAtoi(resultSet->vRows[0]->vColumnValues[i++]);
+
+	i++;//We don't care about the joint name at this point, skipping it.
+
 	jD.jointType = (physicsJointType)dAtoi(resultSet->vRows[0]->vColumnValues[i++]);
 
 	F32 pi_over_180 = M_PI / 180.0f;//Where do we keep our Deg2Rad() logic, it exists doesn't it?
@@ -312,9 +327,9 @@ PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID)
 	jD.swingLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]) * pi_over_180;
 	jD.swingLimit2 = dAtof(resultSet->vRows[0]->vColumnValues[i++]) * pi_over_180;
 
-	jD.xLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
-	jD.yLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
-	jD.zLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD.XLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD.YLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD.ZLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 
 	x = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 	y = dAtof(resultSet->vRows[0]->vColumnValues[i++]);

@@ -61,48 +61,48 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 	offset1 = physx::PxTransform(physx::PxVec3(offsetB.x,offsetB.y,offsetB.z));
 		
 	world->lockScene();
+	
+	loadJointData(jD);//Sets up all the local variables for this joint using the values in the joint data struct.
 
-	physicsJointType jointType = jD->jointType;
-
-	if (jointType==PHYS_JOINT_SPHERICAL) {	
+	if (mJD.jointType==PHYS_JOINT_SPHERICAL) {	
 
 		physx::PxSphericalJoint* sphericalJoint = physx::PxSphericalJointCreate(*gPhysics3SDK,A,offset0,B,offset1);
 		mJoint = dynamic_cast<physx::PxJoint*>(sphericalJoint);
 
-		sphericalJoint->setLimitCone(physx::PxJointLimitCone(jD->swingLimit, jD->swingLimit2, 0.01f));
+		sphericalJoint->setLimitCone(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 0.01f));
 		sphericalJoint->setSphericalJointFlag(physx::PxSphericalJointFlag::eLIMIT_ENABLED, true);
 
-	} else if  (jointType==PHYS_JOINT_REVOLUTE) {
+	} else if  (mJD.jointType==PHYS_JOINT_REVOLUTE) {
 		
 		physx::PxRevoluteJoint* revoluteJoint = physx::PxRevoluteJointCreate(*gPhysics3SDK,A,offset0,B,offset1);
 		mJoint = dynamic_cast<physx::PxJoint*>(revoluteJoint);
 
-		revoluteJoint->setLimit(physx::PxJointAngularLimitPair(-jD->swingLimit/2.0f, jD->swingLimit/2.0f, 0.1f)); 
+		revoluteJoint->setLimit(physx::PxJointAngularLimitPair(-mJD.swingLimit/2.0f, mJD.swingLimit/2.0f, 0.1f)); 
 		revoluteJoint->setRevoluteJointFlag(physx::PxRevoluteJointFlag::eLIMIT_ENABLED, true);
 
-	} else if  (jointType==PHYS_JOINT_PRISMATIC) {
+	} else if  (mJD.jointType==PHYS_JOINT_PRISMATIC) {
 		
 		physx::PxPrismaticJoint* prismaticJoint = physx::PxPrismaticJointCreate(*gPhysics3SDK,A,offset0,B,offset1);
 		mJoint = dynamic_cast<physx::PxJoint*>(prismaticJoint);
 
-		//prismaticJoint->setLimit(physx::PxJointLimitPair(-jD->xLimit, jD->xLimit));//Hm, nvidia example is wrong...
+		//prismaticJoint->setLimit(physx::PxJointLimitPair(-mXLimit, mXLimit));//Hm, nvidia example is wrong...
 
-	} else if  (jointType==PHYS_JOINT_FIXED) {
+	} else if  (mJD.jointType==PHYS_JOINT_FIXED) {
 
 		physx::PxFixedJoint* fixedJoint = physx::PxFixedJointCreate(*gPhysics3SDK,A,offset0,B,offset1);
 		mJoint = dynamic_cast<physx::PxJoint*>(fixedJoint);
 
 		//Nothing else to do, it's fixed.
 
-	} else if  (jointType==PHYS_JOINT_DISTANCE) {
+	} else if  (mJD.jointType==PHYS_JOINT_DISTANCE) {
 
 		physx::PxDistanceJoint* distanceJoint = physx::PxDistanceJointCreate(*gPhysics3SDK,A,offset0,B,offset1);
 		mJoint = dynamic_cast<physx::PxJoint*>(distanceJoint);
 
-		distanceJoint->setMaxDistance(jD->xLimit);
-		distanceJoint->setMinDistance(jD->xLimit/10.0f);//FIX, include min in database.
+		distanceJoint->setMaxDistance(mJD.XLimit);
+		distanceJoint->setMinDistance(mJD.XLimit/10.0f);//FIX, include min in database.
 
-	} else if  (jointType==PHYS_JOINT_D6) {
+	} else if  (mJD.jointType==PHYS_JOINT_D6) {
 
 		physx::PxD6Joint* d6Joint = physx::PxD6JointCreate(*gPhysics3SDK,A,offset0,B,offset1);//dynamic_cast<physx::PxD6Joint*>(mJoint);
 		mJoint = dynamic_cast<physx::PxJoint*>(d6Joint);
@@ -119,22 +119,56 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 		d6Joint->setMotion(physx::PxD6Axis::eSWING1, physx::PxD6Motion::eLIMITED);
 		d6Joint->setMotion(physx::PxD6Axis::eSWING2, physx::PxD6Motion::eLIMITED);
 
-		d6Joint->setSwingLimit(physx::PxJointLimitCone(jD->swingLimit, jD->swingLimit2, 0.01f));
-		d6Joint->setTwistLimit(physx::PxJointAngularLimitPair(-jD->twistLimit,jD->twistLimit,0.01f));
-
+		d6Joint->setSwingLimit(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 0.01f));
+		d6Joint->setTwistLimit(physx::PxJointAngularLimitPair(-mJD.twistLimit,mJD.twistLimit,0.01f));
 
 	} else {
-		Con::printf("Couldn't find joint type: %d",jointType);
+		Con::printf("Couldn't find joint type: %d",mJD.jointType);
+		world->unlockScene();
+		return;
 	}
 
-	mJoint->setBreakForce(jD->maxForce,jD->maxTorque);
-
+	mJoint->setBreakForce(mJD.maxForce,mJD.maxTorque);
+	Con::printf("Created a joint: %d",mJD.jointType);
 	world->unlockScene();//This may be unnecessary(?)
 	//setup();
 }
 
 Px3Joint::~Px3Joint()
 {
+}
+
+void Px3Joint::loadJointData(physicsJointData *jD)
+{
+	//Just to get this out of the way of any other function...
+	mJD.jointID = jD->jointID;
+	mJD.jointType = jD->jointType;
+	mJD.twistLimit = jD->twistLimit;
+	mJD.swingLimit = jD->swingLimit;
+	mJD.swingLimit2 = jD->swingLimit2;
+	mJD.XLimit = jD->XLimit;
+	mJD.YLimit = jD->YLimit;
+	mJD.ZLimit = jD->ZLimit;
+	mJD.localAxis = jD->localAxis;
+	mJD.localNormal = jD->localNormal;
+	mJD.swingSpring = jD->swingSpring;
+	mJD.twistSpring = jD->twistSpring;
+	mJD.springDamper = jD->springDamper;
+	mJD.motorSpring = jD->motorSpring;
+	mJD.motorDamper = jD->motorDamper;
+	mJD.maxForce = jD->maxForce;
+	mJD.maxTorque = jD->maxForce;
+	mJD.limitPoint = jD->limitPoint;
+	mJD.limitPlaneAnchor1 = jD->limitPlaneAnchor1;
+	mJD.limitPlaneNormal1 = jD->limitPlaneNormal1;
+	mJD.limitPlaneAnchor2 = jD->limitPlaneAnchor2;
+	mJD.limitPlaneNormal2 = jD->limitPlaneNormal2;
+	mJD.limitPlaneAnchor3 = jD->limitPlaneAnchor3;
+	mJD.limitPlaneNormal3 = jD->limitPlaneNormal3;
+	mJD.limitPlaneAnchor4 = jD->limitPlaneAnchor4;
+	mJD.limitPlaneNormal4 = jD->limitPlaneNormal4;
+
+	return;
 }
 
 QuatF& Px3Joint::getMotorTarget()

@@ -135,13 +135,13 @@ bool Px3Body::init(   PhysicsCollision *shape,
       else
 	      pShape = mActor->createShape(*desc->pGeometry,*mMaterial);
 
-	   physx::PxFilterData colData;
-	   if(isDebris)
-			colData.word0 = PX3_DEBRIS;
-	   else if(isTrigger)
-        colData.word0 = PX3_TRIGGER;
-	   else
-		   colData.word0 = PX3_DEFAULT;
+	  physx::PxFilterData colData;
+	  if(isDebris)
+		  colData.word0 = PX3_DEBRIS;
+	  else if(isTrigger)
+		  colData.word0 = PX3_TRIGGER;
+	  else
+		  colData.word0 = PX3_DEFAULT;
 
       //set local pose - actor->createShape with a local pose is deprecated in physx 3.3
       pShape->setLocalPose(desc->pose);
@@ -404,7 +404,6 @@ void Px3Body::setTransform( const MatrixF &transform )
 {
    AssertFatal( mActor, "Px3Body::setTransform - The actor is null!" );
 
-
    mWorld->lockScene();
 
    //static actors must be removed from the scene before moving them
@@ -412,7 +411,7 @@ void Px3Body::setTransform( const MatrixF &transform )
    {
       mWorld->getScene()->removeActor(*mActor);
    }
-   
+   //Con::printf("setting global pose: %f %f %f",transform.getPosition().x,transform.getPosition().y,transform.getPosition().z);
    mActor->setGlobalPose(px3Cast<physx::PxTransform>(transform),false);
 
    if(mIsStatic)

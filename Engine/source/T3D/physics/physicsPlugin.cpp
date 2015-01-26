@@ -34,12 +34,15 @@
 #include "T3D/physics/physicsObject.h"
 #include "T3D/physics/physicsWorld.h"
 #include "core/util/tNamedFactory.h"
+#include "console/SQLiteObject.h"
+
 
 
 PhysicsPlugin* PhysicsPlugin::smSingleton = NULL;
 PhysicsResetSignal PhysicsPlugin::smPhysicsResetSignal;
 bool PhysicsPlugin::smSinglePlayer = false;
 U32 PhysicsPlugin::smThreadCount = 2;
+SQLiteObject* PhysicsPlugin::mSQL = NULL;
 
 
 String PhysicsPlugin::smServerWorldName( "server" );
@@ -197,11 +200,19 @@ DefineConsoleFunction( physicsStoreState, void, (), , "physicsStoreState()")
 {
    PhysicsPlugin::getPhysicsResetSignal().trigger( PhysicsResetEvent_Store );
 }
-
+DefineConsoleFunction( pss, void, (), , "physicsStoreState()")
+{
+   PhysicsPlugin::getPhysicsResetSignal().trigger( PhysicsResetEvent_Store );
+}
 // Used to send a signal to objects in the
 // physics simulation that they should restore
 // their saved state, such as when the editor is opened.
 DefineConsoleFunction( physicsRestoreState, void, (), , "physicsRestoreState()")
+{
+   if ( PHYSICSMGR )
+      PHYSICSMGR->reset();
+}
+DefineConsoleFunction( prs, void, (), , "physicsRestoreState()")
 {
    if ( PHYSICSMGR )
       PHYSICSMGR->reset();
@@ -212,3 +223,9 @@ DefineConsoleFunction( physicsDebugDraw, void, (bool enable), , "physicsDebugDra
    if ( PHYSICSMGR )
       PHYSICSMGR->enableDebugDraw( enable );
 }
+DefineConsoleFunction( pdd, void, (bool enable), , "physicsDebugDraw( bool enable )")
+{
+   if ( PHYSICSMGR )
+      PHYSICSMGR->enableDebugDraw( enable );
+}
+

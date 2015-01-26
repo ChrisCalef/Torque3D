@@ -25,7 +25,7 @@
 
 IMPLEMENT_CONOBJECT(SQLiteObject);
 
-bool gSqlVerbose = true;
+bool gSqlVerbose = false;
 
 SQLiteObject::SQLiteObject()
 {

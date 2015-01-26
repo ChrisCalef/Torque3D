@@ -51,6 +51,40 @@ class PhysicsWorld;
 class PhysicsDebrisData;
 class ExplosionData;
 
+enum physicsShapeType
+{
+	PHYS_SHAPE_BOX = 0,
+	PHYS_SHAPE_CAPSULE,
+	PHYS_SHAPE_SPHERE,
+	PHYS_SHAPE_CONVEX,
+	PHYS_SHAPE_COLLISION,
+	PHYS_SHAPE_TRIMESH,
+	PHYS_SHAPE_TYPE_COUNT
+};
+
+struct physicsPartData
+{
+	U32 jointID;
+    S32 baseNode;
+    S32 childNode;
+    S32 shapeType;
+    Point3F dimensions;
+    Point3F orientation;
+    Point3F offset;
+    F32 damageMultiplier;
+    bool isInflictor;
+    F32 density;
+    bool isKinematic;
+    bool isNoGravity;
+    S32 childVerts;
+    S32 parentVerts;
+    S32 farVerts;
+    F32 weightThreshold;
+    F32 ragdollThreshold;
+    S32 bodypartChain;
+    F32 mass;
+    F32 inflictMultiplier;
+};
 
 class PhysicsShapeData : public GameBaseData
 {
@@ -83,6 +117,9 @@ public:
 
    /// The shared unscaled collision shape.
    PhysicsCollisionRef colShape;
+
+   bool isArticulated; //If so, create arrays of PhysicsBody and PhysicsJoint objects, instead of just one PhysicsBody.
+   S32 shapeID;       //Use this to find the bodypart (physicsShapePart) body and joint data in the database.
 
    F32 mass;
    F32 dynamicFriction;
@@ -138,11 +175,16 @@ class PhysicsShape : public GameBase
 {
    typedef GameBase Parent;
 
-protected:
+public: //protected:
    /// Datablock
    PhysicsShapeData *mDataBlock;
    /// The abstracted physics actor.
    PhysicsBody *mPhysicsRep;
+   Vector<PhysicsBody*> mPhysicsBodies;
+
+   PhysicsJoint *mJoint;
+   Vector<PhysicsJoint*> mPhysicsJoints;
+   Vector<S32> mBodyNodes;
 
    ///
    PhysicsWorld *mWorld;
@@ -179,10 +221,11 @@ protected:
    SimObjectPtr< PhysicsShape > mDestroyedShape;
 
    
-   // Disables gravity on this object if not set to true.
-   bool mHasGravity;
-   // Sets object to kinematic if true.
-   bool mIsDynamic;
+   
+   bool mHasGravity;// Disables gravity on this object if not set to true.
+   bool mIsDynamic;// Sets object to kinematic if true.
+   bool mIsArticulated;// If true, shape maintains arrays of PhysicsBody and PhysicsJoint objects, instead of one PhysicsBody.
+   S32 mShapeID;    //Database ID of the physicsShape, to find all the physicsShapePart objects with body and joint data.
 
    ///
    enum MaskBits 
@@ -239,7 +282,9 @@ public:
    F32 getMass() const;
    Point3F getVelocity() const { return mState.linVelocity; }
    void applyImpulse( const Point3F &pos, const VectorF &vec );
+   void applyImpulseToPart( const Point3F &pos, const VectorF &vec, S32 partIndex );
    void applyRadialImpulse( const Point3F &origin, F32 radius, F32 magnitude );
+   void applyRadialImpulseToPart( const Point3F &origin, F32 radius, F32 magnitude, S32 partIndex  );
    void setScale(const VectorF & scale);
 
    // GameBase
@@ -260,7 +305,7 @@ public:
    void storeRestorePos();
 
    PhysicsBody *getPhysicsRep();
-   PhysicsJoint *mJoint;
+   PhysicsJoint *getPhysicsJoint();
    void setJointTarget(QuatF &target);
 
 };

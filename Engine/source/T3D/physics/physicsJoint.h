@@ -48,15 +48,17 @@ enum physicsJointType
 
 struct physicsJointData
 {
+	U32 jointID;
+
 	enum physicsJointType jointType;
 
 	F32 twistLimit;
 	F32 swingLimit;
 	F32 swingLimit2;
 
-	F32 xLimit;
-	F32 yLimit;
-	F32 zLimit;
+	F32 XLimit;
+	F32 YLimit;
+	F32 ZLimit;
 
 	Point3F localAxis;
 	Point3F localNormal;
@@ -93,39 +95,10 @@ public:
    
    PhysicsWorld *mWorld;
 
+   U32 mJointID;//Database ID for this joint.
+
    ////// physicsJointData, from db or datablocks or xml or whatever. ////////////////
-   enum physicsJointType jointType;
-
-   F32 twistLimit;
-   F32 swingLimit;
-   F32 swingLimit2;
-
-   F32 xLimit;
-   F32 yLimit;
-   F32 zLimit;
-
-   Point3F localAxis;
-   Point3F localNormal;
-
-   F32 swingSpring;
-   F32 twistSpring;
-   F32 springDamper;
-
-   F32 motorSpring;
-   F32 motorDamper;
-
-   F32 maxForce;
-   F32 maxTorque;
-
-   Point3F limitPoint;//separate off to allow unlimited? Low priority, four limit planes should be enough.
-   Point3F limitPlaneAnchor1;
-   Point3F limitPlaneNormal1;
-   Point3F limitPlaneAnchor2;
-   Point3F limitPlaneNormal2;
-   Point3F limitPlaneAnchor3;
-   Point3F limitPlaneNormal3;
-   Point3F limitPlaneAnchor4;
-   Point3F limitPlaneNormal4;
+   physicsJointData mJD;
 
    QuatF mMotorTarget;
 
