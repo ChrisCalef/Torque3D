@@ -465,3 +465,38 @@ physx::PxRigidActor* Px3Body::getActor()
 { 
    return mActor; 
 }
+
+void Px3Body::setHasGravity( bool hasGrav )
+{
+   const bool hasGravity = mBodyFlags & BF_GRAVITY;
+   if (hasGravity!=hasGrav)
+   {
+	   if (hasGrav)
+	   {
+		   mActor->setActorFlag(physx::PxActorFlag::eDISABLE_GRAVITY,false);
+		   mBodyFlags |= PhysicsBody::BF_GRAVITY;
+	   } else {
+		   mActor->setActorFlag(physx::PxActorFlag::eDISABLE_GRAVITY,true);
+		   mBodyFlags &= ~PhysicsBody::BF_GRAVITY;
+	   }
+   }  
+}
+
+
+void Px3Body::setIsDynamic( bool isDynam )
+{ //FAIL, CRASH
+	bool isKinematic = mBodyFlags & BF_KINEMATIC;
+	if (isDynam==isKinematic)//ie we're switching states, we were kinematic and now we want to be dynamic, or vice versa.
+	{
+		mWorld->lockScene();
+		if (isDynam)
+		{
+			dynamic_cast<physx::PxRigidDynamic*>(mActor)->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, false);
+			mBodyFlags &= ~PhysicsBody::BF_KINEMATIC;
+		} else {
+			dynamic_cast<physx::PxRigidDynamic*>(mActor)->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
+			mBodyFlags |= PhysicsBody::BF_KINEMATIC;
+		}
+		mWorld->unlockScene();
+	}  
+}

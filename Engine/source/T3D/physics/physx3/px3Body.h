@@ -119,6 +119,9 @@ public:
    virtual void applyImpulse( const Point3F &origin, const Point3F &force );
 
    virtual physx::PxRigidActor* getActor();
+   
+   virtual void setHasGravity( bool hasGravity );
+   virtual void setIsDynamic( bool isDynamic );
 };
 
 #endif // _PX3BODY_H_

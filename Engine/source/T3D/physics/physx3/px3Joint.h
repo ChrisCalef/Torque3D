@@ -37,7 +37,7 @@
 class Px3Joint : public PhysicsJoint
 {
 public:
-   Px3Joint(physx::PxRigidActor*,physx::PxRigidActor*,Px3World*,physicsJointData *jD);
+   Px3Joint(physx::PxRigidActor*,physx::PxRigidActor*,Px3World*,physicsJointData *jD,Point3F origin);
    virtual ~Px3Joint();
 
    physx::PxJoint *mJoint;

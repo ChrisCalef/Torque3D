@@ -552,8 +552,9 @@ void Px3World::onDebugDraw( const SceneRenderState *state )
       return;
 
    mScene->setVisualizationParameter(physx::PxVisualizationParameter::eSCALE,1.0f);
-   mScene->setVisualizationParameter(physx::PxVisualizationParameter::eBODY_AXES,1.0f);
+   //mScene->setVisualizationParameter(physx::PxVisualizationParameter::eBODY_AXES,1.0f);
    mScene->setVisualizationParameter(physx::PxVisualizationParameter::eCOLLISION_SHAPES,1.0f);
+   mScene->setVisualizationParameter(physx::PxVisualizationParameter::eJOINT_LIMITS,1.0f);
 
    const physx::PxRenderBuffer *renderBuffer = &mScene->getRenderBuffer();
 

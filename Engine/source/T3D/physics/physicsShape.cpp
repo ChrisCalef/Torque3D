@@ -242,7 +242,7 @@ void PhysicsShapeData::unpackData( BitStream *stream )
 
    S32 origSimType = stream->readInt( SimType_Bits );
    simType = (SimType)origSimType;
-   Con::printf("receiving simtype: %d orig %d  %s",simType,origSimType,shapeName);
+   //Con::printf("receiving simtype: %d orig %d  %s",simType,origSimType,shapeName);
 
    debris = stream->readRangedU32( 0, DataBlockObjectIdLast );
    explosion = stream->readRangedU32( 0, DataBlockObjectIdLast );   
@@ -661,7 +661,7 @@ bool PhysicsShape::onAdd()
    // Only add server objects and non-destroyed client objects to the scene.
    if ( isServerObject() || !mDestroyed)
       addToScene();
-
+   
    if ( isClientObject() && mDestroyed )
    {
       // Disable all simulation of the body... no collision or dynamics.
@@ -790,18 +790,24 @@ bool PhysicsShape::_createShape()
       bodyFlags |= PhysicsBody::BF_GRAVITY;
    else
 	  bodyFlags &= ~PhysicsBody::BF_GRAVITY;
+   
 
    if (!mDataBlock->isArticulated)
    {
-
 	   //Simple case, only one rigid body, no joints.
 	   mPhysicsRep = PHYSICSMGR->createBody();
+	   //Con::printf("body created, calling init...");
 	   mPhysicsRep->init(   mDataBlock->colShape, 
 							mDataBlock->mass, 
 							bodyFlags,  
 							this, 
 							mWorld );	   
+	   
+	   //Con::printf("init called...");
 	   mPhysicsRep->setMaterial( mDataBlock->restitution, mDataBlock->dynamicFriction, mDataBlock->staticFriction );
+
+	   
+	   //Con::printf("simple body created...");
 
 	   if ( mIsDynamic )
 	   {
@@ -833,8 +839,8 @@ bool PhysicsShape::_createShape()
 
 	   TSShape *kShape = mShapeInst->getShape();
 
-	   //for (U32 i=0;i<resultSet->iNumRows;i++)
-	   for (U32 i=0;i<2;i++)
+	   for (U32 i=0;i<resultSet->iNumRows;i++)
+	   //for (U32 i=0;i<2;i++)
 	   {
 		   S32 j=0;
 		   char baseNode[255],childNode[255];
@@ -854,9 +860,9 @@ bool PhysicsShape::_createShape()
 		   PD->dimensions.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
 		   PD->dimensions.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
 		   PD->dimensions.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->orientation.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->orientation.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->orientation.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+		   PD->orientation.x = mDegToRad( dAtof(resultSet->vRows[i]->vColumnValues[j++]) );
+		   PD->orientation.y = mDegToRad( dAtof(resultSet->vRows[i]->vColumnValues[j++]) );
+		   PD->orientation.z = mDegToRad( dAtof(resultSet->vRows[i]->vColumnValues[j++]) );
 		   PD->offset.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
 		   PD->offset.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
 		   PD->offset.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
@@ -893,8 +899,10 @@ bool PhysicsShape::_createShape()
 		   //PhysicsBody *physicsRep;
 		   //mPhysicsBodies.increment();
 		   //physicsRep = mPhysicsBodies.first();
+		   //Con::printf("creating body, dimensions %f %f %f",PD->dimensions.x,PD->dimensions.y,PD->dimensions.z);
+		   
+		   //PhysicsBody *partBody = PHYSICSMGR->createBody();
 		   mPhysicsRep = PHYSICSMGR->createBody();
-		            
 		   PhysicsCollision* colShape;
 		   colShape = PHYSICSMGR->createCollision();
 
@@ -904,8 +912,6 @@ bool PhysicsShape::_createShape()
 		   orient.setMatrix(&localTrans);
 		   localTrans.setPosition(pos);//Except whoops, this is global trans.
 
-		   //Con::printf("dimensions: %f %f %f",PD->dimensions.x,PD->dimensions.y,PD->dimensions.z);
-		
 		   //colShape->addBox(Point3F(0.2,0.2,0.2),MatrixF(true));
 
 		   Point3F halfDim = PD->dimensions * 0.5;
@@ -957,14 +963,18 @@ bool PhysicsShape::_createShape()
 			   mPhysicsRep->setDamping( mDataBlock->linearDamping, mDataBlock->angularDamping );
 			   mPhysicsRep->setSleepThreshold( mDataBlock->linearSleepThreshold, mDataBlock->angularSleepThreshold );
 		   }
-		   //Con::printf("bodypartPos: %f %f %f",bodypartPos.x,bodypartPos.y,bodypartPos.z);
+		   
 		   mPhysicsRep->setTransform(globalTrans);
 		   
 		   //mPhysicsRep->setTransform( getTransform() );
 
-		   mPhysicsBodies.push_back(mPhysicsRep);
-		   mBodyNodes.push_back(PD->baseNode);//Store node index for below, when we need to define parent objects.
+		   //if (mPhysicsBodies.size()==0)
+		   //mPhysicsRep = partBody;
 
+		   mPhysicsBodies.push_back(mPhysicsRep);
+		
+		   mBodyNodes.push_back(PD->baseNode);//Store node index for below, when we need to define parent objects.
+		   //Con::printf("bodypartPos: %f %f %f, baseNode %d",bodypartPos.x,bodypartPos.y,bodypartPos.z,PD->baseNode);
 
 		   //////////////////////////////////////////
 		   // Create Joint
@@ -983,10 +993,12 @@ bool PhysicsShape::_createShape()
 			   PhysicsBody *parentBody;
 			   while ((finalParentNode<0)&&(notForever<100))
 			   {				   
+				   //Con::printf("starting search for parentnode, immediate parent: %d",parentNode);
 				   for (int k=0;k<mBodyNodes.size();k++)
 				   {
-					   if (parentNode = mBodyNodes[k])
+					   if (parentNode == mBodyNodes[k])
 					   {
+						   //Con::printf("parentNode %d = mBodyNodes[%d]",parentNode,k);
 						   finalParentNode = parentNode;
 						   parentBody = mPhysicsBodies[k];
 					   }
@@ -995,52 +1007,22 @@ bool PhysicsShape::_createShape()
 				   notForever++;//Just to make sure we don't get bodypart order mixed up and wind up in forever loop.
 			   }
 			   if (notForever==100) break;
-			   //Con::printf("making a joint, parentNode = %d",finalParentNode);
-			   PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(getPhysicsRep(),parentBody,PD->jointID);
-			   mPhysicsJoints.push_back(kJoint);
+			   MatrixF partTrans,parentTrans;
+			   mPhysicsRep->getTransform(&partTrans);
+			   parentBody->getTransform(&parentTrans);
+			   Point3F partPos = partTrans.getPosition();
+			   Point3F parentPos = parentTrans.getPosition();
+
+			   //Now, turns out all we need to do is make joint origin equal to the new part origin.
+			   PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(mPhysicsRep,parentBody,PD->jointID,partPos);
+			   if (kJoint)
+				   mPhysicsJoints.push_back(kJoint);
+			   else Con::printf("something is wrong, joint is null!  id %d",PD->jointID);
 		   }
 
 		   delete PD;
-		   //delete JD;
-
-
-		   /*
-		   limitPoint_x        REAL,
-		   limitPoint_y        REAL,
-		   limitPoint_z        REAL,
-		   limitPlaneAnchor1_x REAL,
-		   limitPlaneAnchor1_y REAL,
-		   limitPlaneAnchor1_z REAL,
-		   limitPlaneNormal1_x REAL,
-		   limitPlaneNormal1_y REAL,
-		   limitPlaneNormal1_z REAL,
-		   limitPlaneAnchor2_x REAL,
-		   limitPlaneAnchor2_y REAL,
-		   limitPlaneAnchor2_z REAL,
-		   limitPlaneNormal2_x REAL,
-		   limitPlaneNormal2_y REAL,
-		   limitPlaneNormal2_z REAL,
-		   limitPlaneAnchor3_x REAL,
-		   limitPlaneAnchor3_y REAL,
-		   limitPlaneAnchor3_z REAL,
-		   limitPlaneNormal3_x REAL,
-		   limitPlaneNormal3_y REAL,
-		   limitPlaneNormal3_z REAL,
-		   limitPlaneAnchor4_x REAL,
-		   limitPlaneAnchor4_y REAL,
-		   limitPlaneAnchor4_z REAL,
-		   limitPlaneNormal4_x REAL,
-		   limitPlaneNormal4_y REAL,
-		   limitPlaneNormal4_z REAL
-		   */
-
-
 	   }
-
-
    }
-
-
    return true;
 }
 
@@ -1131,10 +1113,15 @@ void PhysicsShape::applyImpulse( const Point3F &pos, const VectorF &vec )
       mPhysicsRep->applyImpulse( pos, vec );
 }
 
-void PhysicsShape::applyImpulseToPart( const Point3F &pos, const VectorF &vec, S32 partIndex )
+void PhysicsShape::applyImpulseToPart(  S32 partIndex, const Point3F &pos, const VectorF &vec)
 {
    if ( mPhysicsBodies[partIndex] && mPhysicsBodies[partIndex]->isDynamic() )
-      mPhysicsBodies[partIndex]->applyImpulse( pos, vec );
+   {
+	   MatrixF partTransform;
+	   mPhysicsBodies[partIndex]->getTransform(&partTransform);
+	   Point3F finalPos = partTransform.getPosition() + pos;
+	   mPhysicsBodies[partIndex]->applyImpulse( finalPos, vec );
+   }
 }
 
 void PhysicsShape::applyRadialImpulse( const Point3F &origin, F32 radius, F32 magnitude )
@@ -1173,7 +1160,7 @@ void PhysicsShape::applyRadialImpulse( const Point3F &origin, F32 radius, F32 ma
       //((PhysicsShape*)getClientObject())->mPhysicsRep->applyImpulse( origin, force );
 }
 
-void PhysicsShape::applyRadialImpulseToPart( const Point3F &origin, F32 radius, F32 magnitude, S32 partIndex )
+void PhysicsShape::applyRadialImpulseToPart(  S32 partIndex, const Point3F &origin, F32 radius, F32 magnitude )
 {
    if ( !mPhysicsBodies[partIndex] || !mPhysicsBodies[partIndex]->isDynamic() )
       return;
@@ -1460,6 +1447,25 @@ PhysicsBody* PhysicsShape::getPhysicsRep()
 	return mPhysicsRep;
 }
 
+
+void PhysicsShape::setJointTarget(QuatF &target)
+{
+	if (mJoint)
+		mJoint->setMotorTarget(target);
+
+	Con::printf("physicsShape set motor target: %f %f %f %f",target.x,target.y,target.z,target.w);
+
+}
+
+void PhysicsShape::setHasGravity(bool hasGrav)
+{
+	for (U32 i=0;i<mPhysicsBodies.size();i++)
+		mPhysicsBodies[i]->setHasGravity(hasGrav);
+
+}
+
+////////////////////////////////////////////////////////////////////////
+
 DefineEngineMethod( PhysicsShape, isDestroyed, bool, (),, 
    "@brief Returns if a PhysicsShape has been destroyed or not.\n\n" )
 {
@@ -1485,8 +1491,6 @@ DefineEngineMethod( PhysicsShape, restore, void, (),,
    object->restore();
 }
 
-///////////////////////////////////////////////////////////////////////////////////
-
 DefineEngineMethod( PhysicsShape, jointAttach, void, (U32 objectID,U32 jointID),,
    "@brief Attaches this object to the other object by creating a physx joint "
    "of the given type.\n\n")
@@ -1502,22 +1506,22 @@ DefineEngineMethod( PhysicsShape, jointAttach, void, (U32 objectID,U32 jointID),
 	{
 		PhysicsBody *otherBody = dynamic_cast<PhysicsShape*>(otherObj)->getPhysicsRep();
 		//Con::printf("Found other object's physics rep, mass = %f",otherBody->getMass());
-		PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(object->getPhysicsRep(),otherBody,jointID);
+		MatrixF tA,tB;
+		object->getPhysicsRep()->getTransform(&tA);
+		otherBody->getTransform(&tB);
+
+		Point3F posA = tA.getPosition();
+		Point3F posB = tB.getPosition();
+
+		//Now, instead of assuming the exact center between the two body positions, we are going to get it as an argument.
+		Point3F diff = posA - posB;
+		Point3F center = posB + (diff/2);
+
+		PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(object->getPhysicsRep(),otherBody,jointID,center);
 		object->mJoint = kJoint;
 		//object->setJointTarget(QuatF(0,0.707,0.707,0.0));
 	}
 }
-
-void PhysicsShape::setJointTarget(QuatF &target)
-{
-	if (mJoint)
-		mJoint->setMotorTarget(target);
-
-	Con::printf("physicsShape set motor target: %f %f %f %f",target.x,target.y,target.z,target.w);
-
-}
-
-
 DefineEngineMethod( PhysicsShape, setJointTarget, void, (F32 x,F32 y,F32 z,F32 w),,
    "@brief Sets this object's joint motor drive to the target quat.\n\n")
 {
@@ -1530,10 +1534,10 @@ DefineEngineMethod( PhysicsShape, applyImpulse, void, (Point3F pos,Point3F vec),
    object->applyImpulse(pos,vec);
 }
 
-DefineEngineMethod( PhysicsShape, applyImpulseToPart, void, (Point3F pos,Point3F vec,S32 partIndex),,
+DefineEngineMethod( PhysicsShape, applyImpulseToPart, void, (S32 partIndex,Point3F pos,Point3F vec),,
    "@brief Applies vec impulse to object at pos.\n\n")
 {
-   object->applyImpulseToPart(pos,vec,partIndex);
+   object->applyImpulseToPart(partIndex,pos,vec);
 }
 
 DefineEngineMethod( PhysicsShape, applyRadialImpulse, void, (Point3F origin,F32 radius,F32 magnitude),,
@@ -1542,8 +1546,20 @@ DefineEngineMethod( PhysicsShape, applyRadialImpulse, void, (Point3F origin,F32 
    object->applyRadialImpulse(origin,radius,magnitude);
 }
 
-DefineEngineMethod( PhysicsShape, applyRadialImpulseToPart, void, (Point3F origin,F32 radius,F32 magnitude,S32 partIndex),,
+DefineEngineMethod( PhysicsShape, applyRadialImpulseToPart, void, (S32 partIndex,Point3F origin,F32 radius,F32 magnitude),,
    "@brief Applies vec impulse to object at pos.\n\n")
 {
-   object->applyRadialImpulseToPart(origin,radius,magnitude,partIndex);
+   object->applyRadialImpulseToPart(partIndex,origin,radius,magnitude);
+}
+
+DefineEngineMethod( PhysicsShape, setHasGravity, void, (bool hasGrav),,
+   "@brief Sets this object's hasGravity property.\n\n")
+{
+	object->setHasGravity(hasGrav);
+}
+
+DefineEngineMethod( PhysicsShape, setIsDynamic, void, (bool isDynamic),,
+   "@brief Sets this object's hasGravity property.\n\n")
+{  //FAIL, CRASH
+	//object->getPhysicsRep()->setIsDynamic(isDynamic);
 }

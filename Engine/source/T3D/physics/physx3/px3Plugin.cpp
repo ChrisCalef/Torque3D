@@ -283,7 +283,7 @@ PhysicsMaterial* Px3Plugin::createMaterial(const F32 restitution,const F32 stati
    return material;
 }
 
-PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID)
+PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin)
 {
 	PhysicsWorld *worldA,*worldB;
 	worldA = A->getWorld();
@@ -298,64 +298,69 @@ PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID)
 	actor1 = dynamic_cast<Px3Body*>(A)->getActor();
 	actor2 = dynamic_cast<Px3Body*>(B)->getActor();
 
-	char id_query[512];
+
+
+	physicsJointData jD;
+	
+	loadJointData(jointID,&jD);
+
+	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&jD,origin);
+	//NOW, where should I save this joint??
+
+
+	return NULL;
+}
+
+void Px3Plugin::loadJointData(U32 jointID, physicsJointData* jD)
+{
+	int i=0;
+	F32 x,y,z;
+	char id_query[512],insert_query[512];
 	S32 result;
 	sqlite_resultset *resultSet;
 
 	sprintf(id_query,"SELECT * FROM px3Joint WHERE id=%d;",jointID);
 	result = mSQL->ExecuteSQL(id_query);
 	if (result==0)
-		return NULL; 				
+		return;
 
 	resultSet = mSQL->GetResultSet(result);
 	if (resultSet->iNumRows!=1)
-		return NULL;
+		return;
 
-	physicsJointData jD;
-	int i=0;
-	F32 x,y,z;
-	
-	jD.jointID = dAtoi(resultSet->vRows[0]->vColumnValues[i++]);
-
+	jD->jointID = dAtoi(resultSet->vRows[0]->vColumnValues[i++]);
 	i++;//We don't care about the joint name at this point, skipping it.
+	jD->jointType = (physicsJointType)dAtoi(resultSet->vRows[0]->vColumnValues[i++]);
 
-	jD.jointType = (physicsJointType)dAtoi(resultSet->vRows[0]->vColumnValues[i++]);
+	jD->twistLimit = mDegToRad( dAtof(resultSet->vRows[0]->vColumnValues[i++]) );
+	jD->swingLimit = mDegToRad( dAtof(resultSet->vRows[0]->vColumnValues[i++]) );
+	jD->swingLimit2 = mDegToRad( dAtof(resultSet->vRows[0]->vColumnValues[i++]) );
 
-	F32 pi_over_180 = M_PI / 180.0f;//Where do we keep our Deg2Rad() logic, it exists doesn't it?
-
-	jD.twistLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]) * pi_over_180;
-	jD.swingLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]) * pi_over_180;
-	jD.swingLimit2 = dAtof(resultSet->vRows[0]->vColumnValues[i++]) * pi_over_180;
-
-	jD.XLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
-	jD.YLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
-	jD.ZLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD->XLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD->YLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD->ZLimit = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 
 	x = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 	y = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 	z = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
-	jD.localAxis = Point3F(x,y,z);
+	jD->localAxis = Point3F(x,y,z);
 
 	x = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 	y = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 	z = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
-	jD.localNormal = Point3F(x,y,z);
+	jD->localNormal = Point3F(x,y,z);
 
-	jD.swingSpring = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
-	jD.twistSpring = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
-	jD.springDamper = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD->swingSpring = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD->twistSpring = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD->springDamper = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 	
-	jD.motorSpring = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
-	jD.motorDamper = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD->motorSpring = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD->motorDamper = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 
-	jD.maxForce = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
-	jD.maxTorque = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD->maxForce = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
+	jD->maxTorque = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 	
 	//And then later, the limit planes...
-
-	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&jD);
-	//NOW, where should I save this joint??
-
-
-	return NULL;
+	//...
+	
 }

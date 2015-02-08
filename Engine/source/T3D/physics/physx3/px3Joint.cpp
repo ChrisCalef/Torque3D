@@ -46,16 +46,19 @@ enum physicsJointType
 //-----------------------------------------------------------------------------
 // Constructor/Destructor
 //-----------------------------------------------------------------------------
-Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* world,physicsJointData *jD)
+Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* world,physicsJointData *jD,Point3F origin)
 {
 	physx::PxTransform offset0,offset1;
 
 	Point3F posA(A->getGlobalPose().p.x,A->getGlobalPose().p.y,A->getGlobalPose().p.z);
 	Point3F posB(B->getGlobalPose().p.x,B->getGlobalPose().p.y,B->getGlobalPose().p.z);
-	Point3F diff = posA - posB;
-	Point3F center = posB + (diff/2);
-	Point3F offsetA = center - posA;
-	Point3F offsetB = center - posB;
+
+	//Now, instead of assuming the exact center between the two body positions, we are going to get it as an argument.
+	//Point3F diff = posA - posB;
+	//Point3F center = posB + (diff/2);
+
+	Point3F offsetA = origin - posA;
+	Point3F offsetB = origin - posB;
 
 	offset0 = physx::PxTransform(physx::PxVec3(offsetA.x,offsetA.y,offsetA.z));
 	offset1 = physx::PxTransform(physx::PxVec3(offsetB.x,offsetB.y,offsetB.z));
@@ -63,6 +66,9 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 	world->lockScene();
 	
 	loadJointData(jD);//Sets up all the local variables for this joint using the values in the joint data struct.
+	
+	//Con::printf("Trying to make a joint. type %d actor A pos %f %f %f, actor B pos %f %f %f",mJD.jointType,
+	//	posA.x,posA.y,posA.z,posB.x,posB.y,posB.z);
 
 	if (mJD.jointType==PHYS_JOINT_SPHERICAL) {	
 
@@ -129,7 +135,12 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 	}
 
 	mJoint->setBreakForce(mJD.maxForce,mJD.maxTorque);
-	Con::printf("Created a joint: %d",mJD.jointType);
+
+	//if (mJoint) Con::printf("Created a joint: type %d offsetA %f %f %f offsetB %f %f %f",mJD.jointType,
+	//	offsetA.x,offsetA.y,offsetA.z,offsetB.x,offsetB.y,offsetB.z);
+	//else Con::printf("Joint creation FAILED type %d offsetA %f %f %f offsetB %f %f %f",mJD.jointType,
+	//	offsetA.x,offsetA.y,offsetA.z,offsetB.x,offsetB.y,offsetB.z);
+
 	world->unlockScene();//This may be unnecessary(?)
 	//setup();
 }
@@ -167,7 +178,35 @@ void Px3Joint::loadJointData(physicsJointData *jD)
 	mJD.limitPlaneNormal3 = jD->limitPlaneNormal3;
 	mJD.limitPlaneAnchor4 = jD->limitPlaneAnchor4;
 	mJD.limitPlaneNormal4 = jD->limitPlaneNormal4;
-
+			   /*
+		   limitPoint_x        REAL,
+		   limitPoint_y        REAL,
+		   limitPoint_z        REAL,
+		   limitPlaneAnchor1_x REAL,
+		   limitPlaneAnchor1_y REAL,
+		   limitPlaneAnchor1_z REAL,
+		   limitPlaneNormal1_x REAL,
+		   limitPlaneNormal1_y REAL,
+		   limitPlaneNormal1_z REAL,
+		   limitPlaneAnchor2_x REAL,
+		   limitPlaneAnchor2_y REAL,
+		   limitPlaneAnchor2_z REAL,
+		   limitPlaneNormal2_x REAL,
+		   limitPlaneNormal2_y REAL,
+		   limitPlaneNormal2_z REAL,
+		   limitPlaneAnchor3_x REAL,
+		   limitPlaneAnchor3_y REAL,
+		   limitPlaneAnchor3_z REAL,
+		   limitPlaneNormal3_x REAL,
+		   limitPlaneNormal3_y REAL,
+		   limitPlaneNormal3_z REAL,
+		   limitPlaneAnchor4_x REAL,
+		   limitPlaneAnchor4_y REAL,
+		   limitPlaneAnchor4_z REAL,
+		   limitPlaneNormal4_x REAL,
+		   limitPlaneNormal4_y REAL,
+		   limitPlaneNormal4_z REAL
+		   */
 	return;
 }
 

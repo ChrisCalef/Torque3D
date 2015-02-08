@@ -46,7 +46,6 @@
 
 #define POINT_EPSILON (1e-4) ///< Epsilon for point types.
 
-
 /// Result of an overlap test.
 enum OverlapTestResult
 {

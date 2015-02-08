@@ -180,8 +180,8 @@ public: //protected:
    PhysicsShapeData *mDataBlock;
    /// The abstracted physics actor.
    PhysicsBody *mPhysicsRep;
-   Vector<PhysicsBody*> mPhysicsBodies;
 
+   Vector<PhysicsBody*> mPhysicsBodies; //For articulated shapes.
    PhysicsJoint *mJoint;
    Vector<PhysicsJoint*> mPhysicsJoints;
    Vector<S32> mBodyNodes;
@@ -282,9 +282,9 @@ public:
    F32 getMass() const;
    Point3F getVelocity() const { return mState.linVelocity; }
    void applyImpulse( const Point3F &pos, const VectorF &vec );
-   void applyImpulseToPart( const Point3F &pos, const VectorF &vec, S32 partIndex );
+   void applyImpulseToPart( S32 partIndex, const Point3F &pos, const VectorF &vec );
    void applyRadialImpulse( const Point3F &origin, F32 radius, F32 magnitude );
-   void applyRadialImpulseToPart( const Point3F &origin, F32 radius, F32 magnitude, S32 partIndex  );
+   void applyRadialImpulseToPart( S32 partIndex, const Point3F &origin, F32 radius, F32 magnitude );
    void setScale(const VectorF & scale);
 
    // GameBase
@@ -307,6 +307,7 @@ public:
    PhysicsBody *getPhysicsRep();
    PhysicsJoint *getPhysicsJoint();
    void setJointTarget(QuatF &target);
+   void setHasGravity(bool hasGrav);
 
 };
 

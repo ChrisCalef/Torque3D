@@ -28,6 +28,7 @@
 #endif
 
 class Px3ClothShape;
+struct physicsJointData;
 
 class Px3Plugin : public PhysicsPlugin
 {
@@ -61,7 +62,8 @@ public:
    virtual PhysicsMaterial* createMaterial(const F32 restitution,const F32 staticFriction,const F32 dynamicFritction);
 
    // Chris Calef
-   virtual PhysicsJoint* createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID);
+   virtual PhysicsJoint* createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin);
+   virtual void loadJointData(U32 jointID, physicsJointData *jD);
 
 };
 
