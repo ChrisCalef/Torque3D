@@ -986,11 +986,8 @@ void DiffuseMapFeatGLSL::setTexData(   Material::StageData &stageDat,
                                        U32 &texIndex )
 {
    GFXTextureObject *tex = stageDat.getTex( MFT_DiffuseMap );
-   if ( tex )
-   {
-      passData.mSamplerNames[ texIndex ] = "diffuseMap";
-      passData.mTexSlot[ texIndex++ ].texObject = tex;
-   }
+   passData.mSamplerNames[ texIndex ] = "diffuseMap";
+   passData.mTexSlot[ texIndex++ ].texObject = tex;
 }
 
 
@@ -1425,6 +1422,13 @@ void VertLitGLSL::processVert(   Vector<ShaderComponent*> &componentList,
    Var* outColor = dynamic_cast< Var* >( LangElement::find( "vertColor" ) );
    if( !outColor )
    {
+      // Grab the connector color
+      ShaderConnector *connectComp = dynamic_cast<ShaderConnector *>( componentList[C_CONNECTOR] );
+      Var *outColor = connectComp->getElement( RT_COLOR );
+      outColor->setName( "vertColor" );
+      outColor->setStructName( "OUT" );
+      outColor->setType( "vec4" );
+   	
       // Search for vert color
       Var *inColor = (Var*) LangElement::find( "diffuse" );   
 
@@ -1434,13 +1438,6 @@ void VertLitGLSL::processVert(   Vector<ShaderComponent*> &componentList,
          output = NULL;
          return;
       }
-
-      // Grab the connector color
-      ShaderConnector *connectComp = dynamic_cast<ShaderConnector *>( componentList[C_CONNECTOR] );
-      Var *outColor = connectComp->getElement( RT_COLOR );
-      outColor->setName( "vertColor" );
-      outColor->setStructName( "OUT" );
-      outColor->setType( "vec4" );
 
       output = new GenOp( "   @ = @;\r\n", outColor, inColor );
    }
@@ -1813,7 +1810,7 @@ void ReflectCubeFeatGLSL::processPix(  Vector<ShaderComponent*> &componentList,
    else
    {
       if ( attn )
-         lerpVal = new GenOp( "saturate( @ ).xxxx", attn );
+         lerpVal = new GenOp( "vec4( saturate( @ ) ).xxxx", attn );
       else
          blendOp = Material::Mul;
    }
