@@ -270,15 +270,19 @@ bool TerrainFile::save( const char *filename )
    FileStream stream;
    stream.open( filename, Torque::FS::File::Write );
    if ( stream.getStatus() != Stream::Ok )
+   {
+	  Con::printf("failed to open stream %s, status %d",filename,stream.getStatus());
       return false;
-
+   }
    stream.write( (U8)FILE_VERSION );
 
    stream.write( mSize );
 
    // Write out the height map.
    for ( U32 i=0; i < mHeightMap.size(); i++)
+   {
       stream.write( mHeightMap[i] );
+   }
 
    // Write out the layer map.
    for ( U32 i=0; i < mLayerMap.size(); i++)
@@ -287,7 +291,9 @@ bool TerrainFile::save( const char *filename )
    // Write out the material names.
    stream.write( (U32)mMaterials.size() );
    for ( U32 i=0; i < mMaterials.size(); i++ )
+   {
       stream.write( String( mMaterials[i]->getInternalName() ) );
+   }
 
    return stream.getStatus() == FileStream::Ok;
 }
@@ -790,6 +796,22 @@ void TerrainFile::create(  String *inOutFilename,
 
    file->setSize( newSize, true );
    file->save( *inOutFilename );
+   delete file;
+}
+
+void TerrainFile::createByName(  String *inOutFilename, 
+                           U32 heightmapRes, 
+                           const Vector<String> &materials )
+{
+   FileName  basePath( *inOutFilename );
+
+   TerrainFile *file = new TerrainFile;
+
+   for ( U32 i=0; i < materials.size(); i++ )
+      file->mMaterials.push_back( TerrainMaterial::findOrCreate( materials[i] ) );
+
+   file->setSize( heightmapRes, true );
+   file->save( basePath.c_str() );
 
    delete file;
 }
