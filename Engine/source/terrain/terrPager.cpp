@@ -40,7 +40,8 @@ TerrainPager::TerrainPager()
 	mSkyboxRes = 800;
 
 	mLastSkyboxTick = 0;
-	mSkyboxTickInterval = 1800;// 30/sec * 60, about a minute
+	mSkyboxTickInterval = 1200;// 30/sec * 60, about a minute
+	mSkyboxLoadDelay = 60;//two seconds
 
 	mLoadState = 0;//For now just use numbers, make an enum when you know what the states are going to be.
 
@@ -63,18 +64,16 @@ TerrainPager::TerrainPager()
 	mD.mTileLoadRadius = 4800.0f;//Arbitrary values, just make sure the drop
 	mD.mTileDropRadius = 6200.0f;//value is always larger than the load value!
 
-	//mD.mGridSize = 3;
-
 	mD.mTileWidth = 0.0f;//2550 m squares, by default, in a 256x256 terrain grid with 10m square size.
 	mD.mTileWidthLongitude = 0.0f;
 	mD.mTileWidthLatitude = 0.0f;
 	
 	//Would like to receive these through console, but TypeString seems to be failing for me.
+	mD.mTerrainPath = "art/terrains/terrainFiles/";
 	mD.mSkyboxPath = "art/skies/night/";
-	mD.mTerrainPath = "art/terrains/WorldServer/";
 
-	mD.mTerrainLockfile = "lockfile.terrain.tmp";
-	mD.mSkyboxLockfile = "lockfile.skybox.tmp";
+	mD.mTerrainLockfile = "art/terrains/terrainFiles/lockfile.terrain.tmp";//Revisit this when paths are
+	mD.mSkyboxLockfile = "art/skies/night/lockfile.skybox.tmp";//   working from script as they should.
 
 	mD.mSkyboxRes = mSkyboxRes;
 	//////////////////////////////
@@ -186,8 +185,8 @@ bool TerrainPager::onAdd()
 	
 	//delete mTerrain;//Is this safe, at all? What is proper way to remove a terrain block? MissionGroup.remove()?
 
-	mD.mSkyboxLockfile = mD.mSkyboxPath + "lockfile.skybox.tmp";
-	mD.mTerrainLockfile = mD.mTerrainPath + "lockfile.terrain.tmp";
+	//mD.mSkyboxLockfile = mD.mSkyboxPath + "lockfile.skybox.tmp";
+	//mD.mTerrainLockfile = mD.mTerrainPath + "lockfile.terrain.tmp";
 	
 	findClientTile();
 
@@ -195,6 +194,7 @@ bool TerrainPager::onAdd()
 	mGridSize = 1 + (2 * ((int)(mD.mTileLoadRadius /  mD.mTileWidth) + 1));
 	Con::printf("found terrain! tile width: %f tileWidthLat %f tileWidthLong %f gridSize %d textureRes %d",
 				mD.mTileWidth,mD.mTileWidthLatitude,mD.mTileWidthLongitude,mGridSize,mD.mTextureRes);
+
 	//NOW, as soon as you've defined mGridSize, you are ready to set up your sparse Vectors.
 	for (int y=0;y<mGridSize;y++) {
 		for (int x=0;x<mGridSize;x++) {
@@ -277,6 +277,30 @@ void TerrainPager::processTick()
 		}
 		return;//otherwise just keep coming here.
 	}
+	else if ((mLoadState==4) &&(mUseDataSource))//Should never get here without mUseDataSource, but for safety..
+	{//Be very careful, could get stuck here forever and quietly stop checking terrain, if skybox lockfile not deleted.
+		if (mWorldDataSource->checkSkyboxLock()==false)
+		{
+			Con::printf("reloading skybox!!!!");
+			reloadSkybox();
+			mSentSkyboxRequest = false;
+			mLastSkyboxTick = mCurrentTick;
+			mLoadState=10;
+		} else {
+			mWorldDataSource->tick();
+			//if (mCurrentTick++ % mTickInterval == 0)
+			Con::printf("waiting for skybox lock...");
+		}
+		return;//otherwise just keep coming here.
+	}
+	//else if ((mLoadState==5)&&(mUseDataSource))//Should never get here without mUseDataSource, but for safety..
+	//{
+	//	if ((mCurrentTick - mLastSkyboxTick) > mSkyboxLoadDelay)
+	//	{
+	//		Con::executef(this,"UpdateSkybox");
+	//		mLoadState = 10;
+	//	}
+	//}
 	else if (mLoadState==10)
 	{
 		if (mLastTileStartLong != mTileStartLongitude) newTile = true;
@@ -290,20 +314,36 @@ void TerrainPager::processTick()
 			if (mCurrentTick++ % mTickInterval == 0)
 				checkTileGrid();
 		}		
-	}
-	if (mUseDataSource)
-	{
-		if ((mWorldDataSource->mReadyForRequests) &&
-			(mLastSkyboxTick < (mCurrentTick - mSkyboxTickInterval)) &&
+
+		if (mCurrentTick % mTickInterval == 0)
+		{
+			Con::printf("lastSkyboxTick %d, currentTick %d return controls %d, sent request %d",
+				mLastSkyboxTick,mCurrentTick,mWorldDataSource->mNumReturnControls,mSentSkyboxRequest);
+		}
+
+		if ((mUseDataSource)&&(mWorldDataSource->mNumReturnControls==1)&&
+			((S32)mLastSkyboxTick < ((S32)mCurrentTick - (S32)mSkyboxTickInterval))&&
 			(mSentSkyboxRequest == false))
 		{
-			//mWorldDataSource->addSkyboxRequest(0.0,0.0,mD.mClientPosLongitude,mD.mClientPosLatitude);
+			mWorldDataSource->addSkyboxRequest(mTileStartLongitude,mTileStartLatitude,mD.mClientPosLongitude,mD.mClientPosLatitude);
+			mLoadState = 4;
 			mSentSkyboxRequest = true;
 		}
+	}
+
+	if (mUseDataSource)
+	{
 		mWorldDataSource->tick();
 	}
-	if (mCurrentTick % 30 == 0)
+
+	if (mCurrentTick % 10 == 0)
+	{
 		Con::printf("load state: %d",mLoadState);
+	}
+	if (mCurrentTick % 10 == 60)
+	{
+		Con::executef(this,"UpdateSkybox");//hell with it, this takes almost no time, do it every couple of seconds for now.
+	}
 	/*
 	//Now, do this in the second tick, or whenever we're ready.
 	if (mUseDataSource && !mLoadedTileGrid && mWorldDataSource->mReadyForRequests)
@@ -912,12 +952,23 @@ void TerrainPager::reloadSkybox()
 			fs.close();
 		}
 	}
-	Con::executef("TerrainPager::UpdateSkybox");
+	//Con::executef(this,"UpdateSkybox");//Hmm, it appears there is a delay, it takes the system longer
+	//to write the actual files than it does to get out of this function. Might have to schedule the
+	//update for some ticks in the future.
 	//WS_SkyboxCubemap.updateFaces();
 }
 
+void TerrainPager::updateSkyboxConsole()
+{
+	Con::executef(this,"UpdateSkybox");
+}
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+DefineConsoleMethod(TerrainPager, callUpdateSkybox, void, (), , "" )
+{
+	Con::printf("calling update skybox");
+	object->updateSkyboxConsole();
+}
 DefineConsoleMethod(TerrainPager, reloadSkybox, void, (), , "" )
 {
 	Con::printf("calling reload skybox");

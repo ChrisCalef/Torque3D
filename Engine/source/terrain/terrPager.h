@@ -108,6 +108,7 @@ public:
 
 	U32 mLastSkyboxTick;
 	U32 mSkyboxTickInterval;
+	U32 mSkyboxLoadDelay;
 
 	U32 mLoadState;
 
@@ -157,6 +158,8 @@ public:
 	bool checkFileExists(const char*);
 
 	void reloadSkybox();
+
+	void updateSkyboxConsole();
 
 };
 /*
