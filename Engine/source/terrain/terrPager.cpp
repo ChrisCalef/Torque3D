@@ -58,8 +58,9 @@ TerrainPager::TerrainPager()
 	mD.mMapCenterLongitude = 0.0;
 	mD.mMapCenterLatitude = 0.0;
 	
-	mD.mClientPosLatitude = 0.0f;
 	mD.mClientPosLongitude = 0.0f;
+	mD.mClientPosLatitude = 0.0f;
+	mD.mClientPosAltitude = 0.0f;
 	
 	mD.mTileLoadRadius = 4800.0f;//Arbitrary values, just make sure the drop
 	mD.mTileDropRadius = 6200.0f;//value is always larger than the load value!
@@ -325,7 +326,7 @@ void TerrainPager::processTick()
 			((S32)mLastSkyboxTick < ((S32)mCurrentTick - (S32)mSkyboxTickInterval))&&
 			(mSentSkyboxRequest == false))
 		{
-			mWorldDataSource->addSkyboxRequest(mTileStartLongitude,mTileStartLatitude,mD.mClientPosLongitude,mD.mClientPosLatitude);
+			mWorldDataSource->addSkyboxRequest(mTileStartLongitude,mTileStartLatitude,mD.mClientPosLongitude,mD.mClientPosLatitude,mD.mClientPosAltitude);
 			mLoadState = 4;
 			mSentSkyboxRequest = true;
 		}
@@ -635,7 +636,7 @@ void TerrainPager::findClientPos()
 
 	mD.mClientPosLongitude = mD.mMapCenterLongitude + (mClientPos.x * mD.mDegreesPerMeterLongitude);
 	mD.mClientPosLatitude = mD.mMapCenterLatitude + (mClientPos.y * mD.mDegreesPerMeterLatitude);
-
+	mD.mClientPosAltitude = mClientPos.z;
 }
 
 void TerrainPager::findClientTile()

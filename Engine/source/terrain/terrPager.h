@@ -44,6 +44,7 @@ struct terrainPagerData
 	
 	float mClientPosLongitude;
 	float mClientPosLatitude;
+	float mClientPosAltitude;
 
 	float mTileLoadRadius;
 	float mTileDropRadius;

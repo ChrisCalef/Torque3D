@@ -32,7 +32,7 @@ class worldDataSource : public dataSource
 	   //void addTerrainRequest(loadTerrainData *ltData);
 	   void addTerrainRequest(float playerLong,float playerLat);
 	   void addInitSkyboxRequest(unsigned int skyboxRes,int cacheMode,const char *path);
-	   void addSkyboxRequest(float tileLong,float tileLat,float playerLong,float playerLat);
+	   void addSkyboxRequest(float tileLong,float tileLat,float playerLong,float playerLat,float playerAlt);
 	   void skyboxSocketDraw();//source side only, ie flightgear
 
 	   void makeTerrainLock();

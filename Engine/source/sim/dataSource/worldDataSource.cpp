@@ -272,7 +272,7 @@ void worldDataSource::addInitSkyboxRequest(unsigned int skyboxRes,int cacheMode,
 	Con::printf("adding init skybox request, numControls %d, numReturnBytes %d\n",mNumReturnControls,mNumReturnBytes);
 }
 
-void worldDataSource::addSkyboxRequest(float tileLong,float tileLat,float playerLong,float playerLat)
+void worldDataSource::addSkyboxRequest(float tileLong,float tileLat,float playerLong,float playerLat,float playerAlt)
 {
 	float OPCODE = 202.0f;
 	mNumReturnControls++;//Increment mNumReturnControls every time you add a control.
@@ -289,6 +289,8 @@ void worldDataSource::addSkyboxRequest(float tileLong,float tileLat,float player
 	mFloatBuffer[mNumReturnBytes] = playerLong;
 	mNumReturnBytes++;
 	mFloatBuffer[mNumReturnBytes] = playerLat;
+	mNumReturnBytes++;
+	mFloatBuffer[mNumReturnBytes] = playerAlt;
 
 	Con::printf("adding skybox request, numControls %d, tileLong %f tileLat %f\n",mNumReturnControls,tileLong,tileLat);
 }
