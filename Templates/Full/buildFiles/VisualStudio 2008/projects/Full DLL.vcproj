@@ -347,6 +347,12 @@
 					Name="T3D"
 					Filter="">
 					<File
+					   RelativePath="..\..\..\..\..\Engine\source\T3D\accumulationVolume.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\T3D\accumulationVolume.h">
+					</File>
+					<File
 					   RelativePath="..\..\..\..\..\Engine\source\T3D\aiClient.cpp">
 					</File>
 					<File
@@ -731,6 +737,18 @@
 						   RelativePath="..\..\..\..\..\Engine\source\T3D\fx\precipitation.h">
 						</File>
 						<File
+						   RelativePath="..\..\..\..\..\Engine\source\T3D\fx\ribbon.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\T3D\fx\ribbon.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\T3D\fx\ribbonNode.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\T3D\fx\ribbonNode.h">
+						</File>
+						<File
 						   RelativePath="..\..\..\..\..\Engine\source\T3D\fx\splash.cpp">
 						</File>
 						<File
@@ -1009,7 +1027,7 @@
 						   RelativePath="..\..\..\..\..\Engine\source\app\net\net.h">
 						</File>
 						<File
-						   RelativePath="..\..\..\..\..\Engine\source\app\net\netTest.cpp">
+						   RelativePath="..\..\..\..\..\Engine\source\app\net\netExamples.cpp">
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\app\net\serverQuery.cpp">
@@ -1164,6 +1182,19 @@
 						Filter="">
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\component\interfaces\IProcessInput.h">
+						</File>
+					</Filter>
+					<Filter
+						Name="test"
+						Filter="">
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\component\test\moreAdvancedComponentTest.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\component\test\simComponentTest.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\component\test\simpleComponentTest.cpp">
 						</File>
 					</Filter>
 				</Filter>
@@ -1910,10 +1941,10 @@
 								Name="test"
 								Filter="">
 								<File
-								   RelativePath="..\..\..\..\..\Engine\source\core\util\journal\test\testJournal.cpp">
+								   RelativePath="..\..\..\..\..\Engine\source\core\util\journal\test\journalTest.cpp">
 								</File>
 								<File
-								   RelativePath="..\..\..\..\..\Engine\source\core\util\journal\test\testProcess.cpp">
+								   RelativePath="..\..\..\..\..\Engine\source\core\util\journal\test\processTest.cpp">
 								</File>
 							</Filter>
 						</Filter>
@@ -1921,16 +1952,19 @@
 							Name="test"
 							Filter="">
 							<File
-							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\testFixedSizeDeque.cpp">
+							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\pathTest.cpp">
 							</File>
 							<File
-							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\testPath.cpp">
+							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\strTest.cpp">
 							</File>
 							<File
-							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\testString.cpp">
+							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\swizzleTest.cpp">
 							</File>
 							<File
-							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\testVector2.cpp">
+							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\tFixedSizeDequeTest.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\tVectorTest.cpp">
 							</File>
 						</Filter>
 						<Filter
@@ -2013,19 +2047,19 @@
 								</File>
 							</Filter>
 							<Filter
-								Name="unitTests"
+								Name="test"
 								Filter="">
 								<File
-								   RelativePath="..\..\..\..\..\Engine\source\core\util\zip\unitTests\zipTest.h">
+								   RelativePath="..\..\..\..\..\Engine\source\core\util\zip\test\zipTest.h">
 								</File>
 								<File
-								   RelativePath="..\..\..\..\..\Engine\source\core\util\zip\unitTests\zipTestMisc.cpp">
+								   RelativePath="..\..\..\..\..\Engine\source\core\util\zip\test\zipTestMisc.cpp">
 								</File>
 								<File
-								   RelativePath="..\..\..\..\..\Engine\source\core\util\zip\unitTests\zipTestRead.cpp">
+								   RelativePath="..\..\..\..\..\Engine\source\core\util\zip\test\zipTestRead.cpp">
 								</File>
 								<File
-								   RelativePath="..\..\..\..\..\Engine\source\core\util\zip\unitTests\zipTestWrite.cpp">
+								   RelativePath="..\..\..\..\..\Engine\source\core\util\zip\test\zipTestWrite.cpp">
 								</File>
 							</Filter>
 						</Filter>
@@ -2665,16 +2699,6 @@
 						</File>
 					</Filter>
 					<Filter
-						Name="test"
-						Filter="">
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\gfx\test\stanfordBunny.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\gfx\test\testGfx.cpp">
-						</File>
-					</Filter>
-					<Filter
 						Name="util"
 						Filter="">
 						<File
@@ -3259,6 +3283,9 @@
 						Filter="">
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\gui\game\guiChunkedBitmapCtrl.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\gui\game\guiChunkedBitmapCtrl.h">
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\gui\game\guiFadeinBitmapCtrl.cpp">
@@ -4019,13 +4046,19 @@
 						Name="test"
 						Filter="">
 						<File
+						   RelativePath="..\..\..\..\..\Engine\source\math\test\mBoxTest.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\math\test\mMatrixTest.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\math\test\mPlaneTest.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\math\test\mPolyhedronTest.cpp">
+						</File>
+						<File
 						   RelativePath="..\..\..\..\..\Engine\source\math\test\mQuatTest.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\math\test\testMathPlane.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\math\test\testPolyhedron.cpp">
 						</File>
 					</Filter>
 					<Filter
@@ -4125,6 +4158,9 @@
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\platform\platformFont.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\platform\platformGL.h">
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\platform\platformInput.h">
@@ -4261,6 +4297,13 @@
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\platform\async\asyncUpdate.h">
 						</File>
+						<Filter
+							Name="test"
+							Filter="">
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\platform\async\test\asyncPacketQueueTest.cpp">
+							</File>
+						</Filter>
 					</Filter>
 					<Filter
 						Name="input"
@@ -4315,37 +4358,22 @@
 						Name="test"
 						Filter="">
 						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\testAlerts.cpp">
+						   RelativePath="..\..\..\..\..\Engine\source\platform\test\netTest.cpp">
 						</File>
 						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\testAsyncPacketQueue.cpp">
+						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformFileIOTest.cpp">
 						</File>
 						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\testBasicTypes.cpp">
+						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformTimerTest.cpp">
 						</File>
 						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\testFile.cpp">
+						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformTypesTest.cpp">
 						</File>
 						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\testNet.cpp">
+						   RelativePath="..\..\..\..\..\Engine\source\platform\test\profilerTest.cpp">
 						</File>
 						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\testThreading.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\testThreadPool.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\testThreadSafeDeque.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\testThreadSafePriorityQueue.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\testThreadSafeRefCount.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\testTimeManager.cpp">
+						   RelativePath="..\..\..\..\..\Engine\source\platform\test\threadStaticTest.cpp">
 						</File>
 					</Filter>
 					<Filter
@@ -4381,6 +4409,31 @@
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\platform\threads\threadSafeRefCount.h">
 						</File>
+						<Filter
+							Name="test"
+							Filter="">
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\platform\threads\test\mutexTest.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\platform\threads\test\semaphoreTest.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\platform\threads\test\threadPoolTest.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\platform\threads\test\threadSafeDequeTest.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\platform\threads\test\threadSafePriorityQueueTest.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\platform\threads\test\threadSafeRefCountTest.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\platform\threads\test\threadTest.cpp">
+							</File>
+						</Filter>
 					</Filter>
 				</Filter>
 				<Filter
@@ -4448,6 +4501,12 @@
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\platformWin32\winMemory.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\platformWin32\winPlatformCPUCount.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\platformWin32\WinPlatformGL.cpp">
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\platformWin32\winProcessControl.cpp">
@@ -5229,6 +5288,12 @@
 						Name="HLSL"
 						Filter="">
 						<File
+						   RelativePath="..\..\..\..\..\Engine\source\shaderGen\HLSL\accuFeatureHLSL.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\shaderGen\HLSL\accuFeatureHLSL.h">
+						</File>
+						<File
 						   RelativePath="..\..\..\..\..\Engine\source\shaderGen\HLSL\bumpHLSL.cpp">
 						</File>
 						<File
@@ -5604,59 +5669,6 @@
 					</Filter>
 				</Filter>
 				<Filter
-					Name="unit"
-					Filter="">
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\unit\consoleTest.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\unit\memoryTester.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\unit\memoryTester.h">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\unit\test.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\unit\test.h">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\unit\unitTestComponentInterface.cpp">
-					</File>
-					<File
-					   RelativePath="..\..\..\..\..\Engine\source\unit\unitTestComponentInterface.h">
-					</File>
-					<Filter
-						Name="tests"
-						Filter="">
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\unit\tests\testComponents.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\unit\tests\testDefaultConstruction.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\unit\tests\testMatrixMul.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\unit\tests\testRuntimeClassRep.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\unit\tests\testSwizzle.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\unit\tests\testThreadStatic.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\unit\tests\testThreadStaticPerformance.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\unit\tests\testVector.cpp">
-						</File>
-					</Filter>
-				</Filter>
-				<Filter
 					Name="util"
 					Filter="">
 					<File
@@ -5803,7 +5815,7 @@
 						Name="test"
 						Filter="">
 						<File
-						   RelativePath="..\..\..\..\..\Engine\source\windowManager\test\testWinMgr.cpp">
+						   RelativePath="..\..\..\..\..\Engine\source\windowManager\test\windowManagerTest.cpp">
 						</File>
 					</Filter>
 					<Filter

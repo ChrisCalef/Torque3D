@@ -5,16 +5,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Full", "projects/Full.vcpro
 		{C0FCDFF9-E125-412E-87BC-2D89DB971CAB} = {C0FCDFF9-E125-412E-87BC-2D89DB971CAB}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "NP Full Plugin", "projects/NP Full Plugin.vcproj", "{CDECDFF9-E125-412E-87BC-2D89DB971CAB}"
-	ProjectSection(ProjectDependencies) = postProject
-		{C0FCDFF9-E125-412E-87BC-2D89DB971CAB} = {C0FCDFF9-E125-412E-87BC-2D89DB971CAB}
-	EndProjectSection
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "IE Full Plugin", "projects/IE Full Plugin.vcproj", "{CDECDFF9-E125-412E-87CD-2D89DB971CAB}"
-	ProjectSection(ProjectDependencies) = postProject
-		{C0FCDFF9-E125-412E-87BC-2D89DB971CAB} = {C0FCDFF9-E125-412E-87BC-2D89DB971CAB}
-	EndProjectSection
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Full DLL", "projects/Full DLL.vcproj", "{C0FCDFF9-E125-412E-87BC-2D89DB971CAB}"
 	ProjectSection(ProjectDependencies) = postProject
 		{73D9048F-55AA-4EF6-BF33-3A811DC47FCE} = {73D9048F-55AA-4EF6-BF33-3A811DC47FCE}
@@ -78,18 +68,6 @@ Global
 		{CDECDFF9-E125-523F-87BC-2D89DB971CAB}.Optimized Debug|Win32.Build.0 = Optimized Debug|Win32
 		{CDECDFF9-E125-523F-87BC-2D89DB971CAB}.Release|Win32.ActiveCfg = Release|Win32
 		{CDECDFF9-E125-523F-87BC-2D89DB971CAB}.Release|Win32.Build.0 = Release|Win32
-		{CDECDFF9-E125-412E-87BC-2D89DB971CAB}.Debug|Win32.ActiveCfg = Debug|Win32
-		{CDECDFF9-E125-412E-87BC-2D89DB971CAB}.Debug|Win32.Build.0 = Debug|Win32
-		{CDECDFF9-E125-412E-87BC-2D89DB971CAB}.Optimized Debug|Win32.ActiveCfg = Optimized Debug|Win32
-		{CDECDFF9-E125-412E-87BC-2D89DB971CAB}.Optimized Debug|Win32.Build.0 = Optimized Debug|Win32
-		{CDECDFF9-E125-412E-87BC-2D89DB971CAB}.Release|Win32.ActiveCfg = Release|Win32
-		{CDECDFF9-E125-412E-87BC-2D89DB971CAB}.Release|Win32.Build.0 = Release|Win32
-		{CDECDFF9-E125-412E-87CD-2D89DB971CAB}.Debug|Win32.ActiveCfg = Debug|Win32
-		{CDECDFF9-E125-412E-87CD-2D89DB971CAB}.Debug|Win32.Build.0 = Debug|Win32
-		{CDECDFF9-E125-412E-87CD-2D89DB971CAB}.Optimized Debug|Win32.ActiveCfg = Optimized Debug|Win32
-		{CDECDFF9-E125-412E-87CD-2D89DB971CAB}.Optimized Debug|Win32.Build.0 = Optimized Debug|Win32
-		{CDECDFF9-E125-412E-87CD-2D89DB971CAB}.Release|Win32.ActiveCfg = Release|Win32
-		{CDECDFF9-E125-412E-87CD-2D89DB971CAB}.Release|Win32.Build.0 = Release|Win32
 		{C0FCDFF9-E125-412E-87BC-2D89DB971CAB}.Debug|Win32.ActiveCfg = Debug|Win32
 		{C0FCDFF9-E125-412E-87BC-2D89DB971CAB}.Debug|Win32.Build.0 = Debug|Win32
 		{C0FCDFF9-E125-412E-87BC-2D89DB971CAB}.Optimized Debug|Win32.ActiveCfg = Optimized Debug|Win32
