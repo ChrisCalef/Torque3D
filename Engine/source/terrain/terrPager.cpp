@@ -316,11 +316,11 @@ void TerrainPager::processTick()
 				checkTileGrid();
 		}		
 
-		if (mCurrentTick % mTickInterval == 0)
-		{
-			Con::printf("lastSkyboxTick %d, currentTick %d return controls %d, sent request %d",
-				mLastSkyboxTick,mCurrentTick,mWorldDataSource->mNumReturnControls,mSentSkyboxRequest);
-		}
+		//if (mCurrentTick % mTickInterval == 0)
+		//{
+		//	Con::printf("lastSkyboxTick %d, currentTick %d return controls %d, sent request %d",
+		//		mLastSkyboxTick,mCurrentTick,mWorldDataSource->mNumReturnControls,mSentSkyboxRequest);
+		//}
 
 		if ((mUseDataSource)&&(mWorldDataSource->mNumReturnControls==1)&&
 			((S32)mLastSkyboxTick < ((S32)mCurrentTick - (S32)mSkyboxTickInterval))&&
@@ -337,11 +337,11 @@ void TerrainPager::processTick()
 		mWorldDataSource->tick();
 	}
 
-	if (mCurrentTick % 10 == 0)
-	{
-		Con::printf("load state: %d",mLoadState);
-	}
-	if (mCurrentTick % 10 == 60)
+	//if (mCurrentTick % 10 == 0)
+	//{
+	//	Con::printf("load state: %d",mLoadState);
+	//}
+	if ((mCurrentTick % 60 == 0)&&(mUseDataSource))
 	{
 		Con::executef(this,"UpdateSkybox");//hell with it, this takes almost no time, do it every couple of seconds for now.
 	}
@@ -661,7 +661,7 @@ void TerrainPager::loadTileGrid()
 {
 	bool loaded;
 	bool verbose = false;
-	char tileName[20],heightfilename[256],texturefilename[256];
+	char tileName[20],heightfilename[256],texturefilename[256],terrainfilename[256];
 	U32 gridMidpoint = (mGridSize-1)/2;
 
 	F32 startLong = mTileStartLongitude - (gridMidpoint * mD.mTileWidthLongitude);
@@ -697,6 +697,7 @@ void TerrainPager::loadTileGrid()
 			sprintf(tileName,getTileName(kLong,kLat));
 			sprintf(heightfilename,"%shght.%s.bin",mD.mTerrainPath.c_str(),tileName);
 			sprintf(texturefilename,"%stext.%s.bin",mD.mTerrainPath.c_str(),tileName);
+			sprintf(terrainfilename,"%sterrain.%s.ter",mD.mTerrainPath.c_str(),tileName);
 
 			if (mTerrainGrid[y*mGridSize+x]==NULL) loaded = false;
 			else loaded = true;
@@ -717,7 +718,8 @@ void TerrainPager::loadTileGrid()
 				}
 				if (loaded==false)
 				{//Here, let's check for the bin file existing first, and if not handle request here, don't call.
-					if ((checkFileExists(heightfilename))&&(checkFileExists(texturefilename)))
+					if ((checkFileExists(terrainfilename)) || 
+						((checkFileExists(heightfilename))&&(checkFileExists(texturefilename))))
 						mTerrainGrid[y*mGridSize+x] = addTerrainBlock(kLong,kLat);
 					else if (mUseDataSource)//okay, now we need to make a call to worldDataSource. We should be able to safely assume 
 					{	//we're ready for packets and have already sent our init requests.
