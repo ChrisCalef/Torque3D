@@ -35,6 +35,7 @@ class Point3F;
 struct RayInfo;
 class SceneRenderState;
 class PhysicsBody;
+class ColorI;
 
 class PhysicsWorld
 {
@@ -66,7 +67,7 @@ public:
    /// It is assumed the GFX state is setup prior to this call for
    /// rendering in world space.
    ///
-   virtual void onDebugDraw( const SceneRenderState *state ) = 0;
+   virtual void onDebugDraw( const SceneRenderState *state, ColorI color ) = 0;
 
    /// Prepare the physics world for use.
    virtual bool initWorld( bool isServer, ProcessList *processList ) = 0;

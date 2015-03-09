@@ -308,7 +308,7 @@ PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,P
 	//NOW, where should I save this joint??
 
 
-	return NULL;
+	return (PhysicsJoint *)joint;
 }
 
 void Px3Plugin::loadJointData(U32 jointID, physicsJointData* jD)

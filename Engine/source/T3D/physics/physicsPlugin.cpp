@@ -118,13 +118,26 @@ void PhysicsPlugin::_debugDraw( SceneManager *graph, const SceneRenderState *sta
    if ( !PHYSICSMGR || !state->isDiffusePass() )
       return;
 
+   //AHA! Here is where we need a user-accessible way to flag debug rendering for server or client (or both?)
    // Render the server by default... else the client.
-   PhysicsWorld *world = PHYSICSMGR->getWorld( smServerWorldName );
-   if ( !world )
-      world = PHYSICSMGR->getWorld( smClientWorldName );
+   bool debugRenderServer = true;
+   bool debugRenderClient = true;
 
-   if ( world )
-      world->onDebugDraw( state );
+   PhysicsWorld *serverWorld,*clientWorld;
+   if (debugRenderServer)
+   {
+	   serverWorld = PHYSICSMGR->getWorld( smServerWorldName );
+
+	   if ( serverWorld )
+		   serverWorld->onDebugDraw( state,  ColorI("green") );
+   }
+   if (debugRenderClient)
+   {
+	   clientWorld = PHYSICSMGR->getWorld( smClientWorldName );
+
+	   if ( clientWorld )
+		   clientWorld->onDebugDraw( state, ColorI("blue"));
+   }
 }
 
 DefineConsoleFunction( physicsPluginPresent, bool, (), , "physicsPluginPresent()"

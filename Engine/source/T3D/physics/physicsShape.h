@@ -199,12 +199,14 @@ public: //protected:
 
    /// The rendered shape.
    TSShapeInstance *mShapeInst;
-
+   Vector <bool> mNodeBodies;//Tracks which nodes have physics.
    /// The current physics state.
    PhysicsState mState;
+   Vector <PhysicsState> mStates;//For articulated shapes.
 
    /// The previous and current render states.
    PhysicsState mRenderState[2];
+   Vector <PhysicsState> mRenderStates;//For articulated shapes. Two per part. Maybe?
 
    /// True if the PhysicsShape has been destroyed ( gameplay ).
    bool mDestroyed;

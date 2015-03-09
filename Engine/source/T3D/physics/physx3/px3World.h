@@ -38,6 +38,7 @@
 class Px3ConsoleStream;
 class Px3ContactReporter;
 class FixedStepper;
+class ColorI;
 
 enum Px3CollisionGroup
 {
@@ -80,7 +81,7 @@ public:
 
 	virtual bool initWorld( bool isServer, ProcessList *processList );
 	virtual void destroyWorld();
-	virtual void onDebugDraw( const SceneRenderState *state );
+	virtual void onDebugDraw( const SceneRenderState *state, ColorI color );
 	virtual void reset() {}
 	virtual bool castRay( const Point3F &startPnt, const Point3F &endPnt, RayInfo *ri, const Point3F &impulse );
 	virtual PhysicsBody* castRay( const Point3F &start, const Point3F &end, U32 bodyTypes = BT_All );

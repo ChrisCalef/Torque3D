@@ -546,7 +546,7 @@ static ColorI getDebugColor( physx::PxU32 packed )
    return col;
 }
 
-void Px3World::onDebugDraw( const SceneRenderState *state )
+void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
 {
    if ( !mScene )
       return;
@@ -570,7 +570,7 @@ void Px3World::onDebugDraw( const SceneRenderState *state )
       
       while ( numPoints-- )
       {
-         PrimBuild::color( getDebugColor(points->color) );
+         PrimBuild::color( color );//( getDebugColor(points->color) );
          PrimBuild::vertex3fv(px3Cast<Point3F>(points->pos));
          points++;
       }
@@ -587,9 +587,9 @@ void Px3World::onDebugDraw( const SceneRenderState *state )
 
       while ( numLines-- )
       {
-         PrimBuild::color( getDebugColor( lines->color0 ) );
+         PrimBuild::color( color );//( getDebugColor( lines->color0 ) );
          PrimBuild::vertex3fv( px3Cast<Point3F>(lines->pos0));
-         PrimBuild::color( getDebugColor( lines->color1 ) );
+         PrimBuild::color( color );//( getDebugColor( lines->color1 ) );
          PrimBuild::vertex3fv( px3Cast<Point3F>(lines->pos1));
          lines++;
       }
@@ -606,11 +606,11 @@ void Px3World::onDebugDraw( const SceneRenderState *state )
       
       while ( numTris-- )
       {
-         PrimBuild::color( getDebugColor( triangles->color0 ) );
+         PrimBuild::color( color );//( getDebugColor( triangles->color0 ) );
          PrimBuild::vertex3fv( px3Cast<Point3F>(triangles->pos0) );
-         PrimBuild::color( getDebugColor( triangles->color1 ) );
+         PrimBuild::color( color );//( getDebugColor( triangles->color1 ) );
          PrimBuild::vertex3fv( px3Cast<Point3F>(triangles->pos1));
-         PrimBuild::color( getDebugColor( triangles->color2 ) );
+         PrimBuild::color( color );//( getDebugColor( triangles->color2 ) );
          PrimBuild::vertex3fv( px3Cast<Point3F>(triangles->pos2) );
          triangles++;
       }
