@@ -62,7 +62,7 @@ public:
    virtual PhysicsMaterial* createMaterial(const F32 restitution,const F32 staticFriction,const F32 dynamicFritction);
 
    // Chris Calef
-   virtual PhysicsJoint* createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin);
+   virtual PhysicsJoint* createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin,Point3F jointRots);
    virtual void loadJointData(U32 jointID, physicsJointData *jD);
 
 };

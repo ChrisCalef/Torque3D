@@ -25,6 +25,6 @@
 
 
 PhysicsWorld::PhysicsWorld()
-   : mGravity( 0, 0, -9.8f ) //-9.8  -20.0f NOTE: This matches the gravity used for player objects.
+   : mGravity( 0, 0, -5.8f ) //-9.8  -20.0f NOTE: This matches the gravity used for player objects.
 {
 }

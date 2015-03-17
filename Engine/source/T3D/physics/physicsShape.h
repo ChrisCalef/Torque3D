@@ -84,6 +84,7 @@ struct physicsPartData
     S32 bodypartChain;
     F32 mass;
     F32 inflictMultiplier;
+	Point3F jointRots;
 };
 
 class PhysicsShapeData : public GameBaseData
@@ -228,6 +229,7 @@ public: //protected:
    bool mIsDynamic;// Sets object to kinematic if true.
    bool mIsArticulated;// If true, shape maintains arrays of PhysicsBody and PhysicsJoint objects, instead of one PhysicsBody.
    S32 mShapeID;    //Database ID of the physicsShape, to find all the physicsShapePart objects with body and joint data.
+   S32 mCurrentTick;
 
    ///
    enum MaskBits 
@@ -310,7 +312,10 @@ public:
    PhysicsJoint *getPhysicsJoint();
    void setJointTarget(QuatF &target);
    void setHasGravity(bool hasGrav);
-
+   void setIsDynamic(bool isDynamic);//This one just sets the bool.
+   void setDynamic(bool isDynamic);//This one actually does it, during processTick.
+   void setPartIsDynamic(S32 partID,bool isDynamic);
+   void setPartDynamic(S32 partID,bool isDynamic);
 };
 
 #endif // _PHYSICSSHAPE_H_

@@ -283,7 +283,7 @@ PhysicsMaterial* Px3Plugin::createMaterial(const F32 restitution,const F32 stati
    return material;
 }
 
-PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin)
+PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin,Point3F jointRots)
 {
 	PhysicsWorld *worldA,*worldB;
 	worldA = A->getWorld();
@@ -304,7 +304,7 @@ PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,P
 	
 	loadJointData(jointID,&jD);
 
-	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&jD,origin);
+	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&jD,origin,jointRots);
 	//NOW, where should I save this joint??
 
 
@@ -364,3 +364,72 @@ void Px3Plugin::loadJointData(U32 jointID, physicsJointData* jD)
 	//...
 	
 }
+
+/*
+
+ConsoleFunction( physXRemoteDebuggerConnect, bool, 1, 3, "physXRemoteDebuggerConnect(host,port)" )
+{	
+	nxPhysManager *kPM = (nxPhysManager *)physManagerCommon::getPM();
+
+   if ( !kPM->mPhysics )  
+   {
+      Con::errorf( "PhysX SDK not initialized!" );
+      return false;
+   }
+
+   NxRemoteDebugger *debugger = kPM->mPhysics->getFoundationSDK().getRemoteDebugger();
+
+   if ( debugger->isConnected() )
+   {
+      Con::errorf( "RemoteDebugger already connected... call disconnect first!" );
+      return false;
+   }
+
+   const UTF8 *host = "localhost";
+   U32 port = 5425;
+
+   if ( argc >= 2 )
+      host = argv[1];
+   if ( argc >= 3 )
+      port = dAtoi( argv[2] );
+
+   //// Before we connect we need to have write access
+   //// to both the client and server worlds.
+   //PxWorld::releaseWriteLocks();
+
+	kPM->stopPhysics();
+
+   //// Connect!
+   debugger->connect( host, port );
+   if ( !debugger->isConnected() )
+   {
+      Con::errorf( "RemoteDebugger failed to connect!" );
+      return false;
+   }
+
+   Con::printf( "RemoteDebugger connected to %s at port %u!", host, port );
+	kPM->startPhysics();
+   return true;
+}
+
+ConsoleFunction( physXRemoteDebuggerDisconnect, void, 1, 1, "" )
+{
+	nxPhysManager *kPM = (nxPhysManager *)physManagerCommon::getPM();
+
+   if ( !kPM->mPhysics )  
+   {
+      Con::errorf( "PhysX SDK not initialized!" );
+      return;
+   }
+
+   NxRemoteDebugger *debugger = kPM->mPhysics->getFoundationSDK().getRemoteDebugger();
+
+   if ( debugger->isConnected() )
+   {
+      debugger->flush();
+      debugger->disconnect();
+      Con::printf( "RemoteDebugger disconnected!" );
+   }
+}
+
+*/

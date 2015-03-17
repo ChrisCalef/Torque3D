@@ -484,11 +484,11 @@ void Px3Body::setHasGravity( bool hasGrav )
 
 
 void Px3Body::setIsDynamic( bool isDynam )
-{ //FAIL, CRASH
+{ //FAIL, CRASH - maybe only do this from between physics ticks?
 	bool isKinematic = mBodyFlags & BF_KINEMATIC;
 	if (isDynam==isKinematic)//ie we're switching states, we were kinematic and now we want to be dynamic, or vice versa.
 	{
-		mWorld->lockScene();
+		//mWorld->lockScene();
 		if (isDynam)
 		{
 			dynamic_cast<physx::PxRigidDynamic*>(mActor)->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, false);
@@ -497,6 +497,6 @@ void Px3Body::setIsDynamic( bool isDynam )
 			dynamic_cast<physx::PxRigidDynamic*>(mActor)->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
 			mBodyFlags |= PhysicsBody::BF_KINEMATIC;
 		}
-		mWorld->unlockScene();
+		//mWorld->unlockScene();
 	}  
 }

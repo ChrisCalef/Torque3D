@@ -43,10 +43,72 @@ enum physicsJointType
 	PHYS_JOINT_TYPE_COUNT
 };
 */
+//Snagged this from internet, sorry forgot to source, don't we have slerp for this(?)
+physx::PxQuat getLookAtQuat(const Point3F& fromPos, const Point3F& toPos)
+{
+	// Position of toPos relative to fromPos
+	Point3F relToPos = toPos - fromPos;
+
+	/**
+	* First we rotate fromPos around Y axis to look at toPos
+	* This gives us Euler angle around Y axis
+	*/
+
+	// Compute the angle
+	// theta = atan(z/x)
+	const float yAng0 = atan(fabs(relToPos.z) / fabs(relToPos.x));
+
+	// Fix the angle based on XZ quadrant point lies in
+	float yAng;
+	if (relToPos.x >= 0)
+	{
+		if (relToPos.z >= 0)
+			yAng = 2 * M_PI - yAng0; // 360 - theta
+		else
+			yAng = yAng0;
+	}
+	else
+	{
+		if (relToPos.z >= 0)
+			yAng = M_PI + yAng0; // 180 + theta
+		else
+			yAng = M_PI - yAng0; // 180 - theta
+	}
+
+	/**
+	* Next fromPos will look "up" to see toPos
+	* This gives us Euler angle around Z axis
+	*/
+
+	// Compute the angle
+	// theta = atan( y / sqrt(x^2 + z^2))
+	const float zAng0 = atan(fabs(relToPos.y) /
+		sqrt(relToPos.x * relToPos.x + relToPos.z * relToPos.z));
+
+	// Fix angle based on whether toPos is above or below XZ plane
+	const float zAng = (relToPos.y >= 0) ? zAng0 : -zAng0;
+
+	/**
+	* Convert Euler angles to quaternion that rotates
+	* X axis of upright orientation to point at toPos
+	* Reference: PhysX Math Primer
+	*/
+
+	// Convert to quaternions
+	physx::PxQuat qy(yAng, physx::PxVec3(0, 1, 0));
+	physx::PxQuat qz(zAng, physx::PxVec3(0, 0, 1));
+
+	// Rotate local axes
+	physx::PxQuat q = qy * qz;
+
+	return q;
+}
+
 //-----------------------------------------------------------------------------
 // Constructor/Destructor
 //-----------------------------------------------------------------------------
-Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* world,physicsJointData *jD,Point3F origin)
+Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* world,
+								physicsJointData *jD,Point3F origin,Point3F jointRots)
 {
 	physx::PxTransform offset0,offset1;
 
@@ -60,15 +122,25 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 	Point3F offsetA = origin - posA;
 	Point3F offsetB = origin - posB;
 
-	offset0 = physx::PxTransform(physx::PxVec3(offsetA.x,offsetA.y,offsetA.z));
-	offset1 = physx::PxTransform(physx::PxVec3(offsetB.x,offsetB.y,offsetB.z));
-		
+	physx::PxQuat lookatQuat = getLookAtQuat(posB,posA);
+	//QuatF lookatQ;
+	//lookatQ.shortestArc(posB,posA);//Hm, nope, totally different, ...?
+	if (jointRots.len()>0)
+	{
+		EulerF rots(mDegToRad(jointRots.x),mDegToRad(jointRots.y),mDegToRad(jointRots.z));
+		QuatF localRot = QuatF(rots);
+		physx::PxQuat localQuat(localRot.x,localRot.y,localRot.z,localRot.w);
+		lookatQuat = localQuat * lookatQuat;
+	}
+	offset0 = physx::PxTransform(physx::PxVec3(offsetA.x,offsetA.y,offsetA.z),lookatQuat);
+	offset1 = physx::PxTransform(physx::PxVec3(offsetB.x,offsetB.y,offsetB.z),lookatQuat);
+
 	world->lockScene();
 	
 	loadJointData(jD);//Sets up all the local variables for this joint using the values in the joint data struct.
 	
-	//Con::printf("Trying to make a joint. type %d actor A pos %f %f %f, actor B pos %f %f %f",mJD.jointType,
-	//	posA.x,posA.y,posA.z,posB.x,posB.y,posB.z);
+	//Con::printf("Trying to make a joint. type %d jointRots %f %f %f",mJD.jointType,
+	//	jointRots.x,jointRots.y,jointRots.z);
 
 	if (mJD.jointType==PHYS_JOINT_SPHERICAL) {	
 
@@ -110,7 +182,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	} else if  (mJD.jointType==PHYS_JOINT_D6) {
 
-		physx::PxD6Joint* d6Joint = physx::PxD6JointCreate(*gPhysics3SDK,A,offset0,B,offset1);//dynamic_cast<physx::PxD6Joint*>(mJoint);
+		physx::PxD6Joint* d6Joint = physx::PxD6JointCreate(*gPhysics3SDK,B,offset1,A,offset0);//dynamic_cast<physx::PxD6Joint*>(mJoint);
 		mJoint = dynamic_cast<physx::PxJoint*>(d6Joint);
 
 		//if (jD->xLimit<=0) d6Joint->setMotion(physx::PxD6Axis::eX, physx::PxD6Motion::eLOCKED);
@@ -135,6 +207,26 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 	}
 
 	mJoint->setBreakForce(mJD.maxForce,mJD.maxTorque);
+
+	//physx::PxTransform pxTrans0;
+	//physx::PxTransform pxTrans1;
+	//Con::printf("posA %f %f %f  posB %f %f %f",posA.x,posA.y,posA.z,posB.x,posB.y,posB.z);
+	//physx::PxQuat pxq0,pxq1;
+
+	//Here, I think I need slerp. I have a default orientation that puts 
+	//TEMP, HACK...??? FIX
+	//if (posA.z > posB.z)
+	//	pxq0 = physx::PxQuat(mDegToRad(-90.0f),physx::PxVec3(0,1,0));
+	//else if (posA.z < posB.z)
+	//	pxq0 = physx::PxQuat(mDegToRad(90.0f),physx::PxVec3(0,1,0));
+
+	//pxTrans0 = physx::PxTransform::createIdentity();
+	//pxTrans1 = physx::PxTransform(pxq0);
+
+	//mJoint->setLocalPose(physx::PxJointActorIndex::eACTOR0,pxTrans0);
+	//mJoint->setLocalPose(physx::PxJointActorIndex::eACTOR1,pxTrans0);//pxTrans1
+
+	mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::eVISUALIZATION,true);
 
 	//if (mJoint) Con::printf("Created a joint: type %d offsetA %f %f %f offsetB %f %f %f",mJD.jointType,
 	//	offsetA.x,offsetA.y,offsetA.z,offsetB.x,offsetB.y,offsetB.z);

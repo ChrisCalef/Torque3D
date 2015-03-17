@@ -28,7 +28,6 @@
 #include "T3D/physics/physx3/px3Casts.h"
 #include "T3D/physics/physx3/px3Stream.h"
 #include "T3D/physics/physicsUserData.h"
-
 #include "console/engineAPI.h"
 #include "core/stream/bitStream.h"
 #include "platform/profiler.h"
@@ -41,6 +40,9 @@
 #include "gfx/sim/debugDraw.h"
 #include "gfx/primBuilder.h"
 
+#include <physxvisualdebuggersdk\PvdNetworkStreams.h>
+#include <physxvisualdebuggersdk\PvdConnectionManager.h>
+#include <foundation\PxFoundation.h>
 
 physx::PxPhysics* gPhysics3SDK = NULL;
 physx::PxCooking* Px3World::smCooking = NULL;
@@ -133,8 +135,9 @@ bool Px3World::restartSDK( bool destroyOnly, Px3World *clientWorld, Px3World *se
 
 	if(smFoundation)
 	{
-		smFoundation->release();
-		SAFE_DELETE(smErrorCallback);
+		//smFoundation->release();
+		//if (smErrorCallback)
+		//	SAFE_DELETE(smErrorCallback);
 	}
 
 	// If we're not supposed to restart... return.
@@ -268,6 +271,33 @@ bool Px3World::initWorld( bool isServer, ProcessList *processList )
 	mProcessList->preTickSignal().notify( this, &Px3World::getPhysicsResults );
 	mProcessList->postTickSignal().notify( this, &Px3World::tickPhysics, 1000.0f );
 
+	/////////////////////////////PVD TESTING ///////////////////////////////////
+	//PxVisualDebuggerConnectionFlags connectionFlags = PxVisualDebuggerExt::getAllConnectionFlags();
+	/* //haha, oops, this is already here
+	if (gPhysics3SDK->getPvdConnectionManager()!=NULL)
+	{
+		Con::printf("SUCCESS We have a PVD Connection Manager!!!!!!!!!!!!!!! isConnected %d",gPhysics3SDK->getPvdConnectionManager()->isConnected());
+
+		const char*     pvd_host_ip = "127.0.0.1";  // IP of the PC which is running PVD
+		int             port        = 5425;         // TCP port to connect to, where PVD is listening
+		unsigned int    timeout     = 100;          // timeout in milliseconds to wait for PVD to respond,
+		// consoles and remote PCs need a higher timeout.
+		physx::debugger::PxVisualDebuggerConnectionFlags connectionFlags = physx::debugger::PxVisualDebuggerExt::getAllConnectionFlags();
+
+		// and now try to connect
+		physx::debugger::comm::PvdConnection* theConnection = physx::debugger::PxVisualDebuggerExt::createConnection(gPhysics3SDK->getPvdConnectionManager(),
+			pvd_host_ip, port, timeout, connectionFlags);
+	
+		if (theConnection->isConnected())
+			Con::printf("WE ARE CONNECTED");
+		else
+			Con::printf("WE ARE NOT CONNECTED");
+
+		theConnection->disconnect();
+	
+	}*/
+	/////////////////////////////PVD TESTING ///////////////////////////////////
+	
 	return true;
 }
 // Most of this borrowed from bullet physics library, see btDiscreteDynamicsWorld.cpp
@@ -551,16 +581,20 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
    if ( !mScene )
       return;
 
-   mScene->setVisualizationParameter(physx::PxVisualizationParameter::eSCALE,1.0f);
+   mScene->setVisualizationParameter(physx::PxVisualizationParameter::eSCALE,0.2f);
    //mScene->setVisualizationParameter(physx::PxVisualizationParameter::eBODY_AXES,1.0f);
    mScene->setVisualizationParameter(physx::PxVisualizationParameter::eCOLLISION_SHAPES,1.0f);
-   mScene->setVisualizationParameter(physx::PxVisualizationParameter::eJOINT_LIMITS,1.0f);
+   mScene->setVisualizationParameter(physx::PxVisualizationParameter::eJOINT_LOCAL_FRAMES,1.0f);//
+   mScene->setVisualizationParameter(physx::PxVisualizationParameter::eJOINT_LIMITS,1.0f);//eBODY_JOINT_GROUPS
+   //mScene->setVisualizationParameter(physx::PxVisualizationParameter::eBODY_JOINT_GROUPS,1.0f);
 
    const physx::PxRenderBuffer *renderBuffer = &mScene->getRenderBuffer();
 
    if(!renderBuffer)
       return;
 
+   //Con::printf("debug render, points %d  lines %d  tris %d  color %d %d %d",renderBuffer->getNbPoints(),
+	//   renderBuffer->getNbLines(),renderBuffer->getNbTriangles(),color.red,color.green,color.blue);
    // Render points
    {
       physx::PxU32 numPoints = renderBuffer->getNbPoints();
@@ -584,12 +618,14 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
       const physx::PxDebugLine *lines = renderBuffer->getLines();
 
       PrimBuild::begin( GFXLineList, numLines * 2 );
-
+	  
       while ( numLines-- )
       {
-         PrimBuild::color( color );//( getDebugColor( lines->color0 ) );
+         //PrimBuild::color( color );
+		 PrimBuild::color( getDebugColor( lines->color0 ) );
          PrimBuild::vertex3fv( px3Cast<Point3F>(lines->pos0));
-         PrimBuild::color( color );//( getDebugColor( lines->color1 ) );
+         //PrimBuild::color( color );
+         PrimBuild::color( getDebugColor( lines->color1 ) );
          PrimBuild::vertex3fv( px3Cast<Point3F>(lines->pos1));
          lines++;
       }
@@ -606,11 +642,11 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
       
       while ( numTris-- )
       {
-         PrimBuild::color( color );//( getDebugColor( triangles->color0 ) );
+         PrimBuild::color( getDebugColor( triangles->color0 )  );//( color );
          PrimBuild::vertex3fv( px3Cast<Point3F>(triangles->pos0) );
-         PrimBuild::color( color );//( getDebugColor( triangles->color1 ) );
+         PrimBuild::color( getDebugColor( triangles->color1 ) );//(  color );
          PrimBuild::vertex3fv( px3Cast<Point3F>(triangles->pos1));
-         PrimBuild::color( color );//( getDebugColor( triangles->color2 ) );
+         PrimBuild::color(  getDebugColor( triangles->color2 ) );//( color );
          PrimBuild::vertex3fv( px3Cast<Point3F>(triangles->pos2) );
          triangles++;
       }
@@ -623,4 +659,16 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
 DefineEngineFunction( physx3SetSimulationTiming, void, ( F32 stepTime, U32 maxSteps ),, "Set simulation timing of the PhysX 3 plugin" )
 {
    Px3World::setTiming(stepTime,maxSteps);
+}
+
+DefineEngineFunction( physx3RemoteDebuggerConnect, void, ( const char * host, U32 port ),, "Connect to NVIDIA Visual Debugger." )
+{
+   //PxRemoteDebugger *debugger = kPM->mPhysics->getFoundationSDK().getRemoteDebugger();
+	//PVD::Pv
+
+}
+
+DefineEngineFunction( physx3RemoteDebuggerDisconnect, void, ( ),, "Disconnect from NVIDIA Visual Debugger." )
+{
+   
 }
