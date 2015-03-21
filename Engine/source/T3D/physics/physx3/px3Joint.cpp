@@ -43,7 +43,7 @@ enum physicsJointType
 	PHYS_JOINT_TYPE_COUNT
 };
 */
-//Snagged this from internet, sorry forgot to source, don't we have slerp for this(?)
+//Snagged this from internet, sorry forgot to source. Can we do this already in Torque with QuatF slerp?
 physx::PxQuat getLookAtQuat(const Point3F& fromPos, const Point3F& toPos)
 {
 	// Position of toPos relative to fromPos
@@ -115,16 +115,10 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 	Point3F posA(A->getGlobalPose().p.x,A->getGlobalPose().p.y,A->getGlobalPose().p.z);
 	Point3F posB(B->getGlobalPose().p.x,B->getGlobalPose().p.y,B->getGlobalPose().p.z);
 
-	//Now, instead of assuming the exact center between the two body positions, we are going to get it as an argument.
-	//Point3F diff = posA - posB;
-	//Point3F center = posB + (diff/2);
-
 	Point3F offsetA = origin - posA;
 	Point3F offsetB = origin - posB;
 
 	physx::PxQuat lookatQuat = getLookAtQuat(posB,posA);
-	//QuatF lookatQ;
-	//lookatQ.shortestArc(posB,posA);//Hm, nope, totally different, ...?
 	if (jointRots.len()>0)
 	{
 		EulerF rots(mDegToRad(jointRots.x),mDegToRad(jointRots.y),mDegToRad(jointRots.z));
@@ -135,12 +129,9 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 	offset0 = physx::PxTransform(physx::PxVec3(offsetA.x,offsetA.y,offsetA.z),lookatQuat);
 	offset1 = physx::PxTransform(physx::PxVec3(offsetB.x,offsetB.y,offsetB.z),lookatQuat);
 
-	world->lockScene();
+	world->lockScene();//?
 	
 	loadJointData(jD);//Sets up all the local variables for this joint using the values in the joint data struct.
-	
-	//Con::printf("Trying to make a joint. type %d jointRots %f %f %f",mJD.jointType,
-	//	jointRots.x,jointRots.y,jointRots.z);
 
 	if (mJD.jointType==PHYS_JOINT_SPHERICAL) {	
 
@@ -208,33 +199,10 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	mJoint->setBreakForce(mJD.maxForce,mJD.maxTorque);
 
-	//physx::PxTransform pxTrans0;
-	//physx::PxTransform pxTrans1;
-	//Con::printf("posA %f %f %f  posB %f %f %f",posA.x,posA.y,posA.z,posB.x,posB.y,posB.z);
-	//physx::PxQuat pxq0,pxq1;
-
-	//Here, I think I need slerp. I have a default orientation that puts 
-	//TEMP, HACK...??? FIX
-	//if (posA.z > posB.z)
-	//	pxq0 = physx::PxQuat(mDegToRad(-90.0f),physx::PxVec3(0,1,0));
-	//else if (posA.z < posB.z)
-	//	pxq0 = physx::PxQuat(mDegToRad(90.0f),physx::PxVec3(0,1,0));
-
-	//pxTrans0 = physx::PxTransform::createIdentity();
-	//pxTrans1 = physx::PxTransform(pxq0);
-
-	//mJoint->setLocalPose(physx::PxJointActorIndex::eACTOR0,pxTrans0);
-	//mJoint->setLocalPose(physx::PxJointActorIndex::eACTOR1,pxTrans0);//pxTrans1
-
 	mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::eVISUALIZATION,true);
 
-	//if (mJoint) Con::printf("Created a joint: type %d offsetA %f %f %f offsetB %f %f %f",mJD.jointType,
-	//	offsetA.x,offsetA.y,offsetA.z,offsetB.x,offsetB.y,offsetB.z);
-	//else Con::printf("Joint creation FAILED type %d offsetA %f %f %f offsetB %f %f %f",mJD.jointType,
-	//	offsetA.x,offsetA.y,offsetA.z,offsetB.x,offsetB.y,offsetB.z);
+	world->unlockScene();//Is this necessary? Seems like it should be done only once for the whole model, if it is.
 
-	world->unlockScene();//This may be unnecessary(?)
-	//setup();
 }
 
 Px3Joint::~Px3Joint()
@@ -270,35 +238,7 @@ void Px3Joint::loadJointData(physicsJointData *jD)
 	mJD.limitPlaneNormal3 = jD->limitPlaneNormal3;
 	mJD.limitPlaneAnchor4 = jD->limitPlaneAnchor4;
 	mJD.limitPlaneNormal4 = jD->limitPlaneNormal4;
-			   /*
-		   limitPoint_x        REAL,
-		   limitPoint_y        REAL,
-		   limitPoint_z        REAL,
-		   limitPlaneAnchor1_x REAL,
-		   limitPlaneAnchor1_y REAL,
-		   limitPlaneAnchor1_z REAL,
-		   limitPlaneNormal1_x REAL,
-		   limitPlaneNormal1_y REAL,
-		   limitPlaneNormal1_z REAL,
-		   limitPlaneAnchor2_x REAL,
-		   limitPlaneAnchor2_y REAL,
-		   limitPlaneAnchor2_z REAL,
-		   limitPlaneNormal2_x REAL,
-		   limitPlaneNormal2_y REAL,
-		   limitPlaneNormal2_z REAL,
-		   limitPlaneAnchor3_x REAL,
-		   limitPlaneAnchor3_y REAL,
-		   limitPlaneAnchor3_z REAL,
-		   limitPlaneNormal3_x REAL,
-		   limitPlaneNormal3_y REAL,
-		   limitPlaneNormal3_z REAL,
-		   limitPlaneAnchor4_x REAL,
-		   limitPlaneAnchor4_y REAL,
-		   limitPlaneAnchor4_z REAL,
-		   limitPlaneNormal4_x REAL,
-		   limitPlaneNormal4_y REAL,
-		   limitPlaneNormal4_z REAL
-		   */
+
 	return;
 }
 
@@ -315,7 +255,7 @@ void Px3Joint::setMotorTarget(QuatF &target)
 
 	physx::PxD6Joint* d6joint = dynamic_cast<physx::PxD6Joint*>(mJoint);
 
-	//I don't think this works...
+	//I don't think this works... hmm
 	//d6joint->setDrivePosition(physx::PxTransform(physx::PxQuat(mMotorTarget.x,mMotorTarget.y,mMotorTarget.z,mMotorTarget.w)));
 
 }

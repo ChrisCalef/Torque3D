@@ -77,21 +77,6 @@ Px3Plugin::Px3Plugin()
 			id = dAtoi(resultSet->vRows[i]->vColumnValues[0]);
 			Con::printf("Result one: %d   %s",id,resultSet->vRows[i]->vColumnValues[1]);
 		}
-
-		//Now, as a one time thing, let's populate the physicsJoint and physicsShapePart tables using the old database.
-		//Ah, turnsLeaving the code here in case we ever have similar needs in the future.
-
-		//SQLiteObject *EM = new SQLiteObject();
-		//EM->OpenDatabase("ExampleScenes.db");
-		//sprintf(select_query,"SELECT * FROM fxFlexBodyPart;");
-		//result = mSQL->ExecuteSQL(id_query);
-		//Here, we would load all the data into variables and then insert them using the insert_query string,
-		//but it turned out it was easier to export/import using sqliteStudio export functions & SQL editor window.
-		//EM->CloseDatabase();
-		//delete EM;
-
-
-		//NOW, we're just gonna leave this connection open and use it for the life of the Px3Plugin object.
 	}
 }
 
@@ -297,16 +282,10 @@ PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,P
 	physx::PxRigidActor *actor1, *actor2;
 	actor1 = dynamic_cast<Px3Body*>(A)->getActor();
 	actor2 = dynamic_cast<Px3Body*>(B)->getActor();
-
-
-
-	physicsJointData jD;
 	
+	physicsJointData jD;	
 	loadJointData(jointID,&jD);
-
 	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&jD,origin,jointRots);
-	//NOW, where should I save this joint??
-
 
 	return (PhysicsJoint *)joint;
 }
@@ -364,72 +343,3 @@ void Px3Plugin::loadJointData(U32 jointID, physicsJointData* jD)
 	//...
 	
 }
-
-/*
-
-ConsoleFunction( physXRemoteDebuggerConnect, bool, 1, 3, "physXRemoteDebuggerConnect(host,port)" )
-{	
-	nxPhysManager *kPM = (nxPhysManager *)physManagerCommon::getPM();
-
-   if ( !kPM->mPhysics )  
-   {
-      Con::errorf( "PhysX SDK not initialized!" );
-      return false;
-   }
-
-   NxRemoteDebugger *debugger = kPM->mPhysics->getFoundationSDK().getRemoteDebugger();
-
-   if ( debugger->isConnected() )
-   {
-      Con::errorf( "RemoteDebugger already connected... call disconnect first!" );
-      return false;
-   }
-
-   const UTF8 *host = "localhost";
-   U32 port = 5425;
-
-   if ( argc >= 2 )
-      host = argv[1];
-   if ( argc >= 3 )
-      port = dAtoi( argv[2] );
-
-   //// Before we connect we need to have write access
-   //// to both the client and server worlds.
-   //PxWorld::releaseWriteLocks();
-
-	kPM->stopPhysics();
-
-   //// Connect!
-   debugger->connect( host, port );
-   if ( !debugger->isConnected() )
-   {
-      Con::errorf( "RemoteDebugger failed to connect!" );
-      return false;
-   }
-
-   Con::printf( "RemoteDebugger connected to %s at port %u!", host, port );
-	kPM->startPhysics();
-   return true;
-}
-
-ConsoleFunction( physXRemoteDebuggerDisconnect, void, 1, 1, "" )
-{
-	nxPhysManager *kPM = (nxPhysManager *)physManagerCommon::getPM();
-
-   if ( !kPM->mPhysics )  
-   {
-      Con::errorf( "PhysX SDK not initialized!" );
-      return;
-   }
-
-   NxRemoteDebugger *debugger = kPM->mPhysics->getFoundationSDK().getRemoteDebugger();
-
-   if ( debugger->isConnected() )
-   {
-      debugger->flush();
-      debugger->disconnect();
-      Con::printf( "RemoteDebugger disconnected!" );
-   }
-}
-
-*/

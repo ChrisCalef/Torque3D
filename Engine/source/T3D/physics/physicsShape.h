@@ -186,6 +186,7 @@ public: //protected:
    PhysicsJoint *mJoint;
    Vector<PhysicsJoint*> mPhysicsJoints;
    Vector<S32> mBodyNodes;
+   Point3F mStartPos;
 
    ///
    PhysicsWorld *mWorld;
@@ -313,7 +314,7 @@ public:
    void setJointTarget(QuatF &target);
    void setHasGravity(bool hasGrav);
    void setIsDynamic(bool isDynamic);//This one just sets the bool.
-   void setDynamic(bool isDynamic);//This one actually does it, during processTick.
+   void setDynamic(bool isDynamic);//This one actually does it, during processTick. (WIP, doesn't work yet)
    void setPartIsDynamic(S32 partID,bool isDynamic);
    void setPartDynamic(S32 partID,bool isDynamic);
 };
