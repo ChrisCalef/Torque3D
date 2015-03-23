@@ -158,9 +158,9 @@ DefineConsoleFunction( physicsDestroy, void, (), , "physicsDestroy()")
       PHYSICSMGR->destroyPlugin();
 }
 
-DefineConsoleFunction( physicsInitWorld, bool, (const char * worldName), , "physicsInitWorld( String worldName )")
+DefineConsoleFunction( physicsInitWorld, bool, (const char * worldName, Point3F gravity), , "physicsInitWorld( String worldName, Point3F gravity )")
 {
-    bool res = PHYSICSMGR && PHYSICSMGR->createWorld( String( worldName ) );
+    bool res = PHYSICSMGR && PHYSICSMGR->createWorld( String( worldName ),  gravity );
    return res;
 }
 
@@ -241,4 +241,3 @@ DefineConsoleFunction( pdd, void, (bool enable), , "physicsDebugDraw( bool enabl
    if ( PHYSICSMGR )
       PHYSICSMGR->enableDebugDraw( enable );
 }
-

@@ -186,6 +186,9 @@ public: //protected:
    PhysicsJoint *mJoint;
    Vector<PhysicsJoint*> mPhysicsJoints;
    Vector<S32> mBodyNodes;
+   MatrixF mStartMat;
+   MatrixF mInvStartMat;
+
    Point3F mStartPos;
 
    ///

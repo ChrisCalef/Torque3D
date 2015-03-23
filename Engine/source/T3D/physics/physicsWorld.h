@@ -45,10 +45,10 @@ protected:
 
    Signal<void()> mUpdateSignal;
 
+public:
+	
    /// The current gravity force.
    Point3F mGravity;
-
-public:
 
    /// The constructor.
    PhysicsWorld();

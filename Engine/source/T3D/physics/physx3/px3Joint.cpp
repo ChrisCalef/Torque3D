@@ -43,16 +43,20 @@ enum physicsJointType
 	PHYS_JOINT_TYPE_COUNT
 };
 */
-//Snagged this from internet, sorry forgot to source. Can we do this already in Torque with QuatF slerp?
-physx::PxQuat getLookAtQuat(const Point3F& fromPos, const Point3F& toPos)
+
+/*
+//Snagged this from internet, (http://gist.github.com/ashwin/7598571) Turned out not to be necessary for joints, but could be useful 
+//anyway if we don't already have this capability in MatrixF or QuatF (?)
+
+physx::PxQuat getLookAtPxQuat(const Point3F& fromPos, const Point3F& toPos)
 {
 	// Position of toPos relative to fromPos
 	Point3F relToPos = toPos - fromPos;
 
-	/**
-	* First we rotate fromPos around Y axis to look at toPos
-	* This gives us Euler angle around Y axis
-	*/
+	///
+	// First we rotate fromPos around Y axis to look at toPos
+	// This gives us Euler angle around Y axis
+	///
 
 	// Compute the angle
 	// theta = atan(z/x)
@@ -75,10 +79,10 @@ physx::PxQuat getLookAtQuat(const Point3F& fromPos, const Point3F& toPos)
 			yAng = M_PI - yAng0; // 180 - theta
 	}
 
-	/**
-	* Next fromPos will look "up" to see toPos
-	* This gives us Euler angle around Z axis
-	*/
+	///
+	// Next fromPos will look "up" to see toPos
+	// This gives us Euler angle around Z axis
+	//
 
 	// Compute the angle
 	// theta = atan( y / sqrt(x^2 + z^2))
@@ -88,11 +92,11 @@ physx::PxQuat getLookAtQuat(const Point3F& fromPos, const Point3F& toPos)
 	// Fix angle based on whether toPos is above or below XZ plane
 	const float zAng = (relToPos.y >= 0) ? zAng0 : -zAng0;
 
-	/**
-	* Convert Euler angles to quaternion that rotates
-	* X axis of upright orientation to point at toPos
-	* Reference: PhysX Math Primer
-	*/
+	///
+	// Convert Euler angles to quaternion that rotates
+	// X axis of upright orientation to point at toPos
+	// Reference: PhysX Math Primer
+	//
 
 	// Convert to quaternions
 	physx::PxQuat qy(yAng, physx::PxVec3(0, 1, 0));
@@ -104,13 +108,20 @@ physx::PxQuat getLookAtQuat(const Point3F& fromPos, const Point3F& toPos)
 	return q;
 }
 
+QuatF getLookAtQuatF(const Point3F& fromPos, const Point3F& toPos)
+{
+	physx::PxQuat pxQ = getLookAtPxQuat(fromPos,toPos);
+	QuatF out(pxQ.x,pxQ.y,pxQ.z,pxQ.w);
+	return out;
+}
+*/
 //-----------------------------------------------------------------------------
 // Constructor/Destructor
 //-----------------------------------------------------------------------------
 Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* world,
-								physicsJointData *jD,Point3F origin,Point3F jointRots)
+								physicsJointData *jD,Point3F origin,Point3F jointRots,MatrixF invShapeTrans)
 {
-	physx::PxTransform offset0,offset1;
+	physx::PxTransform localTrans0,localTrans1;
 
 	Point3F posA(A->getGlobalPose().p.x,A->getGlobalPose().p.y,A->getGlobalPose().p.z);
 	Point3F posB(B->getGlobalPose().p.x,B->getGlobalPose().p.y,B->getGlobalPose().p.z);
@@ -118,24 +129,25 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 	Point3F offsetA = origin - posA;
 	Point3F offsetB = origin - posB;
 
-	physx::PxQuat lookatQuat = getLookAtQuat(posB,posA);
+	physx::PxQuat localQuat(1.0,0.0,0.0,0.0);
 	if (jointRots.len()>0)
 	{
 		EulerF rots(mDegToRad(jointRots.x),mDegToRad(jointRots.y),mDegToRad(jointRots.z));
 		QuatF localRot = QuatF(rots);
-		physx::PxQuat localQuat(localRot.x,localRot.y,localRot.z,localRot.w);
-		lookatQuat = localQuat * lookatQuat;
+		localQuat = physx::PxQuat(localRot.x,localRot.y,localRot.z,localRot.w);
 	}
-	offset0 = physx::PxTransform(physx::PxVec3(offsetA.x,offsetA.y,offsetA.z),lookatQuat);
-	offset1 = physx::PxTransform(physx::PxVec3(offsetB.x,offsetB.y,offsetB.z),lookatQuat);
-
-	world->lockScene();//?
 	
+	Point3F mulOffsetB;
+	invShapeTrans.mulP(offsetB,&mulOffsetB);
+
+	localTrans0 = physx::PxTransform(physx::PxVec3(offsetA.x,offsetA.y,offsetA.z),localQuat);
+	localTrans1 = physx::PxTransform(physx::PxVec3(mulOffsetB.x,mulOffsetB.y,mulOffsetB.z),localQuat);
+
 	loadJointData(jD);//Sets up all the local variables for this joint using the values in the joint data struct.
 
 	if (mJD.jointType==PHYS_JOINT_SPHERICAL) {	
 
-		physx::PxSphericalJoint* sphericalJoint = physx::PxSphericalJointCreate(*gPhysics3SDK,A,offset0,B,offset1);
+		physx::PxSphericalJoint* sphericalJoint = physx::PxSphericalJointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);
 		mJoint = dynamic_cast<physx::PxJoint*>(sphericalJoint);
 
 		sphericalJoint->setLimitCone(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 0.01f));
@@ -143,7 +155,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	} else if  (mJD.jointType==PHYS_JOINT_REVOLUTE) {
 		
-		physx::PxRevoluteJoint* revoluteJoint = physx::PxRevoluteJointCreate(*gPhysics3SDK,A,offset0,B,offset1);
+		physx::PxRevoluteJoint* revoluteJoint = physx::PxRevoluteJointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);
 		mJoint = dynamic_cast<physx::PxJoint*>(revoluteJoint);
 
 		revoluteJoint->setLimit(physx::PxJointAngularLimitPair(-mJD.swingLimit/2.0f, mJD.swingLimit/2.0f, 0.1f)); 
@@ -151,21 +163,21 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	} else if  (mJD.jointType==PHYS_JOINT_PRISMATIC) {
 		
-		physx::PxPrismaticJoint* prismaticJoint = physx::PxPrismaticJointCreate(*gPhysics3SDK,A,offset0,B,offset1);
+		physx::PxPrismaticJoint* prismaticJoint = physx::PxPrismaticJointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);
 		mJoint = dynamic_cast<physx::PxJoint*>(prismaticJoint);
 
 		//prismaticJoint->setLimit(physx::PxJointLimitPair(-mXLimit, mXLimit));//Hm, nvidia example is wrong...
 
 	} else if  (mJD.jointType==PHYS_JOINT_FIXED) {
 
-		physx::PxFixedJoint* fixedJoint = physx::PxFixedJointCreate(*gPhysics3SDK,A,offset0,B,offset1);
+		physx::PxFixedJoint* fixedJoint = physx::PxFixedJointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);
 		mJoint = dynamic_cast<physx::PxJoint*>(fixedJoint);
 
 		//Nothing else to do, it's fixed.
 
 	} else if  (mJD.jointType==PHYS_JOINT_DISTANCE) {
 
-		physx::PxDistanceJoint* distanceJoint = physx::PxDistanceJointCreate(*gPhysics3SDK,A,offset0,B,offset1);
+		physx::PxDistanceJoint* distanceJoint = physx::PxDistanceJointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);
 		mJoint = dynamic_cast<physx::PxJoint*>(distanceJoint);
 
 		distanceJoint->setMaxDistance(mJD.XLimit);
@@ -173,7 +185,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	} else if  (mJD.jointType==PHYS_JOINT_D6) {
 
-		physx::PxD6Joint* d6Joint = physx::PxD6JointCreate(*gPhysics3SDK,B,offset1,A,offset0);//dynamic_cast<physx::PxD6Joint*>(mJoint);
+		physx::PxD6Joint* d6Joint = physx::PxD6JointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);//dynamic_cast<physx::PxD6Joint*>(mJoint);
 		mJoint = dynamic_cast<physx::PxJoint*>(d6Joint);
 
 		//if (jD->xLimit<=0) d6Joint->setMotion(physx::PxD6Axis::eX, physx::PxD6Motion::eLOCKED);
@@ -181,9 +193,11 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 			//d6Joint->setMotion(physx::PxD6Axis::eX, physx::PxD6Motion::eLIMITED);
 			//d6Joint->setLinearLimit(physx::PxJointLinearLimit(jD->xLimit,0.1f));//??
 		//} // HMMM, seems the help file isn't so helpful here either. Look for it later.
+
 		d6Joint->setMotion(physx::PxD6Axis::eX, physx::PxD6Motion::eLOCKED);
 		d6Joint->setMotion(physx::PxD6Axis::eY, physx::PxD6Motion::eLOCKED);
 		d6Joint->setMotion(physx::PxD6Axis::eZ, physx::PxD6Motion::eLOCKED);
+
 		d6Joint->setMotion(physx::PxD6Axis::eTWIST, physx::PxD6Motion::eLIMITED);
 		d6Joint->setMotion(physx::PxD6Axis::eSWING1, physx::PxD6Motion::eLIMITED);
 		d6Joint->setMotion(physx::PxD6Axis::eSWING2, physx::PxD6Motion::eLIMITED);
@@ -193,7 +207,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	} else {
 		Con::printf("Couldn't find joint type: %d",mJD.jointType);
-		world->unlockScene();
+		//world->unlockScene();
 		return;
 	}
 
@@ -201,7 +215,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::eVISUALIZATION,true);
 
-	world->unlockScene();//Is this necessary? Seems like it should be done only once for the whole model, if it is.
+	//world->unlockScene();//Is this necessary? Seems like it should be done only once for the whole model, if it is.
 
 }
 

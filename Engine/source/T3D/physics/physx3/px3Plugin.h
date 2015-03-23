@@ -50,7 +50,7 @@ public:
    virtual void enableSimulation( const String &worldName, bool enable );
    virtual void setTimeScale( const F32 timeScale );
    virtual const F32 getTimeScale() const;
-   virtual bool createWorld( const String &worldName );
+   virtual bool createWorld( const String &worldName, Point3F gravity );
    virtual void destroyWorld( const String &worldName );
    virtual PhysicsWorld* getWorld( const String &worldName ) const;
    virtual PhysicsWorld* getWorld() const;
@@ -62,7 +62,7 @@ public:
    virtual PhysicsMaterial* createMaterial(const F32 restitution,const F32 staticFriction,const F32 dynamicFritction);
 
    // Chris Calef
-   virtual PhysicsJoint* createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin,Point3F jointRots);
+   virtual PhysicsJoint* createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin,Point3F jointRots,MatrixF shapeTrans);
    virtual void loadJointData(U32 jointID, physicsJointData *jD);
 
 };

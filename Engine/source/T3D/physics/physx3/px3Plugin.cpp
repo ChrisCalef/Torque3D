@@ -191,7 +191,7 @@ const F32 Px3Plugin::getTimeScale() const
    return world->getEditorTimeScale();
 }
 
-bool Px3Plugin::createWorld( const String &worldName )
+bool Px3Plugin::createWorld( const String &worldName, Point3F gravity )
 {
    Map<StringNoCase, PhysicsWorld*>::Iterator iter = mPhysicsWorldLookup.find( worldName );
    PhysicsWorld *world = NULL;
@@ -205,6 +205,8 @@ bool Px3Plugin::createWorld( const String &worldName )
    }
 
    world = new Px3World();
+
+   world->mGravity = gravity;
    
    if ( worldName.equal( smClientWorldName, String::NoCase ) )
       world->initWorld( false, ClientProcessList::get() );
@@ -268,7 +270,7 @@ PhysicsMaterial* Px3Plugin::createMaterial(const F32 restitution,const F32 stati
    return material;
 }
 
-PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin,Point3F jointRots)
+PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin,Point3F jointRots,MatrixF shapeTrans)
 {
 	PhysicsWorld *worldA,*worldB;
 	worldA = A->getWorld();
@@ -285,7 +287,7 @@ PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,P
 	
 	physicsJointData jD;	
 	loadJointData(jointID,&jD);
-	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&jD,origin,jointRots);
+	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&jD,origin,jointRots,shapeTrans);
 
 	return (PhysicsJoint *)joint;
 }

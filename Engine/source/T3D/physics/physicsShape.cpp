@@ -775,6 +775,11 @@ bool PhysicsShape::_createShape()
    // 
    //const bool isDynamic = mDataBlock->mass > 0.0f;
  
+   MatrixF shapeTransform = getTransform();
+   Point3F shapePos = shapeTransform.getPosition();
+   shapeTransform.setPosition(Point3F(0,0,0));
+   shapeTransform.inverse();
+
    if (mDataBlock->mass <= 0.0f) mIsDynamic = false;
 
    mIsArticulated = mDataBlock->isArticulated;
@@ -789,6 +794,8 @@ bool PhysicsShape::_createShape()
       return true;
 
    mWorld = PHYSICSMGR->getWorld( isServerObject() ? "server" : "client" );
+
+   //mWorld->lockScene();
 
    U32 bodyFlags = mIsDynamic ? 0 : PhysicsBody::BF_KINEMATIC; 
 
@@ -987,7 +994,7 @@ bool PhysicsShape::_createShape()
 		   partBody->setTransform(finalTrans);
 		   
 
-		   Con::printf("Pushing back a physics body, isServer %d",isServerObject());
+		   //Con::printf("Pushing back a physics body, isServer %d",isServerObject());
 		   mPhysicsBodies.push_back(partBody);
 
 		   mStates.increment();
@@ -1028,7 +1035,7 @@ bool PhysicsShape::_createShape()
 			   Point3F parentPos = parentTrans.getPosition();
 
 			   //Now, turns out all we need to do is make joint origin equal to the new part origin.
-			   PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(partBody,parentBody,PD->jointID,partPos,PD->jointRots);
+			   PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(partBody,parentBody,PD->jointID,partPos,PD->jointRots,shapeTransform);
 			   if (kJoint)
 			   {
 				   mPhysicsJoints.push_back(kJoint);
@@ -1044,38 +1051,13 @@ bool PhysicsShape::_createShape()
 		   mNodeBodies.last() = false;
 	   }
 	   for (U32 i=0;i<kShape->nodes.size();i++)
-	   {
-		   
+	   {		   
 		   for (U32 j=0;j<mBodyNodes.size();j++)
 		   {
 			   if (mBodyNodes[j] == i)
 				   mNodeBodies[i] = true;
 		   }		   
 	   }
-	   //HMM, not at all sure this is the solution, but this is going to be a saved array of neareast parent nodes
-	   /*for (U32 i=0;i<kShape->nodes.size();i++) // that have physics. 
-	   {
-		   mNodeBodies.increment();
-		   S32 physicsParent = -1;
-		   S32 tempParent = kShape->nodes[i].parentIndex;
-		   while ((physicsParent == -1) && (tempParent >= 0))
-		   {
-			   for (U32 j=0;j<mBodyNodes.size();j++)
-			   {
-				   if (mBodyNodes[j] == tempParent)
-				   {
-					   physicsParent = tempParent;
-					   Con::printf("node %d has physics parent %d",i,physicsParent);
-					   break;
-				   }
-			   }
-			   tempParent = kShape->nodes[tempParent].parentIndex;
-		   }
-		   mNodeBodies.last() = physicsParent;
-	   }*/
-	   //if (mPhysicsBodies[1])
-		 //  Con::printf("first body node: %d",mBodyNodes[0]);
-		  //mPhysicsRep = mPhysicsBodies[1];//hmmm, doesn't work at all.
    }
    return true;
 }
@@ -1290,12 +1272,14 @@ void PhysicsShape::processTick( const Move *move )
 	  }     
 	  if (mIsArticulated)
 	  {//need to do nodeTransform (ragdoll) work on client side, unless we can get them passed over from the server?
-		  MatrixF invShapeTransform = getTransform();
-		  Point3F shapePos = invShapeTransform.getPosition();
+		  MatrixF shapeTransform = getTransform();
+		  Point3F shapePos = shapeTransform.getPosition();
+		  shapeTransform.setPosition(Point3F(0,0,0));
+		  MatrixF invShapeTransform = shapeTransform;
 		  invShapeTransform.inverse();
 		  //mShapeInst is our TSShapeInstance pointer.
 		  TSShape *kShape = mShapeInst->getShape();
-		  Point3F defTrans,newPos,globalPos;
+		  Point3F defTrans,newPos,globalPos,mulPos;
 		  MatrixF m1,m2;
 
 		  for (U32 i=0;i<mPhysicsBodies.size();i++)
@@ -1305,12 +1289,19 @@ void PhysicsShape::processTick( const Move *move )
 			  if (i==0) //hip node, or base node on non biped model, the only node with no joint.
 			  {
 				  globalPos = m1.getPosition();
-				  if (mCurrentTick==1) mStartPos = globalPos;
+				  if (mCurrentTick==1) {
+					  mStartMat = m1;
+					  mStartMat.setPosition(Point3F(0,0,0));
+					  mStartMat.invertTo(&mInvStartMat);
+					  mStartPos = globalPos;
+				  }
 
 				  defTrans = kShape->defaultTranslations[0];
 				  //defTrans /= mObjScale;//we're gonna need to scale models pretty soon as well...
-				  newPos =  globalPos - mStartPos;
-				  m1.setPosition(defTrans + newPos);
+				  newPos =  globalPos - mStartPos;//Here - mult by inverse of startMat?
+				  invShapeTransform.mulP(newPos,&mulPos);
+				  m1 = invShapeTransform * m1;
+				  m1.setPosition(defTrans + mulPos);
 				  mShapeInst->mNodeTransforms[mBodyNodes[i]] = m1;
 
 			  } else { //all other nodes, position is relative to parent
@@ -1318,18 +1309,12 @@ void PhysicsShape::processTick( const Move *move )
 				  defTrans = kShape->defaultTranslations[mBodyNodes[i]];
 				  m2 = mShapeInst->mNodeTransforms[kShape->nodes[mBodyNodes[i]].parentIndex];
 				  m2.mulP(defTrans,&newPos);
+				  m1 = invShapeTransform * m1;
 				  m1.setPosition(newPos);
 				  mShapeInst->mNodeTransforms[mBodyNodes[i]] = m1;
-
 			  }
 		  }
 
-		  if (mPhysicsBodies[0])//After setting all the bodyparts, we have to move the parent 
-		   {                     // shape to our current position.
-			   mPhysicsBodies[0]->getState( &mState );
-			   Point3F pos = mState.position;
-			   Parent::setTransform( mState.getTransform() );
-		   } 
 
 		  //NOW, we need to deal with fingers/toes/etc, anything that isn't a physics body needs to be set according to its parent.
 		  m1.identity();
@@ -1395,7 +1380,13 @@ void PhysicsShape::processTick( const Move *move )
 	   {
 		   // Set the transform on the parent so that
 		   // the physics object isn't moved.
-		   Parent::setTransform( mState.getTransform() );
+		   if ((!mIsArticulated)||isServerObject())
+			   Parent::setTransform( mState.getTransform() );
+		   else 
+		   {
+			   mPhysicsBodies[0]->getState( &mState );
+			   Parent::setTransform( mState.getTransform() );
+		   }
 
 		   // If we're doing server simulation then we need
 		   // to send the client a state update.
@@ -1660,7 +1651,10 @@ DefineEngineMethod( PhysicsShape, jointAttach, void, (U32 objectID,U32 jointID),
 		Point3F diff = posA - posB;
 		Point3F center = posB + (diff/2);
 
-		PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(object->getPhysicsRep(),otherBody,jointID,center,Point3F(0,0,0));
+		MatrixF baseMat;
+		baseMat.identity();
+
+		PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(object->getPhysicsRep(),otherBody,jointID,center,Point3F(0,0,0),baseMat);
 		object->mJoint = kJoint;
 	}
 }
