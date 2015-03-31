@@ -144,7 +144,7 @@ public:
 
    virtual PhysicsMaterial* createMaterial(const F32 restitution,const F32 staticFriction,const F32 dynamicFritction)=0;
 
-   virtual PhysicsJoint* createJoint(PhysicsBody* A, PhysicsBody* B,U32 type,Point3F origin,Point3F jointRots,MatrixF shapeTrans)=0;
+   virtual PhysicsJoint* createJoint(PhysicsBody* A, PhysicsBody* B,U32 type,Point3F origin,Point3F jointRots,Point3F jointRots2,MatrixF shapeTrans)=0;
 
 protected:
 

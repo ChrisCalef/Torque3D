@@ -371,7 +371,7 @@ void Px3World::lockScene()
       return;
    }
 
-	mScene->lockWrite();
+   mScene->lockWrite();
    mIsSceneLocked = true;
 }
 
@@ -380,14 +380,14 @@ void Px3World::unlockScene()
 	if ( !mScene ) 
 		return;
 
-   if(!mIsSceneLocked)
-   {
-      Con::printf("Px3World: Attempting to unlock a scene that is not locked.");
-      return;
-   }
+	if(!mIsSceneLocked)
+	{
+		Con::printf("Px3World: Attempting to unlock a scene that is not locked.");
+		return;
+	}
 
 	mScene->unlockWrite();
-   mIsSceneLocked = false;
+	mIsSceneLocked = false;
 }
 
 bool Px3World::castRay( const Point3F &startPnt, const Point3F &endPnt, RayInfo *ri, const Point3F &impulse )

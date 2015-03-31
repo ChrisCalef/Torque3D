@@ -818,12 +818,22 @@ bool PhysicsShape::_createShape()
 	   colShape->addBox(Point3F(0.03,0.02,0.015),localTrans);//TEMP server physics doesn't really matter for our immediate 
 			// purposes, but depending on the application, this could be replaced with a capsule or a character controller.
 
-	   mPhysicsRep->init(   colShape,//mDataBlock->colShape, 
+	   //Oops, just realized this would break everything not articulated, or at least replace it with stupid little colshape
+	   if (mIsArticulated)
+	   {
+		   mPhysicsRep->init(   colShape, 
 							mDataBlock->mass, 
 							bodyFlags,  
 							this, 
 							mWorld );	   
-	   
+	   } else {
+	   	   mPhysicsRep->init(   mDataBlock->colShape, 
+							mDataBlock->mass, 
+							bodyFlags,  
+							this, 
+							mWorld );
+	   }
+
 	   mPhysicsRep->setMaterial( mDataBlock->restitution, mDataBlock->dynamicFriction, mDataBlock->staticFriction );
 
 	   
@@ -899,6 +909,9 @@ bool PhysicsShape::_createShape()
 		   PD->jointRots.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
 		   PD->jointRots.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
 		   PD->jointRots.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+		   PD->jointRots2.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+		   PD->jointRots2.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+		   PD->jointRots2.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
 
 		   //////////////////////////////////////////
 		   // Joint Data
@@ -977,6 +990,7 @@ bool PhysicsShape::_createShape()
 		   else
 			   bodyFlags &= ~PhysicsBody::BF_GRAVITY;
 
+		   //MASS: get this from shapeParts in database, or better yet use density = 1.0 and make physx figure it out (?)
 		   partBody->init(   colShape, 
 			   mDataBlock->mass, 
 			   bodyFlags,  
@@ -1035,7 +1049,7 @@ bool PhysicsShape::_createShape()
 			   Point3F parentPos = parentTrans.getPosition();
 
 			   //Now, turns out all we need to do is make joint origin equal to the new part origin.
-			   PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(partBody,parentBody,PD->jointID,partPos,PD->jointRots,shapeTransform);
+			   PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(partBody,parentBody,PD->jointID,partPos,PD->jointRots,PD->jointRots2,shapeTransform);
 			   if (kJoint)
 			   {
 				   mPhysicsJoints.push_back(kJoint);
@@ -1258,7 +1272,9 @@ void PhysicsShape::processTick( const Move *move )
    mCurrentTick++;
 
    if ( !mPhysicsRep->isDynamic() )//HMMM, no more? need to direct the kinematics...
+   {
       return;
+   }
 
    // SINGLE PLAYER HACK!!!!
    if ( PHYSICSMGR->isSinglePlayer() && isClientObject() && getServerObject() )
@@ -1596,11 +1612,80 @@ void PhysicsShape::setJointTarget(QuatF &target)
 }
 
 void PhysicsShape::setHasGravity(bool hasGrav)
-{
-	for (U32 i=0;i<mPhysicsBodies.size();i++)
-		mPhysicsBodies[i]->setHasGravity(hasGrav);
+{	
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());//SINGLE PLAYER HACK
+		clientShape->setHasGravity(hasGrav);
+		return;
+	}
 
+	if (!mIsArticulated)
+	{
+		mPhysicsRep->setHasGravity(hasGrav);
+	} else {
+		for (U32 i=0;i<mPhysicsBodies.size();i++)
+		{
+			mPhysicsBodies[i]->setHasGravity(hasGrav);
+		}
+	}
 }
+
+void PhysicsShape::setPartHasGravity(S32 partID,bool hasGrav)
+{
+	if ( (!mIsArticulated) || (partID<0) )
+		return;
+	
+	if (isServerObject())
+	{        //SINGLE PLAYER HACK
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setPartHasGravity(partID,hasGrav);
+		return;
+	}
+		
+	if (partID<=mPhysicsBodies.size()-1)
+		mPhysicsBodies[partID]->setHasGravity(hasGrav);
+}
+
+void PhysicsShape::setDynamic(bool isDynamic)
+{
+	mIsDynamic = isDynamic;
+
+	if (isServerObject())
+	{        //SINGLE PLAYER HACK
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setDynamic(isDynamic);
+		return;
+	}
+
+	if (!mIsArticulated)
+	{
+		mPhysicsRep->setDynamic(isDynamic);
+	} else {
+		for (U32 i=0;i<mPhysicsBodies.size();i++)
+		{
+			mPhysicsBodies[i]->setDynamic(isDynamic);
+		}
+	}
+}
+
+void PhysicsShape::setPartDynamic(S32 partID,bool isDynamic)
+{
+	//set or clear dynamic for partID bodypart
+	if ( (!mIsArticulated) || (partID<0) )
+		return;
+
+	if (isServerObject())
+	{        //SINGLE PLAYER HACK
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setPartDynamic(partID,isDynamic);
+		return;
+	}
+	
+	if (partID<=mPhysicsBodies.size()-1)
+		mPhysicsBodies[partID]->setDynamic(isDynamic);
+}
+
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -1654,10 +1739,11 @@ DefineEngineMethod( PhysicsShape, jointAttach, void, (U32 objectID,U32 jointID),
 		MatrixF baseMat;
 		baseMat.identity();
 
-		PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(object->getPhysicsRep(),otherBody,jointID,center,Point3F(0,0,0),baseMat);
+		PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(object->getPhysicsRep(),otherBody,jointID,center,Point3F(0,0,0),Point3F(0,0,0),baseMat);
 		object->mJoint = kJoint;
 	}
 }
+
 DefineEngineMethod( PhysicsShape, setJointTarget, void, (F32 x,F32 y,F32 z,F32 w),,
    "@brief Sets this object's joint motor drive to the target quat.\n\n")
 {
@@ -1676,10 +1762,10 @@ DefineEngineMethod( PhysicsShape, applyImpulseToPart, void, (S32 partIndex,Point
    object->applyImpulseToPart(partIndex,pos,vec);
 }
 
-DefineEngineMethod( PhysicsShape, aitp, void, (S32 partIndex,Point3F pos,Point3F vec),,
+DefineEngineMethod( PhysicsShape, aitp, void, (S32 partIndex,Point3F vec),,
    "@brief Applies vec impulse to object at pos.\n\n")
 {
-   object->applyImpulseToPart(partIndex,pos,vec);
+   object->applyImpulseToPart(partIndex,Point3F(0,0,0),vec);
 }
 
 DefineEngineMethod( PhysicsShape, applyRadialImpulse, void, (Point3F origin,F32 radius,F32 magnitude),,
@@ -1694,64 +1780,30 @@ DefineEngineMethod( PhysicsShape, applyRadialImpulseToPart, void, (S32 partIndex
    object->applyRadialImpulseToPart(partIndex,origin,radius,magnitude);
 }
 
-DefineEngineMethod( PhysicsShape, setHasGravity, void, (bool hasGrav),,
-   "@brief Sets this object's hasGravity property.\n\n")
-{
-	object->setHasGravity(hasGrav);
-}
-
-void PhysicsShape::setIsDynamic(bool isDynamic)
-{
-	mIsDynamic = isDynamic;
-	//Now, wait till a safe time to actually do it...
-
-	////set or clear dynamic for all bodyparts
-	//if ((!mIsArticulated)||(isServerObject()))
-	//{
-	//	mPhysicsRep->setIsDynamic(isDynamic);
-	//} else {
-	//	for (U32 i=0;i<mPhysicsBodies.size();i++)
-	//	{
-	//		mPhysicsBodies[i]->setIsDynamic(isDynamic);
-	//	}
-	//}
-}
-
-void PhysicsShape::setDynamic(bool isDynamic)
-{
-	////set or clear dynamic for all bodyparts
-	//if ((!mIsArticulated)||(isServerObject()))
-	//{
-	//	mPhysicsRep->setIsDynamic(isDynamic);
-	//} else {
-	//	for (U32 i=0;i<mPhysicsBodies.size();i++)
-	//	{
-	//		mPhysicsBodies[i]->setIsDynamic(isDynamic);
-	//	}
-	//}
-}
-
-void PhysicsShape::setPartIsDynamic(S32 partID,bool isDynamic)
-{
-	//set or clear dynamic for partID bodypart
-
-}
-
-void PhysicsShape::setPartDynamic(S32 partID,bool isDynamic)
-{
-	//set or clear dynamic for partID bodypart
-
-}
 
 
-DefineEngineMethod( PhysicsShape, setIsDynamic, void, (bool isDynamic),,
+DefineEngineMethod( PhysicsShape, setDynamic, void, (bool isDynamic),,
    "@brief Sets this object's isDynamic property.\n\n")
 { 
-	object->setIsDynamic(isDynamic);
+
+	object->setDynamic(isDynamic);
 }
 
 DefineEngineMethod( PhysicsShape, setPartDynamic, void, (int partID,bool isDynamic),,
    "@brief Sets this part's isDynamic property.\n\n")
 {  
 	object->setPartDynamic(partID,isDynamic);
+}
+
+DefineEngineMethod( PhysicsShape, setHasGravity, void, (bool hasGravity),,
+   "@brief Sets this object's hasGravity property.\n\n")
+{ 
+
+	object->setHasGravity(hasGravity);
+}
+
+DefineEngineMethod( PhysicsShape, setPartHasGravity, void, (int partID,bool hasGravity),,
+   "@brief Sets this part's hasGravity property.\n\n")
+{  
+	object->setPartHasGravity(partID,hasGravity);
 }

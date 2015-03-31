@@ -111,6 +111,12 @@ public:
 
    virtual void explosion( const Point3F &pos, F32 radius, F32 forceMagnitude ) = 0;
 
+   virtual void unlockScene() = 0;
+   virtual void lockScene() = 0;
+
+   //virtual void unlockScenes();
+   //virtual void lockScenes();
+
    //SQLiteObject *mSQL;//Chris Calef 2015
 };
 

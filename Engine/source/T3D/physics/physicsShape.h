@@ -85,6 +85,7 @@ struct physicsPartData
     F32 mass;
     F32 inflictMultiplier;
 	Point3F jointRots;
+	Point3F jointRots2;
 };
 
 class PhysicsShapeData : public GameBaseData
@@ -316,9 +317,8 @@ public:
    PhysicsJoint *getPhysicsJoint();
    void setJointTarget(QuatF &target);
    void setHasGravity(bool hasGrav);
-   void setIsDynamic(bool isDynamic);//This one just sets the bool.
-   void setDynamic(bool isDynamic);//This one actually does it, during processTick. (WIP, doesn't work yet)
-   void setPartIsDynamic(S32 partID,bool isDynamic);
+   void setPartHasGravity(S32 partID,bool hasGrav);
+   void setDynamic(bool isDynamic);
    void setPartDynamic(S32 partID,bool isDynamic);
 };
 

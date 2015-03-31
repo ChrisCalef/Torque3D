@@ -121,7 +121,7 @@ public:
    virtual void applyImpulse( const Point3F &origin, const Point3F &force ) = 0;
 
    virtual void setHasGravity( bool hasGravity ) = 0;
-   virtual void setIsDynamic( bool isDynamic ) = 0;
+   virtual void setDynamic( bool isDynamic ) = 0;
 
 };
 

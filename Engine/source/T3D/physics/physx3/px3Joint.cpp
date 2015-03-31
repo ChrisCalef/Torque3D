@@ -119,7 +119,7 @@ QuatF getLookAtQuatF(const Point3F& fromPos, const Point3F& toPos)
 // Constructor/Destructor
 //-----------------------------------------------------------------------------
 Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* world,
-								physicsJointData *jD,Point3F origin,Point3F jointRots,MatrixF invShapeTrans)
+								physicsJointData *jD,Point3F origin,Point3F jointRots,Point3F jointRots2,MatrixF invShapeTrans)
 {
 	physx::PxTransform localTrans0,localTrans1;
 
@@ -130,13 +130,23 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 	Point3F offsetB = origin - posB;
 
 	physx::PxQuat localQuat(1.0,0.0,0.0,0.0);
+	physx::PxQuat localQuat2(1.0,0.0,0.0,0.0);
 	if (jointRots.len()>0)
 	{
 		EulerF rots(mDegToRad(jointRots.x),mDegToRad(jointRots.y),mDegToRad(jointRots.z));
 		QuatF localRot = QuatF(rots);
 		localQuat = physx::PxQuat(localRot.x,localRot.y,localRot.z,localRot.w);
 	}
+
 	
+	if (jointRots2.len()>0)
+	{
+		EulerF rots(mDegToRad(jointRots2.x),mDegToRad(jointRots2.y),mDegToRad(jointRots2.z));
+		QuatF localRot = QuatF(rots);
+		localQuat2 = physx::PxQuat(localRot.x,localRot.y,localRot.z,localRot.w);
+		localQuat *= localQuat2;
+	}
+
 	Point3F mulOffsetB;
 	invShapeTrans.mulP(offsetB,&mulOffsetB);
 
@@ -197,25 +207,23 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 		d6Joint->setMotion(physx::PxD6Axis::eX, physx::PxD6Motion::eLOCKED);
 		d6Joint->setMotion(physx::PxD6Axis::eY, physx::PxD6Motion::eLOCKED);
 		d6Joint->setMotion(physx::PxD6Axis::eZ, physx::PxD6Motion::eLOCKED);
-
+		
 		d6Joint->setMotion(physx::PxD6Axis::eTWIST, physx::PxD6Motion::eLIMITED);
 		d6Joint->setMotion(physx::PxD6Axis::eSWING1, physx::PxD6Motion::eLIMITED);
 		d6Joint->setMotion(physx::PxD6Axis::eSWING2, physx::PxD6Motion::eLIMITED);
 
-		d6Joint->setSwingLimit(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 0.01f));
-		d6Joint->setTwistLimit(physx::PxJointAngularLimitPair(-mJD.twistLimit,mJD.twistLimit,0.01f));
+		d6Joint->setSwingLimit(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 1.0f));
+		d6Joint->setTwistLimit(physx::PxJointAngularLimitPair(-mJD.twistLimit,mJD.twistLimit,1.0f));
 
 	} else {
+
 		Con::printf("Couldn't find joint type: %d",mJD.jointType);
-		//world->unlockScene();
 		return;
 	}
 
 	mJoint->setBreakForce(mJD.maxForce,mJD.maxTorque);
 
 	mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::eVISUALIZATION,true);
-
-	//world->unlockScene();//Is this necessary? Seems like it should be done only once for the whole model, if it is.
 
 }
 

@@ -94,21 +94,18 @@ bool Px3Body::init(   PhysicsCollision *shape,
    const bool isDebris = mBodyFlags & BF_DEBRIS;
    const bool hasGravity = mBodyFlags & BF_GRAVITY;
 
+   mActor = gPhysics3SDK->createRigidDynamic(physx::PxTransform(physx::PxIDENTITY()));
+   physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
+
    if ( isKinematic )
-   {
-		mActor = gPhysics3SDK->createRigidDynamic(physx::PxTransform(physx::PxIDENTITY()));
-		physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
+   {		
 		actor->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
-		actor->setMass(getMax( mass, 1.0f ));
+		actor->setMass(getMax( mass, 1.0f ));//wait, shouldn't even matter with kinematic?
    }
-   else if ( mass > 0.0f )
+   else if ( mass <= 0.0f )
    {
-      mActor = gPhysics3SDK->createRigidDynamic(physx::PxTransform(physx::PxIDENTITY()));
-   }
-   else
-   {
-      mActor = gPhysics3SDK->createRigidStatic(physx::PxTransform(physx::PxIDENTITY()));
-      mIsStatic = true;
+	   actor->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
+       mIsStatic = true;
    }
 
    if (hasGravity==false)
@@ -482,21 +479,22 @@ void Px3Body::setHasGravity( bool hasGrav )
    }  
 }
 
-
-void Px3Body::setIsDynamic( bool isDynam )
-{ //FAIL, CRASH - maybe only do this from between physics ticks?
+//This property is somewhat confusing because I chose to use the word "dynamic" over "kinematic" in order to
+//make sense to more people, but they are opposites, ie dynamic==true is the same as kinematic==false.
+//So to test whether we're changing states, if (isDynam==isKinematic) then we're changing.
+void Px3Body::setDynamic( bool isDynam )
+{ 
 	bool isKinematic = mBodyFlags & BF_KINEMATIC;
-	if (isDynam==isKinematic)//ie we're switching states, we were kinematic and now we want to be dynamic, or vice versa.
-	{
-		//mWorld->lockScene();
+	if (isDynam==isKinematic)
+	{ //ie we're switching states, we were kinematic and now we want to be dynamic, or vice versa.
+		physx::PxRigidDynamic *mTemp = static_cast<physx::PxRigidDynamic*>(mActor);
 		if (isDynam)
 		{
-			dynamic_cast<physx::PxRigidDynamic*>(mActor)->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, false);
+			mTemp->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, false);
 			mBodyFlags &= ~PhysicsBody::BF_KINEMATIC;
 		} else {
-			dynamic_cast<physx::PxRigidDynamic*>(mActor)->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
+			mTemp->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
 			mBodyFlags |= PhysicsBody::BF_KINEMATIC;
 		}
-		//mWorld->unlockScene();
 	}  
 }

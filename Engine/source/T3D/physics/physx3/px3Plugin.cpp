@@ -270,7 +270,7 @@ PhysicsMaterial* Px3Plugin::createMaterial(const F32 restitution,const F32 stati
    return material;
 }
 
-PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin,Point3F jointRots,MatrixF shapeTrans)
+PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin,Point3F jointRots,Point3F jointRots2,MatrixF shapeTrans)
 {
 	PhysicsWorld *worldA,*worldB;
 	worldA = A->getWorld();
@@ -287,7 +287,7 @@ PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,P
 	
 	physicsJointData jD;	
 	loadJointData(jointID,&jD);
-	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&jD,origin,jointRots,shapeTrans);
+	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&jD,origin,jointRots,jointRots2,shapeTrans);
 
 	return (PhysicsJoint *)joint;
 }

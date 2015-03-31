@@ -94,14 +94,14 @@ public:
 	void getPhysicsResults();
 	void setEditorTimeScale( F32 timeScale ) { mEditorTimeScale = timeScale; }
 	const F32 getEditorTimeScale() const { return mEditorTimeScale; }
-	void unlockScene();
-   void lockScene();
+	virtual void unlockScene();
+    virtual void lockScene();
 	bool isServer(){return mIsServer;}
 	physx::PxController* createController( physx::PxControllerDesc &desc );
 	//static
 	static bool restartSDK( bool destroyOnly = false, Px3World *clientWorld = NULL, Px3World *serverWorld = NULL );
 	static void unlockScenes();
-   static void lockScenes();
+    static void lockScenes();
 	static physx::PxCooking *getCooking();
    static void setTiming(F32 stepTime,U32 maxIterations);
 };

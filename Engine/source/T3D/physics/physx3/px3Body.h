@@ -121,7 +121,7 @@ public:
    virtual physx::PxRigidActor* getActor();
    
    virtual void setHasGravity( bool hasGravity );
-   virtual void setIsDynamic( bool isDynamic );
+   virtual void setDynamic( bool isDynamic );
 };
 
 #endif // _PX3BODY_H_
