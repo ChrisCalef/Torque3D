@@ -1271,8 +1271,20 @@ void PhysicsShape::processTick( const Move *move )
 
    mCurrentTick++;
 
-   if ( !mPhysicsRep->isDynamic() )//HMMM, no more? need to direct the kinematics...
+   if ( !mPhysicsRep->isDynamic() )
    {
+	   if ( (mCurrentTick==1) && isClientObject() && mIsArticulated ) 
+	   {
+		   MatrixF m1,m2;
+		   mPhysicsBodies[0]->getState(&mStates[0]);
+		   m1 = mStates[0].getTransform();
+		   Point3F globalPos = m1.getPosition();
+
+		   mStartMat = m1;
+		   mStartMat.setPosition(Point3F(0,0,0));
+		   mStartMat.invertTo(&mInvStartMat);
+		   mStartPos = globalPos;
+	   }
       return;
    }
 
