@@ -1270,34 +1270,60 @@ void PhysicsShape::processTick( const Move *move )
    // to move collision shapes it would not affect the physx representation.
 
    mCurrentTick++;
+   TSShape *kShape = mShapeInst->getShape();
 
+   ///////////////////////////////////////////////////////////////////
+   //If kinematic, we need to drive physics bodyparts with nodeTransforms data.
    if ( !mPhysicsRep->isDynamic() )
    {
-	   if ( (mCurrentTick==1) && isClientObject() && mIsArticulated ) 
+	   if ( isClientObject() && mIsArticulated ) 
 	   {
 		   MatrixF m1,m2;
-		   mPhysicsBodies[0]->getState(&mStates[0]);
-		   m1 = mStates[0].getTransform();
-		   Point3F globalPos = m1.getPosition();
+		   if (mCurrentTick==1)
+		   {
+			   mPhysicsBodies[0]->getState(&mStates[0]);
+			   m1 = mStates[0].getTransform();
+			   Point3F globalPos = m1.getPosition();
 
-		   mStartMat = m1;
-		   mStartMat.setPosition(Point3F(0,0,0));
-		   mStartMat.invertTo(&mInvStartMat);
-		   mStartPos = globalPos;
+			   mStartMat = m1;
+			   mStartMat.setPosition(Point3F(0,0,0));
+			   mStartMat.invertTo(&mInvStartMat);
+			   mStartPos = globalPos;
+		   } else {
+			   //NOW, set up positions of rigid bodyparts based on nodeTransforms.
+			   for (U32 i=0;i<mPhysicsBodies.size();i++)
+			   {
+				   Point3F defTrans,rotPos,newPos;
+				   defTrans = kShape->defaultTranslations[mBodyNodes[i]];
+				   S32 parentInd = kShape->nodes[mBodyNodes[i]].parentIndex;
+				   m2 = mShapeInst->mNodeTransforms[parentInd];
+				   m2.mulP(defTrans,&rotPos);
+				   mStartMat.mulP(rotPos,&newPos);
+				   newPos += ( mStartPos - kShape->defaultTranslations[0] );
+
+				   m1 = mShapeInst->mNodeTransforms[mBodyNodes[i]];
+				   m1 = mStartMat * m1;
+
+				   if (i==0) m1.setPosition(mStartPos);
+				   else m1.setPosition(newPos);
+
+				   mPhysicsBodies[i]->setTransform(m1);
+			   }
+		   }
 	   }
       return;
    }
-
-   // SINGLE PLAYER HACK!!!!
+   ///////////////////////////////////////////////////////////////////
+   // Else if dynamic, we need to drive nodeTransforms with physics.
    if ( PHYSICSMGR->isSinglePlayer() && isClientObject() && getServerObject() )
-   {
+   {  //SINGLE PLAYER HACK!!!!
       PhysicsShape *servObj = (PhysicsShape*)getServerObject();
 	  if (!mIsDynamic)
 	  {
 		  setTransform( servObj->mState.getTransform() ); 
 		  mRenderState[0] = servObj->mRenderState[0];
 		  mRenderState[1] = servObj->mRenderState[1];
-	  }     
+	  }
 	  if (mIsArticulated)
 	  {//need to do nodeTransform (ragdoll) work on client side, unless we can get them passed over from the server?
 		  MatrixF shapeTransform = getTransform();
@@ -1306,7 +1332,6 @@ void PhysicsShape::processTick( const Move *move )
 		  MatrixF invShapeTransform = shapeTransform;
 		  invShapeTransform.inverse();
 		  //mShapeInst is our TSShapeInstance pointer.
-		  TSShape *kShape = mShapeInst->getShape();
 		  Point3F defTrans,newPos,globalPos,mulPos;
 		  MatrixF m1,m2;
 
@@ -1376,8 +1401,6 @@ void PhysicsShape::processTick( const Move *move )
 
    const bool wasSleeping = mState.sleeping;
 
-
-
    //TODO: handle all this for articulated bodies.
    if (1)//(!mIsArticulated)
    {
@@ -1430,7 +1453,7 @@ void PhysicsShape::processTick( const Move *move )
 
 void PhysicsShape::advanceTime( F32 timeDelta )
 {
-	if ( isClientObject() && mPlayAmbient && mAmbientThread != NULL )
+	if ( isClientObject() && mPlayAmbient && mAmbientThread != NULL && !mIsDynamic )
       mShapeInst->advanceTime( timeDelta, mAmbientThread );
 }
 

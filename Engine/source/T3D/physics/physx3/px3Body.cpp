@@ -107,6 +107,9 @@ bool Px3Body::init(   PhysicsCollision *shape,
 	   actor->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
        mIsStatic = true;
    }
+   //void PxRigidDynamic::setSolverIterationCounts(PxU32 minPositionIters, PxU32 minVelocityIters);
+   //Defaults to (4,1)
+   actor->setSolverIterationCounts(4,1);//Hmm, higher doesn't seem to help.
 
    if (hasGravity==false)
 		mActor->setActorFlag(physx::PxActorFlag::eDISABLE_GRAVITY,true);
