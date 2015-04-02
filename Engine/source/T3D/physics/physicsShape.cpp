@@ -1011,6 +1011,8 @@ bool PhysicsShape::_createShape()
 		   //Con::printf("Pushing back a physics body, isServer %d",isServerObject());
 		   mPhysicsBodies.push_back(partBody);
 
+		   mLastTrans.push_back(MatrixF(true));// During kinematic animation we use these so we can find
+		  
 		   mStates.increment();
 		   if (mIsDynamic) partBody->getState(&(mStates.last()));
 		
@@ -1137,6 +1139,7 @@ void PhysicsShape::setTransform( const MatrixF &newMat )
    mRenderState[0] = mRenderState[1] = mState;
    setMaskBits( StateMask );
 
+   //Update for mIsArticulated?
    if ( mPhysicsRep )
       mPhysicsRep->setTransform( newMat );
 }
@@ -1274,7 +1277,7 @@ void PhysicsShape::processTick( const Move *move )
 
    ///////////////////////////////////////////////////////////////////
    //If kinematic, we need to drive physics bodyparts with nodeTransforms data.
-   if ( !mPhysicsRep->isDynamic() )
+   if ( !mPhysicsRep->isDynamic() )//This is testing the server physics body btw, which is kinda weird.
    {
 	   if ( isClientObject() && mIsArticulated ) 
 	   {
@@ -1307,6 +1310,7 @@ void PhysicsShape::processTick( const Move *move )
 				   if (i==0) m1.setPosition(mStartPos);
 				   else m1.setPosition(newPos);
 
+				   mPhysicsBodies[i]->getTransform(&mLastTrans[i]);//store transform for when we go dynamic.
 				   mPhysicsBodies[i]->setTransform(m1);
 			   }
 		   }
@@ -1318,8 +1322,9 @@ void PhysicsShape::processTick( const Move *move )
    if ( PHYSICSMGR->isSinglePlayer() && isClientObject() && getServerObject() )
    {  //SINGLE PLAYER HACK!!!!
       PhysicsShape *servObj = (PhysicsShape*)getServerObject();
-	  if (!mIsDynamic)
+	  if (!mIsDynamic)//relevant in any way?? this is our own bool, not testing physics body directly as above...
 	  {
+		  Con::printf("we're in the weird section that should probably be removed.");
 		  setTransform( servObj->mState.getTransform() ); 
 		  mRenderState[0] = servObj->mRenderState[0];
 		  mRenderState[1] = servObj->mRenderState[1];
@@ -1696,10 +1701,30 @@ void PhysicsShape::setDynamic(bool isDynamic)
 	if (!mIsArticulated)
 	{
 		mPhysicsRep->setDynamic(isDynamic);
+		//HERE: add linear/angular velocity if (isDynamic==true) and we were animating/moving before.
 	} else {
 		for (U32 i=0;i<mPhysicsBodies.size();i++)
 		{
 			mPhysicsBodies[i]->setDynamic(isDynamic);
+			if (isDynamic)
+			{//Add linear/angular velocity
+				Point3F posVel;
+
+				MatrixF curTrans,diffTrans,invLastTrans;
+				mPhysicsBodies[i]->getTransform(&curTrans);
+				posVel = curTrans.getPosition() - mLastTrans[i].getPosition();
+				posVel *= 32;//Times tick rate per second
+				mPhysicsBodies[i]->setLinVelocity(posVel);
+
+				EulerF angVel;
+				mLastTrans[i].invertTo(&invLastTrans);
+				diffTrans = curTrans * invLastTrans;
+				angVel = diffTrans.toEuler();
+				//angVel *= 180.0/M_PI;//Maybe?
+				angVel *= 32;//Times tick rate per second.
+				mPhysicsBodies[i]->setAngVelocity(angVel);
+				//Very difficult to see effect, but setAngVelocity does work. Not sure how to turn it up.
+			}
 		}
 	}
 }

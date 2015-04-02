@@ -187,6 +187,7 @@ public: //protected:
    PhysicsJoint *mJoint;
    Vector<PhysicsJoint*> mPhysicsJoints;
    Vector<S32> mBodyNodes;
+   Vector<MatrixF>mLastTrans;//for finding velocity on set dynamic
    MatrixF mStartMat;
    MatrixF mInvStartMat;
 
