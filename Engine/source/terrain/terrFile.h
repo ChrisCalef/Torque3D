@@ -126,7 +126,7 @@ protected:
    /// The legacy file loading code.
    void _loadLegacy( FileStream &stream );
 
-   /// Used to populate the materail vector by finding the 
+   /// Used to populate the material vector by finding the 
    /// TerrainMaterial objects by name.
    void _resolveMaterials( const Vector<String> &materials );
 
@@ -151,7 +151,12 @@ public:
    static void create(  String *inOutFilename, 
                         U32 newSize, 
                         const Vector<String> &materials );
-
+   
+   ///
+   static void createByName(  String *inOutFilename, 
+                        U32 newSize, 
+                        const Vector<String> &materials );
+   
    ///
    static TerrainFile* load( const Torque::Path &path );
 

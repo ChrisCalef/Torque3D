@@ -481,6 +481,7 @@ void TerrainBlock::updateGrid( const Point2I &minPt, const Point2I &maxPt, bool 
    // pointer to do it.
    if ( updateClient && getClientObject() )
       ((TerrainBlock*)getClientObject())->updateGrid( minPt, maxPt, false );
+
 }
 
 bool TerrainBlock::getHeight( const Point2F &pos, F32 *height ) const
@@ -941,11 +942,12 @@ bool TerrainBlock::onAdd()
 
    if (isClientObject())
    {
-      if ( mCRC != terr.getChecksum() )
-      {
-         NetConnection::setLastError("Your terrain file doesn't match the version that is running on the server.");
-         return false;
-      }
+	  //TerrainPager: causing problems, seems not that necessary.
+      //if ( mCRC != terr.getChecksum() )
+      //{
+      //   NetConnection::setLastError("Your terrain file doesn't match the version that is running on the server.");
+      //   return false;
+      //}
 
       clearLightMap();
 
@@ -1295,6 +1297,110 @@ void TerrainBlock::getMinMaxHeight( F32 *minHeight, F32 *maxHeight ) const
    *maxHeight = fixedToFloat( sq->maxHeight );
 }
 
+
+bool TerrainBlock::loadTerrainData( const char *heightFile,const char *textureFile,unsigned int textureRes,unsigned int material_count,const char *treeFile) 
+{
+	//Con::printf("loading terrain data: %s",fileName);
+
+	//HERE: when we're ready, this is where we will open the hght.(tileName).bin file, as well as text.(tileName).bin 
+	//and eventually trees.(tileName).bin and whatever else comes up.
+	FileStream fs;
+	F32 data;
+	S32 numHeightBinArgs = 5;
+
+	TerrainFile *terrFile = getFile();
+	
+
+	if (!fs.open(heightFile,Torque::FS::File::Read))
+	{ 
+		for (U32 xx=0;xx<getBlockSize();xx++)
+		{	
+			for (U32 yy=0;yy<getBlockSize();yy++)
+			{
+				setHeight(Point2I(xx,yy),0.0f);//for now just set unknown terrain to flat plane at zero meters elevation.
+				//mTerrainsLayout[y][x]->setHeight(Point2I(xx,yy),data);
+			}
+		}
+		return false;
+	} else {
+		fs.setPosition(0*sizeof(float)); fs.read(&data);
+		F32 fileLong = data;
+		fs.setPosition(1*sizeof(float)); fs.read(&data);
+		F32 fileLat = data;
+		fs.setPosition(2*sizeof(float)); fs.read(&data);
+		F32 fileTileWidth = data;
+		fs.setPosition(3*sizeof(float)); fs.read(&data);
+		U32 fileHeightmapRes = (U32)data;
+		fs.setPosition(4*sizeof(float)); fs.read(&data);
+		U32 fileTextureRes = (U32)data;
+		if (fileHeightmapRes!=getBlockSize())
+		{
+			Con::printf("Wrong heightmap resolution in file: %s",heightFile);
+			//for(int i=0; i<mTerrainsXCount; i++)//First time, we're going to have to load all terrains for sure.
+			//	for(int j=0; j<mTerrainsZCount; j++)
+			//		mLoadTerrains[j][i] = true; 
+			//pingWorldServer(true);
+			return false;
+		}
+		//Con::printf("Loading terrain data from:  %s, long/lat: %f %f  heightmapres %d  tileWidth %f",
+		//	fileName,fileLong,fileLat,fileHeightmapRes,getWorldBlockSize());
+
+		for (U32 xx=0;xx<getBlockSize();xx++)
+		{	
+			for (U32 yy=0;yy<getBlockSize();yy++)
+			{
+				fs.setPosition((yy*getBlockSize()*sizeof(float)) + (xx*sizeof(float)) + (numHeightBinArgs*sizeof(float)) );
+				fs.read(&data);
+				setHeight(Point2I(xx,yy),data);				
+			}
+		}
+		fs.close();
+	}
+
+	U8 texData;
+	if (fs.open(textureFile,Torque::FS::File::Read))
+	{
+		//UH OH. It appears that the heightmap and textureRes properties have to be the same,
+		//or else I'm misunderstanding what textureRes is.
+		
+		for (U32 xx=0;xx<getBlockSize();xx++)
+		{	
+			for (U32 yy=0;yy<getBlockSize();yy++)
+			{
+				fs.setPosition((yy*getBlockSize()*sizeof(U8)) + (xx*sizeof(U8)));
+				fs.read(&texData);
+				U8 index = texData - 1;//Flightgear puts out 1-based numbers, here we are 0-based.
+				if ((index >= 0)&&(index < material_count))
+					terrFile->setLayerIndex( xx, yy, index );
+			}
+		}/*
+		for (U32 xx=0;xx<textureRes;xx++)
+		{	
+			for (U32 yy=0;yy<textureRes;yy++)
+			{
+				fs.setPosition((yy*textureRes*sizeof(U8)) + (xx*sizeof(U8)));
+				fs.read(&texData);
+				U8 index = texData - 1;//Flightgear puts out 1-based numbers, here we are 0-based.
+				if ((index >= 0)&&(index < material_count))
+					terrFile->setLayerIndex( xx, yy, index );
+			}
+		}
+		*/
+		fs.close();
+	}
+	
+	updateGrid(Point2I(0,0),Point2I(getBlockSize()-1,getBlockSize()-1),true);
+	//updateGridMaterials(Point2I(0,0),Point2I(getBlockSize()-1,getBlockSize()-1));
+
+	terrFile->save(terrFile->mFilePath.getFullPath());
+
+	return true;
+}
+
+//DefineConsoleMethod( TerrainBlock, loadTerrainData, void, (const char *tileName), ,"")
+//{
+	//object->loadTerrainData(tileName);
+//}
 //-----------------------------------------------------------------------------
 // Console Methods
 //-----------------------------------------------------------------------------
@@ -1308,10 +1414,10 @@ DefineEngineMethod( TerrainBlock, save, bool, ( const char* fileName),,
 {
 	char filename[256];
 	dStrcpy(filename,fileName);
-   char *ext = dStrrchr(filename, '.');
-   if (!ext || dStricmp(ext, ".ter") != 0)
-      dStrcat(filename, ".ter");
-   return static_cast<TerrainBlock*>(object)->save(filename);
+	char *ext = dStrrchr(filename, '.');
+	if (!ext || dStricmp(ext, ".ter") != 0)
+		dStrcat(filename, ".ter");
+	return static_cast<TerrainBlock*>(object)->save(filename);
 }
 
 //ConsoleMethod(TerrainBlock, save, bool, 3, 3, "(string fileName) - saves the terrain block's terrain file to the specified file name.")

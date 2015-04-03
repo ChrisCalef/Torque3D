@@ -59,6 +59,7 @@ class TerrainBlock : public SceneObject
 
    friend class TerrainEditor;
    friend class TerrainCellMaterial;
+   friend class TerrainPager;
 
 protected:
 
@@ -200,6 +201,9 @@ protected:
 
    /// True if the zoning needs to be recalculated for the terrain.
    bool mZoningDirty;
+
+   F32 mLongitude;//TerrainPager
+   F32 mLatitude;//TerrainPager
 
    String _getBaseTexCacheFileName() const;
 
@@ -461,6 +465,9 @@ public:
    U32 packUpdate   (NetConnection *conn, U32 mask, BitStream *stream);
    void unpackUpdate(NetConnection *conn,           BitStream *stream);
    void inspectPostApply();
+
+   //TerrainPager
+   bool loadTerrainData(const char *heightFile,const char *textureFile,unsigned int textureRes,unsigned int material_count,const char *treeFile);//TerrainPager
 
 };
 

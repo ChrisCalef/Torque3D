@@ -1045,7 +1045,7 @@
 						   RelativePath="..\..\..\..\..\Engine\source\app\net\net.h">
 						</File>
 						<File
-						   RelativePath="..\..\..\..\..\Engine\source\app\net\netTest.cpp">
+						   RelativePath="..\..\..\..\..\Engine\source\app\net\netExamples.cpp">
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\app\net\serverQuery.cpp">
@@ -1971,6 +1971,7 @@
 							Filter="">
 							<File
 							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\pathTest.cpp">
+
 							</File>
 							<File
 							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\strTest.cpp">
@@ -1982,6 +1983,7 @@
 							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\tFixedSizeDequeTest.cpp">
 							</File>
 							<File
+
 							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\tVectorTest.cpp">
 							</File>
 						</Filter>
@@ -4377,6 +4379,7 @@
 						Filter="">
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\netTest.cpp">
+<<<<<<< HEAD
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformFileIOTest.cpp">
@@ -4391,6 +4394,22 @@
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\profilerTest.cpp">
 						</File>
 						<File
+=======
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformFileIOTest.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformTimerTest.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformTypesTest.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\platform\test\profilerTest.cpp">
+						</File>
+						<File
+>>>>>>> terrain_pager
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\threadStaticTest.cpp">
 						</File>
 					</Filter>

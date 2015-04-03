@@ -20,6 +20,11 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <iostream>
+#include <fstream>
 #include "platform/platform.h"
 #include "console/console.h"
 #include "console/consoleInternal.h"
@@ -2599,4 +2604,27 @@ DefineEngineFunction( isToolBuild, bool, (),,
 #else
    return false;
 #endif
+}
+
+
+//rewrite as DefineConsoleFunction (or EngineFunction)
+ConsoleFunction( copyFile, bool, 3, 3,
+   "() Copies a file.\n"
+   "@hide")
+{
+   const char *infilename = argv[1];
+   const char *outfilename = argv[2];
+	Con::printf("trying to copy %s into %s",infilename,outfilename);
+      
+	std::ifstream fin(infilename, std::ios::in | std::ios::binary);
+	std::ofstream fout(outfilename, std::ios::out | std::ios::binary);
+
+	if(fin == NULL || fout == NULL) {
+		return false;
+	}
+
+	// read from the first file then write to the second file
+	fout << fin.rdbuf();
+
+   return true;
 }

@@ -1,5 +1,7 @@
-Torque 3D v3.6.2 - PhysX 3.3 Advanced
-==========================
+
+Torque 3D v3.6.3 - PhysX 3.3 Advanced
+================
+
 
 Sample Project Available At:
 
@@ -27,6 +29,7 @@ Setting up PhysX 3.3 manually
 
 The following libraries will also be needed:
  
+<<<<<<< HEAD
 Release , Debug
 
  - PhysX3_x86.lib,PhysX3CHECKED_x86.lib
@@ -41,6 +44,16 @@ Release , Debug
 With debug build feel free to change CHECKED to DEBUG if you prefer but it will still require the CHECKED dll's though.
  
 Running a project
+=======
+* [Torque 3D 3.6 Full template](http://mit.garagegames.com/Torque3D-3-6-1-FullTemplate.zip), which contains precompiled binaries.
+* [Complete Torque 3D 3.6 zip package](http://mit.garagegames.com/Torque3D-3-6-1.zip) containing the contents of this repository.
+* [Windows binaries for 3.6.3](https://github.com/GarageGames/Torque3D/releases/tag/v3.6.3) which you can drop into your existing script projects.
+* [Torque 3D Project Manager v2.1](http://mit.garagegames.com/T3DProjectManager-2-1.zip) on its own for use in your T3D forks.
+
+If you're looking for an older release see the [Torque 3D Archive](https://github.com/GarageGames/Torque3D/wiki/Torque-3D-Archive)
+
+Creating a New Project Based on a Template
+>>>>>>> terrain_pager
 ------------------------------------------
 
  - To run a release project you will need the following from the SDK bin folder:
