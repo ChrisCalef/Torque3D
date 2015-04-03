@@ -28,6 +28,8 @@
 #include "T3D/physics/physx3/px3World.h"
 #include "T3D/physics/physx3/px3Collision.h"
 
+#include "T3D/physics/physicsShape.h"
+
 #include "console/console.h"
 #include "console/consoleTypes.h"
 
@@ -38,7 +40,8 @@ Px3Body::Px3Body() :
    mWorld( NULL ),
    mBodyFlags( 0 ),
    mIsEnabled( true ),
-   mIsStatic(false)
+   mIsStatic(false),
+   mBodyIndex( -1 )
 {
 }
 
@@ -73,7 +76,8 @@ bool Px3Body::init(   PhysicsCollision *shape,
                      F32 mass,
                      U32 bodyFlags,
                      SceneObject *obj, 
-                     PhysicsWorld *world )
+                     PhysicsWorld *world
+					 )
 {
    AssertFatal( obj, "Px3Body::init - Got a null scene object!" );
    AssertFatal( world, "Px3Body::init - Got a null world!" );
@@ -500,4 +504,14 @@ void Px3Body::setDynamic( bool isDynam )
 			mBodyFlags |= PhysicsBody::BF_KINEMATIC;
 		}
 	}  
+}
+
+void Px3Body::setBodyIndex( S32 ID )
+{ 
+	mBodyIndex = ID;
+}
+
+S32 Px3Body::getBodyIndex()
+{ 
+	return mBodyIndex;
 }

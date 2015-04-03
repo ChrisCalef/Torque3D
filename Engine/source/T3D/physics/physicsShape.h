@@ -190,6 +190,7 @@ public: //protected:
    Vector<MatrixF>mLastTrans;//for finding velocity on set dynamic
    MatrixF mStartMat;
    MatrixF mInvStartMat;
+   S32 mContactBody;//ID of mPhysicsBody having latest contact with raycast or ... ?
 
    Point3F mStartPos;
 
@@ -321,6 +322,7 @@ public:
    void setPartHasGravity(S32 partID,bool hasGrav);
    void setDynamic(bool isDynamic);
    void setPartDynamic(S32 partID,bool isDynamic);
+   S32 getContactBody();
 };
 
 #endif // _PHYSICSSHAPE_H_

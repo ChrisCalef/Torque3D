@@ -40,6 +40,8 @@ class Px3World;
 class Px3Collision;
 struct Px3CollisionDesc;
 
+class PhysicsShape;
+
 namespace physx{
 	class PxRigidActor;
 	class PxMaterial;
@@ -71,6 +73,7 @@ protected:
    /// The body flags set at creation time.
    U32 mBodyFlags;
 
+   S32 mBodyIndex;//index into mPHysicsBodies array on an articulated PhysicsShape, -1 if not relevant.
    /// Is true if this body is enabled and active
    /// in the simulation of the scene.
    bool mIsEnabled;
@@ -99,7 +102,8 @@ public:
                         F32 mass,
                         U32 bodyFlags,
                         SceneObject *obj, 
-                        PhysicsWorld *world );
+                        PhysicsWorld *world
+						);
    virtual bool isDynamic() const;
    virtual PhysicsCollision* getColShape();
    virtual void setSleepThreshold( F32 linear, F32 angular );
@@ -122,6 +126,8 @@ public:
    
    virtual void setHasGravity( bool hasGravity );
    virtual void setDynamic( bool isDynamic );
+   virtual void setBodyIndex( S32 ID );
+   virtual S32 getBodyIndex();
 };
 
 #endif // _PX3BODY_H_
