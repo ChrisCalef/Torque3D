@@ -28,6 +28,8 @@
 #include "T3D/physics/physx3/px3Casts.h"
 #include "T3D/physics/physx3/px3Stream.h"
 #include "T3D/physics/physicsUserData.h"
+#include "T3D/physics/physicsShape.h"
+#include "T3D/physics/physx3/px3Body.h"
 #include "console/engineAPI.h"
 #include "core/stream/bitStream.h"
 #include "platform/profiler.h"
@@ -39,6 +41,7 @@
 #include "T3D/gameBase/gameProcess.h"
 #include "gfx/sim/debugDraw.h"
 #include "gfx/primBuilder.h"
+#include "scene/sceneObject.h"
 
 #include <physxvisualdebuggersdk\PvdNetworkStreams.h>
 #include <physxvisualdebuggersdk\PvdConnectionManager.h>
@@ -627,3 +630,50 @@ DefineEngineFunction( physx3SetSimulationTiming, void, ( F32 stepTime, U32 maxSt
 {
    Px3World::setTiming(stepTime,maxSteps);
 }
+
+DefineEngineFunction( physx3CastRay, S32, (Point3F start, Point3F vec, U32 bodyType ),, "Cast a ray for distance/direction of vector, where bodyType is 0=static, 1=dynamic, 2=player, 3=all" )
+{
+	
+   Px3World *kWorld = static_cast<Px3World *>(PHYSICSMGR->getWorld( "client" ));
+   //Con::printf("castRay start: %f %f %f,  vec %f %f %f, type %d",start.x,start.y,start.z,vec.x,vec.y,vec.z,bodyType);
+   PhysicsBody *kPhysBody = NULL;
+   Px3Body *kBody = NULL;
+   kPhysBody = kWorld->castRay(start,start + vec,bodyType);
+   kBody = static_cast<Px3Body *>(kPhysBody);
+   if (kBody)
+   {
+	   //Con::printf("Physx3 castRay hit a px3 body!!! %s ",kBody->getUserData().getObject()->getClassName());
+	   if (!(strcmp(kBody->getUserData().getObject()->getClassName(),"PhysicsShape")))
+	   {
+		   PhysicsShape *physShape = reinterpret_cast<PhysicsShape *>(kBody->getUserData().getObject());
+		   physShape->mContactBody = kBody->getBodyIndex();
+	   }
+	   S32 id = kBody->getUserData().getObject()->getId();
+	   return id;
+   } else {
+	   return 0;
+   }
+}
+//DefineEngineMethod( Px3World, physx3CastRay, void, ( Point3F start, Point3F vec ),, "Cast a physx ray from start in direction vec." )
+//{
+//   
+//}
+
+/*
+void PhysicsForce::attach( const Point3F &start, const Point3F &direction, F32 maxDist )
+{
+   detach();
+
+   // If there is no physics world then we cannot apply any forces.
+   if ( !mWorld )
+      return;
+
+   PhysicsBody *body = mWorld->castRay( start, start + ( direction * maxDist ), PhysicsWorld::BT_Dynamic );
+   if ( !body )
+      return;
+
+   mBody = body;
+}
+
+*/
+

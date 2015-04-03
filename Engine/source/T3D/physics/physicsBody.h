@@ -122,6 +122,8 @@ public:
 
    virtual void setHasGravity( bool hasGravity ) = 0;
    virtual void setDynamic( bool isDynamic ) = 0;
+   virtual void setBodyIndex( S32 ID) = 0;
+   virtual S32 getBodyIndex() = 0;
 
 };
 

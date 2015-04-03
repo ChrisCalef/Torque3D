@@ -428,10 +428,12 @@ PhysicsShape::PhysicsShape()
 	  mIsDynamic( true ),
 	  mIsArticulated( false ),
 	  mCurrentTick( 0 ),
-	  mStartPos( Point3F(0,0,0) )//maybe use mResetPos for this?
+	  mStartPos( Point3F(0,0,0)//maybe use mResetPos for this?
+	   )
 {
    mNetFlags.set( Ghostable | ScopeAlways );
    mTypeMask |= DynamicShapeObjectType;
+   mContactBody = -1;
 }
 
 PhysicsShape::~PhysicsShape()
@@ -1007,7 +1009,7 @@ bool PhysicsShape::_createShape()
 		   
 		   partBody->setTransform(finalTrans);
 		   
-
+		   partBody->setBodyIndex(mPhysicsBodies.size());
 		   //Con::printf("Pushing back a physics body, isServer %d",isServerObject());
 		   mPhysicsBodies.push_back(partBody);
 
@@ -1181,6 +1183,7 @@ void PhysicsShape::applyImpulseToPart(  S32 partIndex, const Point3F &pos, const
 		MatrixF partTransform;
 		mPhysicsBodies[partIndex]->getTransform(&partTransform);
 		Point3F finalPos = partTransform.getPosition() + pos;
+		//Con::printf("applying impulse to part %d: %f %f %f",partIndex,vec.x,vec.y,vec.z);
 		mPhysicsBodies[partIndex]->applyImpulse( finalPos, vec );
 	}
 }
@@ -1284,8 +1287,9 @@ void PhysicsShape::processTick( const Move *move )
 		   MatrixF m1,m2;
 		   if (mCurrentTick==1)
 		   {
-			   mPhysicsBodies[0]->getState(&mStates[0]);
-			   m1 = mStates[0].getTransform();
+			   //mPhysicsBodies[0]->getState(&mStates[0]);//Whoops, this is only for dynamics.
+			   //m1 = mStates[0].getTransform();
+			   mPhysicsBodies[0]->getTransform(&m1);
 			   Point3F globalPos = m1.getPosition();
 
 			   mStartMat = m1;
@@ -1299,7 +1303,11 @@ void PhysicsShape::processTick( const Move *move )
 				   Point3F defTrans,rotPos,newPos;
 				   defTrans = kShape->defaultTranslations[mBodyNodes[i]];
 				   S32 parentInd = kShape->nodes[mBodyNodes[i]].parentIndex;
-				   m2 = mShapeInst->mNodeTransforms[parentInd];
+				   if (parentInd>=0)
+					   m2 = mShapeInst->mNodeTransforms[parentInd];
+				   else
+					   m2.identity();
+
 				   m2.mulP(defTrans,&rotPos);
 				   mStartMat.mulP(rotPos,&newPos);
 				   newPos += ( mStartPos - kShape->defaultTranslations[0] );
@@ -1746,7 +1754,10 @@ void PhysicsShape::setPartDynamic(S32 partID,bool isDynamic)
 		mPhysicsBodies[partID]->setDynamic(isDynamic);
 }
 
-
+S32 PhysicsShape::getContactBody()
+{
+	return mContactBody;
+}
 ////////////////////////////////////////////////////////////////////////
 
 DefineEngineMethod( PhysicsShape, isDestroyed, bool, (),, 
@@ -1866,4 +1877,10 @@ DefineEngineMethod( PhysicsShape, setPartHasGravity, void, (int partID,bool hasG
    "@brief Sets this part's hasGravity property.\n\n")
 {  
 	object->setPartHasGravity(partID,hasGravity);
+}
+
+DefineEngineMethod( PhysicsShape, getContactBody, S32, (),,
+   "@brief Gets this shape's latest ContactBody.\n\n")
+{  
+	return object->getContactBody();
 }
