@@ -515,7 +515,11 @@ bool AIPlayer::getAIMove(Move *movePtr)
 
    // Replicate the trigger state into the move so that
    // triggers can be controlled from scripts.
+//<<<<<<< HEAD
    for( int i = 0; i < MaxTriggerKeys; i++ )
+//=======
+   //for( S32 i = 0; i < MaxMountedImages; i++ )  //???
+//>>>>>>> badbehave/master
       movePtr->trigger[i] = getImageTriggerState(i);
 
 #ifdef TORQUE_NAVIGATION_ENABLED

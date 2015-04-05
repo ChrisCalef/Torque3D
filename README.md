@@ -29,7 +29,6 @@ Setting up PhysX 3.3 manually
 
 The following libraries will also be needed:
  
-<<<<<<< HEAD
 Release , Debug
 
  - PhysX3_x86.lib,PhysX3CHECKED_x86.lib
@@ -53,7 +52,6 @@ Running a project
 If you're looking for an older release see the [Torque 3D Archive](https://github.com/GarageGames/Torque3D/wiki/Torque-3D-Archive)
 
 Creating a New Project Based on a Template
->>>>>>> terrain_pager
 ------------------------------------------
 
  - To run a release project you will need the following from the SDK bin folder:
@@ -70,6 +68,55 @@ Creating a New Project Based on a Template
    5. PhysX3CharacterKinematicCHECKED_x86.dll
  
 Place these files along side the exe and this should get you up and running.
+
+
+
+BadBehavior
+==========
+Behavior Tree System for Torque 3D
+----------------------------------
+### Introduction
+
+The BadBehavior system is an experimental behavior tree implementation and editor for the [Torque3D](https://github.com/GarageGames/Torque3D) game engine. BadBehavior is very much a work in progress, but feel free to mess around with it and see what you can make it do.
+
+### Features
+
+* Implemented in C++ for efficiency.
+* Supports the common behavior tree node types including sequences, selectors, parallels and a range of decorators.
+* Shared behavior trees - a single behavior tree definition can be used by multiple objects.
+* Behavior trees can be used by any type of SimObject
+* Trees can be assembled from smaller sub-trees in a modular fashion
+* A multi-page graphical editor with undo/redo support
+* Flexible behavior leaf nodes:
+  * Actions/conditions can be created entirely in the editor for rapid prototyping
+  * Structured behaviors can be written in script
+  * Performance critical behaviors can be written entirely in C++
+* Self contained - no changes to existing engine classes
+
+### Further information
+
+For tutorials and guides on how to use BadBehavior in your project, refer to:
+* BadBehavior [GitHub Wiki](https://github.com/BadBehavior/BadBehavior_T3D/wiki)
+* BadBehavior [GitHub page](http://badbehavior.github.io/BadBehavior_T3D)
+
+For information specific to the Torque 3D game engine:
+* Torque 3D [main repository](https://github.com/GarageGames/Torque3D)
+* Torque 3D [GitHub Wiki](https://github.com/GarageGames/Torque3D/wiki)
+
+License
+-------
+
+The BadBehavior system is Copyright (c) 2014 Guy Allard
+
+Torque 3D is Copyright (c) 2012 GarageGames, LLC
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to
+deal in the Software without restriction, including without limitation the
+rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+>>>>>>> badbehave/master
 
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR

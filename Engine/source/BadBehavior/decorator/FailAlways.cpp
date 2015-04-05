@@ -1,5 +1,5 @@
 //-----------------------------------------------------------------------------
-// Copyright (c) 2012 GarageGames, LLC
+// Copyright (c) 2014 Guy Allard
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -20,42 +20,32 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
-// Load up all scripts.  This function is called when
-// a server is constructed.
-exec("./camera.cs");
-exec("./triggers.cs");
-exec("./inventory.cs");
-exec("./shapeBase.cs");
-exec("./item.cs");
-exec("./health.cs");
-exec("./projectile.cs");
-exec("./radiusDamage.cs");
-exec("./teleporter.cs");
+#include "FailAlways.h"
 
-// Load our supporting weapon script, it contains methods used by all weapons.
-exec("./weapon.cs");
+using namespace BadBehavior;
 
-// Load our weapon scripts
-// We only need weapon scripts for those weapons that work differently from the
-// class methods defined in weapon.cs
-exec("./proximityMine.cs");
+//------------------------------------------------------------------------------
+// FailAlways decorator node
+//------------------------------------------------------------------------------
+IMPLEMENT_CONOBJECT(FailAlways);
 
-// Load our default player script
-exec("./player.cs");
+Task *FailAlways::createTask(SimObject &owner, BehaviorTreeRunner &runner)
+{
+   return new FailAlwaysTask(*this, owner, runner);
+}
 
-// Load our player scripts
-exec("./aiPlayer.cs");
+//------------------------------------------------------------------------------
+// FailAlways decorator task
+//------------------------------------------------------------------------------
+FailAlwaysTask::FailAlwaysTask(Node &node, SimObject &owner, BehaviorTreeRunner &runner)
+   : Parent(node, owner, runner) 
+{
+}
+      
+void FailAlwaysTask::onChildComplete(Status s)
+{
+   Parent::onChildComplete(s);
+   if(mStatus == SUCCESS)
+      mStatus = FAILURE;
+}
 
-exec("./vehicle.cs");
-exec("./vehicleWheeled.cs");
-exec("./cheetah.cs");
-
-// Load turret support scripts
-exec("./turret.cs");
-
-// Load our gametypes
-exec("./gameCore.cs"); // This is the 'core' of the gametype functionality.
-exec("./gameDM.cs"); // Overrides GameCore with DeathMatch functionality.
-
-// setup the behavior tree framework
-exec("./BadBehavior/main.cs");

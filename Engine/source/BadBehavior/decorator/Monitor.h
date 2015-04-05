@@ -1,5 +1,5 @@
 //-----------------------------------------------------------------------------
-// Copyright (c) 2012 GarageGames, LLC
+// Copyright (c) 2014 Guy Allard
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -20,42 +20,42 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
-// Load up all scripts.  This function is called when
-// a server is constructed.
-exec("./camera.cs");
-exec("./triggers.cs");
-exec("./inventory.cs");
-exec("./shapeBase.cs");
-exec("./item.cs");
-exec("./health.cs");
-exec("./projectile.cs");
-exec("./radiusDamage.cs");
-exec("./teleporter.cs");
+#ifndef _BB_MONITOR_H_
+#define _BB_MONITOR_H_
 
-// Load our supporting weapon script, it contains methods used by all weapons.
-exec("./weapon.cs");
+#ifndef _BB_DECORATOR_H_
+#include "BadBehavior/core/Decorator.h"
+#endif
 
-// Load our weapon scripts
-// We only need weapon scripts for those weapons that work differently from the
-// class methods defined in weapon.cs
-exec("./proximityMine.cs");
+namespace BadBehavior
+{
+   //---------------------------------------------------------------------------
+   // Monitor decorator
+   // outputs the return status to the console,
+   //---------------------------------------------------------------------------
+   class Monitor : public DecoratorNode
+   {
+      typedef DecoratorNode Parent;
 
-// Load our default player script
-exec("./player.cs");
+   public:
+      virtual Task *createTask(SimObject &owner, BehaviorTreeRunner &runner);
+      
+      DECLARE_CONOBJECT(Monitor);
+   };
 
-// Load our player scripts
-exec("./aiPlayer.cs");
+   //---------------------------------------------------------------------------
+   // Monitor decorator task
+   //---------------------------------------------------------------------------
+   class MonitorTask : public DecoratorTask
+   {
+      typedef DecoratorTask Parent;
 
-exec("./vehicle.cs");
-exec("./vehicleWheeled.cs");
-exec("./cheetah.cs");
+   public:
+      MonitorTask(Node &node, SimObject &owner, BehaviorTreeRunner &runner);
 
-// Load turret support scripts
-exec("./turret.cs");
+      virtual void onChildComplete(Status s);
+   };
 
-// Load our gametypes
-exec("./gameCore.cs"); // This is the 'core' of the gametype functionality.
-exec("./gameDM.cs"); // Overrides GameCore with DeathMatch functionality.
+} // namespace BadBehavior
 
-// setup the behavior tree framework
-exec("./BadBehavior/main.cs");
+#endif
