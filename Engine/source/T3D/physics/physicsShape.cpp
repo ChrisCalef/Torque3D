@@ -424,6 +424,14 @@ PhysicsShape::PhysicsShape()
       mPlayAmbient( false ),
       mAmbientThread( NULL ),
       mAmbientSeq( -1 ),
+      mCurrentSeq( -1 ),
+	  mIdleSeq( -1 ),
+	  mWalkSeq( -1 ),
+	  mRunSeq( -1 ),
+	  mAttackSeq( -1 ),
+	  mBlockSeq( -1 ),
+	  mFallSeq( -1 ),
+	  mGetupSeq( -1 ),
 	  mHasGravity( true ),
 	  mIsDynamic( true ),
 	  mIsArticulated( false ),
@@ -434,6 +442,10 @@ PhysicsShape::PhysicsShape()
    mNetFlags.set( Ghostable | ScopeAlways );
    mTypeMask |= DynamicShapeObjectType;
    mContactBody = -1;
+   mIsGroundMoving = false;
+   mLastThreadPos = 0.0;
+   mLastGroundTrans = Point3F::Zero;
+   mLastGroundRot = QuatF::Identity;
 }
 
 PhysicsShape::~PhysicsShape()
@@ -691,6 +703,14 @@ void PhysicsShape::onRemove()
    SAFE_DELETE( mShapeInst );
    mAmbientThread = NULL;
    mAmbientSeq = -1;
+   mCurrentSeq = -1;
+   mIdleSeq = -1;
+   mWalkSeq = -1;
+   mRunSeq = -1;
+   mAttackSeq = -1;
+   mBlockSeq = -1;
+   mFallSeq = -1;
+   mGetupSeq = -1;
    mWorld = NULL;
 
    if ( isServerObject() )
@@ -740,6 +760,14 @@ bool PhysicsShape::_createShape()
    mAmbientThread = NULL;
    mWorld = NULL;
    mAmbientSeq = -1;
+   mCurrentSeq = -1;
+   mIdleSeq = -1;
+   mWalkSeq = -1;
+   mRunSeq = -1;
+   mAttackSeq = -1;
+   mBlockSeq = -1;
+   mFallSeq = -1;
+   mGetupSeq = -1;
 
    if ( !mDataBlock )
       return false;
@@ -759,11 +787,27 @@ bool PhysicsShape::_createShape()
    }
 
    // Create the shape instance.
+   
+   TSShape *kShape = mDataBlock->shape;
    mShapeInst = new TSShapeInstance( mDataBlock->shape, isClientObject() );
+   //mShapeInst = new TSShapeInstance( kShape, isClientObject() );//NOPE! const Resource<TSShape> version is not same as TSShape* version!
+   //With a pointer I get a "no material" on my shape, unknown if anything else breaks.
+
+   //These are all being set in script by use of set(Ambient,etc)SeqByName("") functions. Taking them out here.
+   //mAmbientSeq = kShape->findSequence( "ambient" );
+   //mIdleSeq = kShape->findSequence( "ambient" );//This will be different when we start accumulating more idle seqs.
+   //mWalkSeq = kShape->findSequence( "walk" );
+   //mRunSeq = kShape->findSequence( "run" );
+   //mAttackSeq = kShape->findSequence( "power_punch_down" );
+   //mBlockSeq = kShape->findSequence( "ambient" );//just a placeholder for the moment
+   //mFallSeq = kShape->findSequence( "runscerd" );//ditto, need a falling seq.
+   //mGetupSeq = kShape->findSequence( "frontGetup" );//this will be selected in script
+
+	//Con::printf("swingUnder seq ground frames: %d, first ground frame %d",
+	//	  kShape->sequences[mAmbientSeq].numGroundFrames,kShape->sequences[mAmbientSeq].firstGroundFrame);
 
    if ( isClientObject() )
-   {
-      mAmbientSeq = mDataBlock->shape->findSequence( "ambient" );
+   {	  
       _initAmbient();   
    }
 
@@ -1095,11 +1139,38 @@ void PhysicsShape::_initAmbient()
     
       // Play the sequence.
       mShapeInst->setSequence( mAmbientThread, mAmbientSeq, 0);
-
+	  mCurrentSeq = mAmbientSeq;
       setProcessTick(true);
    }
    else
    {
+      if ( mAmbientThread != NULL )
+      {
+         mShapeInst->destroyThread( mAmbientThread );
+         mAmbientThread = NULL;
+      }
+   }
+}
+
+void PhysicsShape::_setCurrent()
+{
+   if ( isServerObject() )
+      return;
+
+   bool willPlay = (mCurrentSeq >= 0) && (mCurrentSeq < mShapeInst->getShape()->sequences.size());
+
+   if ( willPlay )
+   {
+      // Create thread if we dont already have.
+      if ( mAmbientThread == NULL )
+         mAmbientThread = mShapeInst->addThread();
+    
+      // Play the sequence.
+      mShapeInst->setSequence( mAmbientThread, mCurrentSeq, 0);
+      setProcessTick(true);
+   }
+   else
+   {//Hmm, do we really want to destroy the thread every time a seq fails? I guess so, easy to recreate it above.
       if ( mAmbientThread != NULL )
       {
          mShapeInst->destroyThread( mAmbientThread );
@@ -1134,16 +1205,26 @@ void PhysicsShape::setTransform( const MatrixF &newMat )
 {
    Parent::setTransform( newMat );
    
+
    // This is only called to set an absolute position
    // so we discard the delta state.
-   mState.position = getPosition();
+   if (  !mIsArticulated )//isServerObject() ||
+	   mState.position = getPosition();
+   else // is articulated, and is on the client... try this. Might need to rotate defTrans by newMat however.
+   {
+	   mState.position = getPosition() + mShapeInst->getShape()->defaultTranslations[0];
+	   //updatePhysicsBodies()??
+   }
    mState.orientation.set( newMat );
    mRenderState[0] = mRenderState[1] = mState;
    setMaskBits( StateMask );
 
-   //Update for mIsArticulated?
    if ( mPhysicsRep )
-      mPhysicsRep->setTransform( newMat );
+   {
+	  MatrixF newNewMat = newMat;
+	  newNewMat.setPosition(mState.position);
+      mPhysicsRep->setTransform( newNewMat );	  
+   }
 }
 
 void PhysicsShape::setScale( const VectorF &scale )
@@ -1278,6 +1359,49 @@ void PhysicsShape::processTick( const Move *move )
    mCurrentTick++;
    TSShape *kShape = mShapeInst->getShape();
 
+   //Now, this really belongs somewhere over in the ts directory, it is not related to physics at all, but for now testing it here.
+   if ( (mIsGroundMoving) && (mCurrentSeq>=0) && !isServerObject() )
+   {
+	   TSSequence currSeq = kShape->sequences[mCurrentSeq];
+	   //Rots: maybe later, maybe not even necessary this time around.
+	   //Quat16 groundRot = kShape->groundRotations[ambSeq.firstGroundFrame+(S32)(mAmbientThread->getPos()*(F32)(ambSeq.numGroundFrames))];
+	   //QuatF groundQuat;
+	   //groundRot.getQuatF(&groundQuat);
+	   Point3F groundTrans = kShape->groundTranslations[currSeq.firstGroundFrame+(S32)(mAmbientThread->getPos()*(F32)(currSeq.numGroundFrames))];
+	   Point3F mulGroundTrans;
+	   mStartMat.mulP(groundTrans,&mulGroundTrans);
+	   MatrixF m1 = getTransform();
+	   Point3F pos = m1.getPosition();	  	   
+	   if (mLastThreadPos > mAmbientThread->getPos())
+	   {
+		   mLastGroundTrans = Point3F::Zero;
+		   //mLastGroundRot = MatrixF::Identity;
+	   }
+
+	   Point3F tempPos,finalPos,groundPos;
+	   tempPos = pos + mulGroundTrans - mLastGroundTrans;
+
+	   //Con::printf("pos: %f %f %f  mulGroundTrans  %f %f %f   tempPos  %f %f %f  ",pos.x,pos.y,pos.z,
+		//  mulGroundTrans.x,mulGroundTrans.y,mulGroundTrans.z,tempPos.x,tempPos.y,tempPos.z);
+
+	   //Con::printf("tempPos: %f %f %f",tempPos.x,tempPos.y,tempPos.z);
+	   //HMM, I think I need another world castray function that will only look for statics, or maybe only for ground.
+	   //Soon we'll be back in that difficulty of finding the right floor of a building and not landing on the roof, etc.
+	   //RayInfo ri;
+	   //bool raySuccess = mWorld->castGroundRay(tempPos + Point3F(0,0,1),tempPos + Point3F(0,0,-100000),&ri);
+	   //m1.setPosition(ri.point);
+	   
+	   //if (ri.distance > 0.0) 
+	   groundPos = findGroundPosition(tempPos + Point3F(0,0,1));
+	   m1.setPosition(groundPos);
+	   //Con::printf("id %d pos %f %f %f groundTrans: %f %f %f, lastGroundTrans %f %f %f",getId(),pos.x,pos.y,pos.z,
+		//  mulGroundTrans.x,mulGroundTrans.y,mulGroundTrans.z,mLastGroundTrans.x,mLastGroundTrans.y,mLastGroundTrans.z);
+	   setTransform(m1);
+	   mLastGroundTrans = mulGroundTrans;
+
+	   mLastThreadPos = mAmbientThread->getPos();
+   } 
+
    ///////////////////////////////////////////////////////////////////
    //If kinematic, we need to drive physics bodyparts with nodeTransforms data.
    if ( !mPhysicsRep->isDynamic() )//This is testing the server physics body btw, which is kinda weird.
@@ -1285,45 +1409,64 @@ void PhysicsShape::processTick( const Move *move )
 	   if ( isClientObject() && mIsArticulated ) 
 	   {
 		   MatrixF m1,m2;
-		   if (mCurrentTick==1)
+
+		   //HMM, when the shape may be moving, then we can't just grab the globalPos once at the beginning. 
+		   //Seeing what happens if we just do it every frame.
+		   //if (mCurrentTick==1)
+		   //{
+		   //mPhysicsBodies[0]->getState(&mStates[0]);//Whoops, this is only for dynamics.
+		   //m1 = mStates[0].getTransform();
+		   mPhysicsBodies[0]->getTransform(&m1);
+		   //Point3F globalPos = m1.getPosition();
+		   Point3F globalPos = getPosition();
+
+		   //if (mCurrentTick==1) 
+		   mStartMat = m1;
+		   mStartMat.setPosition(Point3F(0,0,0));
+		   //mStartMat.invertTo(&mInvStartMat);
+		   mStartPos = globalPos;
+		   //} else {
+		   //NOW, set up positions of rigid bodyparts based on nodeTransforms.
+		   for (U32 i=0;i<mPhysicsBodies.size();i++)
 		   {
-			   //mPhysicsBodies[0]->getState(&mStates[0]);//Whoops, this is only for dynamics.
-			   //m1 = mStates[0].getTransform();
-			   mPhysicsBodies[0]->getTransform(&m1);
-			   Point3F globalPos = m1.getPosition();
-
-			   mStartMat = m1;
-			   mStartMat.setPosition(Point3F(0,0,0));
-			   mStartMat.invertTo(&mInvStartMat);
-			   mStartPos = globalPos;
-		   } else {
-			   //NOW, set up positions of rigid bodyparts based on nodeTransforms.
-			   for (U32 i=0;i<mPhysicsBodies.size();i++)
+			   Point3F defTrans,rotPos,newPos;
+			   defTrans = kShape->defaultTranslations[mBodyNodes[i]];
+			   S32 parentInd = kShape->nodes[mBodyNodes[i]].parentIndex;
+			   if (parentInd>=0)
+				   m2 = mShapeInst->mNodeTransforms[parentInd];
+			   else
 			   {
-				   Point3F defTrans,rotPos,newPos;
-				   defTrans = kShape->defaultTranslations[mBodyNodes[i]];
-				   S32 parentInd = kShape->nodes[mBodyNodes[i]].parentIndex;
-				   if (parentInd>=0)
-					   m2 = mShapeInst->mNodeTransforms[parentInd];
-				   else
-					   m2.identity();
-
-				   m2.mulP(defTrans,&rotPos);
-				   mStartMat.mulP(rotPos,&newPos);
-				   newPos += ( mStartPos - kShape->defaultTranslations[0] );
-
-				   m1 = mShapeInst->mNodeTransforms[mBodyNodes[i]];
-				   m1 = mStartMat * m1;
-
-				   if (i==0) m1.setPosition(mStartPos);
-				   else m1.setPosition(newPos);
-
-				   mPhysicsBodies[i]->getTransform(&mLastTrans[i]);//store transform for when we go dynamic.
-				   mPhysicsBodies[i]->setTransform(m1);
+				   m2.identity();
 			   }
+
+			   m2.mulP(defTrans,&rotPos);
+			   mStartMat.mulP(rotPos,&newPos);
+			   //newPos += ( mStartPos - kShape->defaultTranslations[0] );
+			   newPos += ( mStartPos );
+			  // newPos +=  mStartPos;
+
+			   m1 = mShapeInst->mNodeTransforms[mBodyNodes[i]];
+			   m1 = mStartMat * m1;
+
+			   if (i==0) {
+				   Point3F nodePos = mShapeInst->mNodeTransforms[mBodyNodes[i]].getPosition();
+				   Point3F mulPos;
+				   mStartMat.mulP(nodePos,&mulPos);
+				   //m1.setPosition((mStartPos-defTrans)+nodePos);//Well this is awkward, but mStartPos already has defTrans[0] in it.
+				   
+				   
+					m1.setPosition(mStartPos + mulPos);
+				   
+			   }
+			   //if (i==0) // + mShapeInst->mNodeTransforms[mBodyNodes[i]].getPosition() //NOPE!
+			   else m1.setPosition(newPos);
+
+			   mPhysicsBodies[i]->getTransform(&mLastTrans[i]);//store transform for when we go dynamic.
+			   mPhysicsBodies[i]->setTransform(m1);
+			   //}
 		   }
 	   }
-      return;
+	   return;
    }
    ///////////////////////////////////////////////////////////////////
    // Else if dynamic, we need to drive nodeTransforms with physics.
@@ -1331,8 +1474,7 @@ void PhysicsShape::processTick( const Move *move )
    {  //SINGLE PLAYER HACK!!!!
       PhysicsShape *servObj = (PhysicsShape*)getServerObject();
 	  if (!mIsDynamic)//relevant in any way?? this is our own bool, not testing physics body directly as above...
-	  {
-		  Con::printf("we're in the weird section that should probably be removed.");
+	  {   //???
 		  setTransform( servObj->mState.getTransform() ); 
 		  mRenderState[0] = servObj->mRenderState[0];
 		  mRenderState[1] = servObj->mRenderState[1];
@@ -1355,19 +1497,29 @@ void PhysicsShape::processTick( const Move *move )
 			  if (i==0) //hip node, or base node on non biped model, the only node with no joint.
 			  {
 				  globalPos = m1.getPosition();
-				  if (mCurrentTick==1) {
-					  mStartMat = m1;
-					  mStartMat.setPosition(Point3F(0,0,0));
-					  mStartMat.invertTo(&mInvStartMat);
-					  mStartPos = globalPos;
-				  }
+				  //if (mCurrentTick==1) {
+				  mStartMat = m1;
+				  //mStartMat.setPosition(Point3F(0,0,0));
+				  //mStartMat.invertTo(&mInvStartMat);
+				  //mStartPos = globalPos;
+				  //}
 
 				  defTrans = kShape->defaultTranslations[0];
 				  //defTrans /= mObjScale;//we're gonna need to scale models pretty soon as well...
+				  Point3F mulDefTrans;
+				  //mStartMat.mulP(defTrans,&mulDefTrans);
+
 				  newPos =  globalPos - mStartPos;//Here - mult by inverse of startMat?
 				  invShapeTransform.mulP(newPos,&mulPos);
+				  invShapeTransform.mulP(defTrans,&mulDefTrans);
 				  m1 = invShapeTransform * m1;
-				  m1.setPosition(defTrans + mulPos);
+				  //m1.setPosition(defTrans + mulPos);
+				  //Con::printf("globalPos: %f %f %f  mStartPos %f %f %f, newPos %f %f %f, mulPos %f %f %f",
+				//	  globalPos.x,globalPos.y,globalPos.z,mStartPos.x,mStartPos.y,mStartPos.z,
+				//	  newPos.x,newPos.y,newPos.z,mulPos.x,mulPos.y,mulPos.z);
+				  m1.setPosition(mulPos - mulDefTrans);
+				  //Con::printf("setting hip node,  mulPos %f %f %f, newPos %f %f %f, globalPos %f %f %f",
+				//	 mulPos.x,mulPos.y,mulPos.z,newPos.x,newPos.y,newPos.z,globalPos.x,globalPos.y,globalPos.z);
 				  mShapeInst->mNodeTransforms[mBodyNodes[i]] = m1;
 
 			  } else { //all other nodes, position is relative to parent
@@ -1758,6 +1910,400 @@ S32 PhysicsShape::getContactBody()
 {
 	return mContactBody;
 }
+
+
+void PhysicsShape::setPosition(Point3F pos)
+{
+	if (isServerObject())
+	{        //SINGLE PLAYER HACK
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setPosition(pos);
+		//So weird, can't find MoveMask anymore?? How and where does Torque handle normal move ghosting again? Hmmm
+	}
+
+	MatrixF shapeTransform = getTransform();	
+	shapeTransform.setPosition(pos);
+	setTransform(shapeTransform);
+	
+	return;
+}
+
+/////////////////////////////////////////////////////////////
+
+bool PhysicsShape::setCurrentSeq(S32 seq)
+{	
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		return clientShape->setCurrentSeq(seq);
+	}
+
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mCurrentSeq = seq;
+		_setCurrent();
+		return true;
+	} else {
+		return false;
+	}
+}
+
+//////////////////////////////////////////
+
+bool PhysicsShape::setAmbientSeq(S32 seq)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setAmbientSeq(seq);
+	}
+
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mAmbientSeq = seq;
+		_initAmbient();
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setIdleSeq(S32 seq)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setIdleSeq(seq);
+	}
+
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mIdleSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setWalkSeq(S32 seq)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setWalkSeq(seq);
+	}
+
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mWalkSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setRunSeq(S32 seq)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setRunSeq(seq);
+	}
+
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mRunSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setAttackSeq(S32 seq)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setAttackSeq(seq);
+	}
+
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mAttackSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setBlockSeq(S32 seq)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setBlockSeq(seq);
+	}
+
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mBlockSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setFallSeq(S32 seq)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setFallSeq(seq);
+	}
+
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mFallSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setGetupSeq(S32 seq)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setGetupSeq(seq);
+	}
+
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mGetupSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+////////////////////////////////////////////////////
+
+
+bool PhysicsShape::setAmbientSeq(const char *name)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setAmbientSeq(name);
+	}
+
+	S32 seq = mDataBlock->shape->findSequence( name );
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mAmbientSeq = seq;
+		if (!isServerObject())
+			_initAmbient();
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setIdleSeq(const char *name)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setIdleSeq(name);
+	}
+
+	S32 seq = mDataBlock->shape->findSequence( name );
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mIdleSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setWalkSeq(const char *name)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setWalkSeq(name);
+	}
+	
+	Con::printf("server %d setting walk seq: %s",isServerObject(),name);
+	S32 seq = mDataBlock->shape->findSequence( name );
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mWalkSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setRunSeq(const char *name)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setRunSeq(name);
+	}
+
+	S32 seq = mDataBlock->shape->findSequence( name );
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mRunSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setAttackSeq(const char *name)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setAttackSeq(name);
+	}
+
+	S32 seq = mDataBlock->shape->findSequence( name );
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mAttackSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setBlockSeq(const char *name)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setBlockSeq(name);
+	}
+
+	S32 seq = mDataBlock->shape->findSequence( name );
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mBlockSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setFallSeq(const char *name)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setFallSeq(name);
+	}
+
+	S32 seq = mDataBlock->shape->findSequence( name );
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mFallSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool PhysicsShape::setGetupSeq(const char *name)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setGetupSeq(name);
+	}
+
+	S32 seq = mDataBlock->shape->findSequence( name );
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	{
+		mGetupSeq = seq;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+////////////////////////////////////////////////////
+
+void PhysicsShape::orientToPosition(Point3F pos)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->orientToPosition(pos);
+	}
+	//Do this for both client and server.
+		
+	Point3F bodyPos = getPosition();
+	Point3F diff = pos - bodyPos;
+	Point3F dir;
+	QuatF arc;
+
+	F32 moveThreshold = 0.05;//(set this in script)
+	if ((diff.len()>0.05))//(0.05 = move threshold,
+	{
+		//Con::errorf("setting move target to target body position: %f %f %f",
+		//	   mMoveTarget.x,mMoveTarget.y,mMoveTarget.z);
+
+		Point3F diffNorm = diff;
+		diffNorm.z = 0.0;
+		diffNorm.normalize();
+		//QuatF q(mat);
+		//q.mulP(Point3F(0,1,0),&dir);//dir should now be Y vector multiplied by our world transform, i.e. the direction we are facing.
+
+		dir.set(0,1,0);
+		//Now, rotate around the Z axis so that our Y axis points at the target.
+		dir.normalize(); //just to make sure, should already be.
+
+		arc.shortestArc(diffNorm,dir);
+		if (!(mIsNaN_F(arc.x)||mIsNaN_F(arc.y)||mIsNaN_F(arc.z)||mIsNaN_F(arc.w)))
+		{
+			MatrixF mat;
+			arc.setMatrix(&mat);
+			Point3F myPos = getPosition();
+			mat.setPosition(myPos);
+			setTransform(mat);
+		}
+	}
+}
+
+Point3F PhysicsShape::getClientPosition()
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		return clientShape->getTransform().getPosition();
+	} else return(Point3F(0,0,0));//should never happen.
+}
+
+Point3F PhysicsShape::findGroundPosition(Point3F pos)
+{
+	RayInfo ri;
+	bool raySuccess = mWorld->castGroundRay(pos,pos + Point3F(0,0,-100000),&ri);
+
+	if (raySuccess)
+		return ri.point;
+	else 
+	{
+		Con::printf("ground raycast failed from %f %f %f",pos.x,pos.y,pos.z);
+		return Point3F(0,0,0);
+	}
+}
+
 ////////////////////////////////////////////////////////////////////////
 
 DefineEngineMethod( PhysicsShape, isDestroyed, bool, (),, 
@@ -1851,8 +2397,6 @@ DefineEngineMethod( PhysicsShape, applyRadialImpulseToPart, void, (S32 partIndex
    object->applyRadialImpulseToPart(partIndex,origin,radius,magnitude);
 }
 
-
-
 DefineEngineMethod( PhysicsShape, setDynamic, void, (bool isDynamic),,
    "@brief Sets this object's isDynamic property.\n\n")
 { 
@@ -1869,7 +2413,6 @@ DefineEngineMethod( PhysicsShape, setPartDynamic, void, (int partID,bool isDynam
 DefineEngineMethod( PhysicsShape, setHasGravity, void, (bool hasGravity),,
    "@brief Sets this object's hasGravity property.\n\n")
 { 
-
 	object->setHasGravity(hasGravity);
 }
 
@@ -1883,4 +2426,314 @@ DefineEngineMethod( PhysicsShape, getContactBody, S32, (),,
    "@brief Gets this shape's latest ContactBody.\n\n")
 {  
 	return object->getContactBody();
+}
+
+DefineEngineMethod( PhysicsShape, setPosition, void, (Point3F pos),,
+   "@brief Sets position.\n\n")
+{  
+	object->setPosition(pos);
+}
+
+DefineEngineMethod( PhysicsShape, groundMove, void, (),,
+   "@brief starts movement via ground transforms.\n\n")
+{  
+	object->mIsGroundMoving = true;
+	PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(object->getClientObject());
+	clientShape->mIsGroundMoving = true;
+	//Con::printf("ground moving is set!");
+}
+
+///////////////////////////////////////////////////////
+
+DefineEngineMethod( PhysicsShape, setAmbientSeq, bool, (S32 seq),,
+   "@brief \n\n")
+{  
+	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
+	{
+		object->setAmbientSeq(seq);
+		return true;
+	} else return false;
+}
+
+DefineEngineMethod( PhysicsShape, setIdleSeq, bool, (S32 seq),,
+   "@brief \n\n")
+{  
+	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
+	{
+		object->setIdleSeq(seq);
+		return true;
+	} else return false;
+}
+
+DefineEngineMethod( PhysicsShape, setWalkSeq, bool, (S32 seq),,
+   "@brief \n\n")
+{  
+	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
+	{
+		object->setWalkSeq(seq);
+		return true;
+	} else return false;
+}
+
+DefineEngineMethod( PhysicsShape, setRunSeq, bool, (S32 seq),,
+   "@brief \n\n")
+{  
+	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
+	{
+		object->setRunSeq(seq);
+		return true;
+	} else return false;
+}
+
+DefineEngineMethod( PhysicsShape, setAttackSeq, bool, (S32 seq),,
+   "@brief \n\n")
+{  
+	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
+	{
+		object->setAttackSeq(seq);
+		return true;
+	} else return false;
+}
+
+DefineEngineMethod( PhysicsShape, setBlockSeq, bool, (S32 seq),,
+   "@brief \n\n")
+{  
+	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
+	{
+		object->setBlockSeq(seq);
+		return true;
+	} else return false;
+}
+
+DefineEngineMethod( PhysicsShape, setFallSeq, bool, (S32 seq),,
+   "@brief \n\n")
+{  
+	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
+	{
+		object->setFallSeq(seq);
+		return true;
+	} else return false;
+}
+
+DefineEngineMethod( PhysicsShape, setGetupSeq, bool, (S32 seq),,
+   "@brief \n\n")
+{  
+	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
+	{
+		object->setGetupSeq(seq);
+		return true;
+	} else return false;
+}
+
+///////////////////////////////////////////////////////
+
+DefineEngineMethod( PhysicsShape, getAmbientSeq, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mAmbientSeq;	
+}
+
+DefineEngineMethod( PhysicsShape, getIdleSeq, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mIdleSeq;	
+}
+
+DefineEngineMethod( PhysicsShape, getWalkSeq, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mWalkSeq;	
+}
+
+DefineEngineMethod( PhysicsShape, getRunSeq, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mRunSeq;	
+}
+
+DefineEngineMethod( PhysicsShape, getAttackSeq, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mAttackSeq;	
+}
+
+DefineEngineMethod( PhysicsShape, getBlockSeq, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mBlockSeq;	
+}
+
+DefineEngineMethod( PhysicsShape, getFallSeq, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mFallSeq;	
+}
+
+DefineEngineMethod( PhysicsShape, getGetupSeq, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mGetupSeq;	
+}
+
+///////////////////////////////////////////////////////
+
+DefineEngineMethod( PhysicsShape, getAmbientSeqName, const char *, (),,
+   "@brief \n\n")
+{  
+	return object->mShapeInst->getShape()->getSequenceName(object->mAmbientSeq);
+}
+
+DefineEngineMethod( PhysicsShape, getIdleSeqName, const char *, (),,
+   "@brief \n\n")
+{  
+	return object->mShapeInst->getShape()->getSequenceName(object->mIdleSeq);	
+}
+
+DefineEngineMethod( PhysicsShape, getWalkSeqName, const char *, (),,
+   "@brief \n\n")
+{  
+	return object->mShapeInst->getShape()->getSequenceName(object->mWalkSeq);	
+}
+
+DefineEngineMethod( PhysicsShape, getRunSeqName, const char *, (),,
+   "@brief \n\n")
+{  
+	return object->mShapeInst->getShape()->getSequenceName(object->mRunSeq);	
+}
+
+DefineEngineMethod( PhysicsShape, getAttackSeqName, const char *, (),,
+   "@brief \n\n")
+{  
+	return object->mShapeInst->getShape()->getSequenceName(object->mAttackSeq);	
+}
+
+DefineEngineMethod( PhysicsShape, getBlockSeqName, const char *, (),,
+   "@brief \n\n")
+{  
+	return object->mShapeInst->getShape()->getSequenceName(object->mBlockSeq);	
+}
+
+DefineEngineMethod( PhysicsShape, getFallSeqName, const char *, (),,
+   "@brief \n\n")
+{  
+	return object->mShapeInst->getShape()->getSequenceName(object->mFallSeq);	
+}
+
+DefineEngineMethod( PhysicsShape, getGetupSeqName, const char *, (),,
+   "@brief \n\n")
+{  
+	return object->mShapeInst->getShape()->getSequenceName(object->mGetupSeq);	
+}
+///////////////////////////////////////////////////////
+
+DefineEngineMethod( PhysicsShape, setAmbientSeqByName, bool, (const char* name),,
+   "@brief \n\n")
+{  
+	return object->setAmbientSeq(name);
+}
+
+DefineEngineMethod( PhysicsShape, setIdleSeqByName, bool, (const char* name),,
+   "@brief \n\n")
+{  
+	return object->setIdleSeq(name);
+}
+
+DefineEngineMethod( PhysicsShape, setWalkSeqByName, bool, (const char* name),,
+   "@brief \n\n")
+{  
+	return object->setWalkSeq(name);
+}
+
+DefineEngineMethod( PhysicsShape, setRunSeqByName, bool, (const char* name),,
+   "@brief \n\n")
+{  
+	return object->setRunSeq(name);
+}
+
+DefineEngineMethod( PhysicsShape, setAttackSeqByName, bool, (const char* name),,
+   "@brief \n\n")
+{  
+	return object->setAttackSeq(name);
+}
+
+DefineEngineMethod( PhysicsShape, setBlockSeqByName, bool, (const char* name),,
+   "@brief \n\n")
+{  
+	return object->setBlockSeq(name);
+}
+
+DefineEngineMethod( PhysicsShape, setFallSeqByName, bool, (const char* name),,
+   "@brief \n\n")
+{  
+	return object->setFallSeq(name);
+}
+
+DefineEngineMethod( PhysicsShape, setGetupSeqByName, bool, (const char* name),,
+   "@brief \n\n")
+{  
+	return object->setGetupSeq(name);
+}
+
+///////////////////////////////////////////////////
+
+DefineEngineMethod( PhysicsShape, seqIdle, void, (),,
+   "@brief.\n\n")
+{  
+	object->setCurrentSeq(object->mIdleSeq);
+}
+
+DefineEngineMethod( PhysicsShape, seqWalk, void, (),,
+   "@brief.\n\n")
+{  
+	object->setCurrentSeq(object->mWalkSeq);
+}
+
+DefineEngineMethod( PhysicsShape, seqRun, void, (),,
+   "@brief.\n\n")
+{  
+	object->setCurrentSeq(object->mRunSeq);
+}
+
+DefineEngineMethod( PhysicsShape, seqAttack, void, (),,
+   "@brief.\n\n")
+{  
+	object->setCurrentSeq(object->mAttackSeq);
+}
+
+DefineEngineMethod( PhysicsShape, seqBlock, void, (),,
+   "@brief.\n\n")
+{  
+	object->setCurrentSeq(object->mBlockSeq);
+}
+
+DefineEngineMethod( PhysicsShape, seqFall, void, (),,
+   "@brief.\n\n")
+{  
+	object->setCurrentSeq(object->mFallSeq);
+}
+
+DefineEngineMethod( PhysicsShape, seqGetup, void, (),,
+   "@brief.\n\n")
+{  
+	object->setCurrentSeq(object->mGetupSeq);
+}
+
+/////////////////////////////////////////////////////
+
+DefineEngineMethod( PhysicsShape, orientToPos, void, (Point3F pos),,
+   "@brief.\n\n")
+{  
+	object->orientToPosition(pos);
+}
+
+DefineEngineMethod( PhysicsShape, getClientPosition, Point3F, (),,
+   "@brief.\n\n")
+{  
+	return object->getClientPosition();
+}
+
+DefineEngineMethod( PhysicsShape, findGroundPosition, Point3F, (Point3F pos),,
+   "@brief.\n\n")
+{  
+	return object->findGroundPosition(pos);
 }

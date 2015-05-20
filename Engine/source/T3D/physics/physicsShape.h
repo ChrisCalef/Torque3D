@@ -222,8 +222,18 @@ public: //protected:
    /// Enables automatic playing of the animation named "ambient" (if it exists) 
    /// when the PhysicsShape is loaded.
    bool mPlayAmbient;
+
    S32 mAmbientSeq;
-   TSThread* mAmbientThread;
+   S32 mCurrentSeq;//This will be set to whatever sequence we are currently playing, need one per thread when we get that far.
+   S32 mIdleSeq;
+   S32 mWalkSeq;
+   S32 mRunSeq;
+   S32 mAttackSeq;
+   S32 mBlockSeq;
+   S32 mFallSeq;
+   S32 mGetupSeq;
+
+   TSThread* mAmbientThread;//Really this should be called mActiveThread now...
 
    /// If a specified to create one in the PhysicsShape data, this is the 
    /// subshape created when this PhysicsShape is destroyed.
@@ -231,12 +241,15 @@ public: //protected:
    SimObjectPtr< PhysicsShape > mDestroyedShape;
 
    
-   
    bool mHasGravity;// Disables gravity on this object if not set to true.
    bool mIsDynamic;// Sets object to kinematic if true.
    bool mIsArticulated;// If true, shape maintains arrays of PhysicsBody and PhysicsJoint objects, instead of one PhysicsBody.
+   bool mIsGroundMoving;//Probably not the final answer for this, but trying it out for testing. 
    S32 mShapeID;    //Database ID of the physicsShape, to find all the physicsShapePart objects with body and joint data.
    S32 mCurrentTick;
+   F32 mLastThreadPos;
+   Point3F mLastGroundTrans;
+   QuatF mLastGroundRot;
 
    ///
    enum MaskBits 
@@ -251,6 +264,8 @@ public: //protected:
    bool _createShape();
 
    void _initAmbient();
+
+   void _setCurrent();
   
    ///
    void _applyCorrection( const MatrixF &mat );
@@ -315,6 +330,8 @@ public:
    /// such as Prefab need to make use of this.
    void storeRestorePos();
 
+   void orientToPosition(Point3F pos);
+
    PhysicsBody *getPhysicsRep();
    PhysicsJoint *getPhysicsJoint();
    void setJointTarget(QuatF &target);
@@ -323,6 +340,34 @@ public:
    void setDynamic(bool isDynamic);
    void setPartDynamic(S32 partID,bool isDynamic);
    S32 getContactBody();
+
+   void setPosition(Point3F pos);
+
+   Point3F getClientPosition();//probably temporary, still working out ghosting strategy
+   
+   Point3F findGroundPosition(Point3F pos);//use our mWorld to do a ground raycast and return the contact point.
+
+   //NOTE: all this logic would be just as useful in a setting without physics, consider moving up or over to somewhere else.
+   bool setAmbientSeq(const char *name);
+   bool setIdleSeq(const char *name);
+   bool setWalkSeq(const char *name);
+   bool setRunSeq(const char *name);
+   bool setAttackSeq(const char *name);
+   bool setBlockSeq(const char *name);
+   bool setFallSeq(const char *name);
+   bool setGetupSeq(const char *name);
+
+   bool setAmbientSeq(S32);
+   bool setIdleSeq(S32);
+   bool setWalkSeq(S32);
+   bool setRunSeq(S32);
+   bool setAttackSeq(S32);
+   bool setBlockSeq(S32);
+   bool setFallSeq(S32);
+   bool setGetupSeq(S32);
+
+   bool setCurrentSeq(S32);
+
 };
 
 #endif // _PHYSICSSHAPE_H_

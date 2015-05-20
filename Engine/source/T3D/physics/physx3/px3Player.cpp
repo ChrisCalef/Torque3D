@@ -64,23 +64,23 @@ void Px3Player::init( const char *type,
                      SceneObject *obj, 
                      PhysicsWorld *world )
 {
-   AssertFatal( obj, "Px3Player::init - Got a null scene object!" );
-   AssertFatal( world, "Px3Player::init - Got a null world!" );
-   AssertFatal( dynamic_cast<Px3World*>( world ), "Px3Player::init - The world is the wrong type!" );
+	AssertFatal( obj, "Px3Player::init - Got a null scene object!" );
+	AssertFatal( world, "Px3Player::init - Got a null world!" );
+	AssertFatal( dynamic_cast<Px3World*>( world ), "Px3Player::init - The world is the wrong type!" );
 
-   // Cleanup any previous controller.
-   _releaseController();
+	// Cleanup any previous controller.
+	_releaseController();
 
-   mObject = obj;
-   mWorld = (Px3World*)world;
-   mOriginOffset = size.z * 0.5f;
+	mObject = obj;
+	mWorld = (Px3World*)world;
+	mOriginOffset = size.z * 0.5f;
 
 	physx::PxCapsuleControllerDesc desc;
-   desc.contactOffset = mSkinWidth;
-   desc.radius = getMax( size.x, size.y ) * 0.5f;
-   desc.radius -= mSkinWidth;
-   desc.height = size.z - ( desc.radius * 2.0f );
-   desc.height -= mSkinWidth * 2.0f;
+	desc.contactOffset = mSkinWidth;
+	desc.radius = getMax( size.x, size.y ) * 0.5f;
+	desc.radius -= mSkinWidth;
+	desc.height = size.z - ( desc.radius * 2.0f );
+	desc.height -= mSkinWidth * 2.0f;
 	desc.climbingMode = physx::PxCapsuleClimbingMode::eCONSTRAINED;
 	desc.position.set( 0, 0, 0 );
 	desc.upDirection = physx::PxVec3(0,0,1);
@@ -92,21 +92,21 @@ void Px3Player::init( const char *type,
 
 	mController = mWorld->createController( desc );
 
-   mWorld->getStaticChangedSignal().notify( this, &Px3Player::_onStaticChanged );
-   physx::PxRigidDynamic *kineActor = mController->getActor();
+	mWorld->getStaticChangedSignal().notify( this, &Px3Player::_onStaticChanged );
+	physx::PxRigidDynamic *kineActor = mController->getActor();
 
-   //player only has one shape
+	//player only has one shape
 	physx::PxShape *shape = px3GetFirstShape(kineActor);
 	physx::PxFilterData colData;
 	colData.word0 = PX3_PLAYER;
 	shape->setSimulationFilterData(colData);
 	shape->setQueryFilterData(colData);
 
-   //store geometry for later use in findContact calls
-   shape->getCapsuleGeometry(mGeometry);
+	//store geometry for later use in findContact calls
+	shape->getCapsuleGeometry(mGeometry);
 
-   mUserData.setObject( obj );
-   kineActor->userData = &mUserData;
+	mUserData.setObject( obj );
+	kineActor->userData = &mUserData;
 
 }
 

@@ -1360,15 +1360,19 @@ bool TerrainBlock::loadTerrainData( const char *heightFile,const char *textureFi
 	U8 texData;
 	if (fs.open(textureFile,Torque::FS::File::Read))
 	{
-		//UH OH. It appears that the heightmap and textureRes properties have to be the same,
-		//or else I'm misunderstanding what textureRes is.
-		
+		//HERE: This needs a whole new system, instead of mapping flightgear layers to individual T3D layers, we need to use
+		// the flightgear layer to map to a whole set of T3D textures, assigned via internal logic specific to area type.
 		for (U32 xx=0;xx<getBlockSize();xx++)
 		{	
 			for (U32 yy=0;yy<getBlockSize();yy++)
 			{
 				fs.setPosition((yy*getBlockSize()*sizeof(U8)) + (xx*sizeof(U8)));
 				fs.read(&texData);
+				
+				//HMMM. What we should really be doing here is defining areas of a certain type, and then later run through
+				//these regions one by one and define them using local rules.
+				
+				//Old way - just map textures 1 to 1
 				U8 index = texData - 1;//Flightgear puts out 1-based numbers, here we are 0-based.
 				if ((index >= 0)&&(index < material_count))
 					terrFile->setLayerIndex( xx, yy, index );

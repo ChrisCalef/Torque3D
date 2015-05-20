@@ -98,22 +98,25 @@ bool Px3Body::init(   PhysicsCollision *shape,
    const bool isDebris = mBodyFlags & BF_DEBRIS;
    const bool hasGravity = mBodyFlags & BF_GRAVITY;
 
-   mActor = gPhysics3SDK->createRigidDynamic(physx::PxTransform(physx::PxIDENTITY()));
-   physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
-
-   if ( isKinematic )
-   {		
-		actor->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
-		actor->setMass(getMax( mass, 1.0f ));//wait, shouldn't even matter with kinematic?
-   }
-   else if ( mass <= 0.0f )
+   if (mass > 0.0)
    {
-	   actor->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
-       mIsStatic = true;
+	   mActor = gPhysics3SDK->createRigidDynamic(physx::PxTransform(physx::PxIDENTITY()));
+	   physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
+
+	   if ( isKinematic )
+	   {		
+		   actor->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
+		   actor->setMass(getMax( mass, 1.0f ));//wait, shouldn't even matter with kinematic?
+	   }
+   } else {
+	   mActor = gPhysics3SDK->createRigidStatic(physx::PxTransform(physx::PxIDENTITY()));
+	   physx::PxRigidStatic *actor = mActor->is<physx::PxRigidStatic>();
+	   mIsStatic = true;
    }
+
    //void PxRigidDynamic::setSolverIterationCounts(PxU32 minPositionIters, PxU32 minVelocityIters);
    //Defaults to (4,1)
-   actor->setSolverIterationCounts(4,1);//Hmm, higher doesn't seem to help.
+   //actor->setSolverIterationCounts(4,1);//Hmm, higher doesn't seem to help.
 
    if (hasGravity==false)
 		mActor->setActorFlag(physx::PxActorFlag::eDISABLE_GRAVITY,true);
@@ -157,15 +160,17 @@ bool Px3Body::init(   PhysicsCollision *shape,
       pShape->setQueryFilterData(colData);
    }
 
+   //Con::printf("creating new physics body, mass %f, classname %s",mass,obj->getClassName());
+
    //mass & intertia has to be set after creating the shape
    if ( mass > 0.0f )
    {
-		physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
-		physx::PxRigidBodyExt::setMassAndUpdateInertia(*actor,mass);
-      if(mBodyFlags & BF_CCD)
-         actor->setRigidBodyFlag(physx::PxRigidBodyFlag::eENABLE_CCD, true);
-      else
-         actor->setRigidBodyFlag(physx::PxRigidBodyFlag::eENABLE_CCD, false);
+	   physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
+	   physx::PxRigidBodyExt::setMassAndUpdateInertia(*actor,mass);
+	   if(mBodyFlags & BF_CCD)
+		   actor->setRigidBodyFlag(physx::PxRigidBodyFlag::eENABLE_CCD, true);
+	   else
+		   actor->setRigidBodyFlag(physx::PxRigidBodyFlag::eENABLE_CCD, false);
    }
 
 

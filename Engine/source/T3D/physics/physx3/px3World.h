@@ -84,6 +84,7 @@ public:
 	virtual void onDebugDraw( const SceneRenderState *state, ColorI color );
 	virtual void reset() {}
 	virtual bool castRay( const Point3F &startPnt, const Point3F &endPnt, RayInfo *ri, const Point3F &impulse );
+	virtual bool castGroundRay( const Point3F &startPnt, const Point3F &endPnt, RayInfo *ri );
 	virtual PhysicsBody* castRay( const Point3F &start, const Point3F &end, U32 bodyTypes = BT_All );
 	virtual void explosion( const Point3F &pos, F32 radius, F32 forceMagnitude ); 
 	virtual bool isEnabled() const { return mIsEnabled; }

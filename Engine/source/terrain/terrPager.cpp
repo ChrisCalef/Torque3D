@@ -36,7 +36,7 @@ ConsoleDocClass( TerrainPager,
 TerrainPager::TerrainPager()
 {
 	mCurrentTick = 0;
-	mTickInterval = 10;//slow us down to three times a second instead of thirty.
+	mTickInterval = 10;
 	mSkyboxRes = 800;
 
 	mLastSkyboxTick = 0;
@@ -144,13 +144,23 @@ bool TerrainPager::onAdd()
 		return false;
 	
 	
-	terrain_materials.push_back( "city1" );
-	terrain_materials.push_back( "forest1a" );
-	terrain_materials.push_back( "drycrop2" );
-	terrain_materials.push_back( "grass_green_hires" );
-	terrain_materials.push_back( "sand_hires" );
-	terrain_materials.push_back( "water" );
-	terrain_materials.push_back( "asphalt" );
+	//terrain_materials.push_back( "city1" );
+	//terrain_materials.push_back( "forest1a" );
+	//terrain_materials.push_back( "drycrop2" );
+	//terrain_materials.push_back( "grass_green_hires" );
+	//terrain_materials.push_back( "sand_hires" );
+	//terrain_materials.push_back( "water" );
+	//terrain_materials.push_back( "asphalt" );
+
+	//FIX!! Need to read materials from terrain block
+	terrain_materials.push_back( "TT_Gravel_02" );
+	terrain_materials.push_back( "TT_Grass_01" );
+	terrain_materials.push_back( "TT_Grass_20" );
+	terrain_materials.push_back( "TT_Rock_14" );
+	terrain_materials.push_back( "TT_Sand_01" );
+	terrain_materials.push_back( "TT_Snow_01" );
+	terrain_materials.push_back( "TT_Snow_02" );
+	terrain_materials.push_back( "TT_Mud_07" );
 
 	Con::printf("Terrain pager skybox path: %s",mD.mSkyboxPath.c_str());
 
@@ -181,6 +191,12 @@ bool TerrainPager::onAdd()
 			
 			mD.mTileWidthLongitude = mD.mDegreesPerMeterLongitude * mD.mTileWidth;
 			mD.mTileWidthLatitude = mD.mDegreesPerMeterLatitude * mD.mTileWidth;
+
+			Con::printf("terrain materials: %d",mTerrain->mBaseTextures.size());
+			//for (U32 i=0;i<mTerrain->mBaseTextures.size();i++)
+			//{
+			//	Con::printf("material %d: %s",i,mTerrain->mBaseTextures[i].??? // Is there any way to get name back out??
+			//}
 		}
 	}
 	
@@ -227,7 +243,7 @@ void TerrainPager::processTick()
 	{//Check to make sure we have a reasonable player location. [NOTE: Do *not* make player spawn at perfect (0,0,0)!]
 		return;//No player yet.
 	}
-	
+
 	if (mLoadState==0)
 	{//Just found our first useful client position.
 		Con::printf("terrainPager first client info: long/lat %f %f, pos %f %f",
@@ -331,20 +347,19 @@ void TerrainPager::processTick()
 			mSentSkyboxRequest = true;
 		}
 	}
-
+	
 	if (mUseDataSource)
 	{
 		mWorldDataSource->tick();
 	}
-
-	//if (mCurrentTick % 10 == 0)
-	//{
-	//	Con::printf("load state: %d",mLoadState);
-	//}
+	
 	if ((mCurrentTick % 60 == 0)&&(mUseDataSource))
 	{
 		Con::executef(this,"UpdateSkybox");//hell with it, this takes almost no time, do it every couple of seconds for now.
 	}
+	
+
+
 	/*
 	//Now, do this in the second tick, or whenever we're ready.
 	if (mUseDataSource && !mLoadedTileGrid && mWorldDataSource->mReadyForRequests)

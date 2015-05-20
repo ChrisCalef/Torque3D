@@ -770,6 +770,8 @@ class TSThread
    TSThread(TSShapeInstance*);
    TSThread() {}
 
+public:
+
    void setSequence(S32 seq, F32 pos);
    void transitionToSequence(S32 seq, F32 pos, F32 duration, bool continuePlay);
 
@@ -793,7 +795,7 @@ class TSThread
    S32 getKeyframeNumber();
    void setKeyframeNumber(S32 kf);
 
-public:
+//public:
 
    TSShapeInstance * getShapeInstance() { return mShapeInstance; }
    bool hasSequence() const { return sequence >= 0; }

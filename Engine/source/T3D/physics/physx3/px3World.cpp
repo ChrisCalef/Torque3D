@@ -395,51 +395,101 @@ void Px3World::unlockScene()
 
 bool Px3World::castRay( const Point3F &startPnt, const Point3F &endPnt, RayInfo *ri, const Point3F &impulse )
 {
-    
+
 	physx::PxVec3 orig = px3Cast<physx::PxVec3>( startPnt );
-   physx::PxVec3 dir = px3Cast<physx::PxVec3>( endPnt - startPnt );
-   physx::PxF32 maxDist = dir.magnitude();
-   dir.normalize();
+	physx::PxVec3 dir = px3Cast<physx::PxVec3>( endPnt - startPnt );
+	physx::PxF32 maxDist = dir.magnitude();
+	dir.normalize();
 
-   U32 groups = 0xffffffff;
-   groups &= ~( PX3_TRIGGER ); // No trigger shapes!
+	U32 groups = 0xffffffff;
+	groups &= ~( PX3_TRIGGER ); // No trigger shapes!
 
-   physx::PxHitFlags outFlags(physx::PxHitFlag::eDISTANCE | physx::PxHitFlag::eIMPACT | physx::PxHitFlag::eNORMAL);
-   physx::PxQueryFilterData filterData(physx::PxQueryFlag::eSTATIC|physx::PxQueryFlag::eDYNAMIC);
-   filterData.data.word0 = groups;
-   physx::PxRaycastBuffer buf;
+	physx::PxHitFlags outFlags(physx::PxHitFlag::eDISTANCE | physx::PxHitFlag::eIMPACT | physx::PxHitFlag::eNORMAL);
+	physx::PxQueryFilterData filterData(physx::PxQueryFlag::eSTATIC|physx::PxQueryFlag::eDYNAMIC);
+	filterData.data.word0 = groups;
+	physx::PxRaycastBuffer buf;
 
-   if(!mScene->raycast(orig,dir,maxDist,buf,outFlags,filterData))
-	  return false;
-   if(!buf.hasBlock)
-	 return false;
+	if(!mScene->raycast(orig,dir,maxDist,buf,outFlags,filterData))
+		return false;
+	if(!buf.hasBlock)
+		return false;
 
 	const physx::PxRaycastHit hit = buf.block;
-   physx::PxRigidActor *actor = hit.actor;
-   PhysicsUserData *userData = PhysicsUserData::cast( actor->userData );
+	physx::PxRigidActor *actor = hit.actor;
+	PhysicsUserData *userData = PhysicsUserData::cast( actor->userData );
 
-   if ( ri )
-   {
-      ri->object = ( userData != NULL ) ? userData->getObject() : NULL;
-      
-      if ( ri->object == NULL )
+	if ( ri )
+	{
+		ri->object = ( userData != NULL ) ? userData->getObject() : NULL;
 
-      ri->distance = hit.distance;
-      ri->normal = px3Cast<Point3F>( hit.normal );
-      ri->point = px3Cast<Point3F>( hit.position );
-      ri->t = maxDist / hit.distance;
-   }
+		if ( ri->object == NULL )
+			ri->distance = hit.distance;
 
-   if ( impulse.isZero() ||
-        !actor->isRigidDynamic() ||
-        actor->is<physx::PxRigidDynamic>()->getRigidDynamicFlags() & physx::PxRigidDynamicFlag::eKINEMATIC )
-      return true;
-  
-   physx::PxRigidBody *body = actor->is<physx::PxRigidBody>();
-   physx::PxVec3 force = px3Cast<physx::PxVec3>( impulse );
-   physx::PxRigidBodyExt::addForceAtPos(*body,force,hit.position,physx::PxForceMode::eIMPULSE);
+		ri->normal = px3Cast<Point3F>( hit.normal );
+		ri->point = px3Cast<Point3F>( hit.position );
+		ri->t = maxDist / hit.distance;
+		//Con::printf("raycast hit a point: %f %f %f",ri->point.x,ri->point.y,ri->point.z);
+	}
 
-   return true;
+	if ( impulse.isZero() ||
+		!actor->isRigidDynamic() ||
+		actor->is<physx::PxRigidDynamic>()->getRigidDynamicFlags() & physx::PxRigidDynamicFlag::eKINEMATIC )
+		return true;
+
+	physx::PxRigidBody *body = actor->is<physx::PxRigidBody>();
+	physx::PxVec3 force = px3Cast<physx::PxVec3>( impulse );
+	physx::PxRigidBodyExt::addForceAtPos(*body,force,hit.position,physx::PxForceMode::eIMPULSE);
+
+	return true;
+}
+
+bool Px3World::castGroundRay( const Point3F &startPnt, const Point3F &endPnt, RayInfo *ri )
+{
+	//Con::printf("ground raycast start point: %f %f %f    end point: %f %f %f",startPnt.x,startPnt.y,startPnt.z,endPnt.x,endPnt.y,endPnt.z);
+	
+	physx::PxVec3 orig = px3Cast<physx::PxVec3>( startPnt );
+	physx::PxVec3 dir = px3Cast<physx::PxVec3>( endPnt - startPnt );
+	physx::PxF32 maxDist = dir.magnitude();
+	dir.normalize();
+
+	U32 groups = 0xffffffff;
+	groups &= ~( PX3_TRIGGER ); // No trigger shapes!
+
+	physx::PxHitFlags outFlags(physx::PxHitFlag::eDISTANCE | physx::PxHitFlag::eIMPACT | physx::PxHitFlag::eNORMAL);
+	physx::PxQueryFilterData filterData(physx::PxQueryFlag::eSTATIC);//|physx::PxQueryFlag::eDYNAMIC //HMM, not getting any hits, this is the only thing I changed...
+	filterData.data.word0 = groups;
+	physx::PxRaycastBuffer buf;
+
+	if(!mScene->raycast(orig,dir,maxDist,buf,outFlags,filterData))
+	{
+		//Con::printf("scene raycast failed! orig %f %f %f  dir %f %f %f",orig.x,orig.y,orig.z,dir.x,dir.y,dir.z);
+		return false;
+	}
+	if(!buf.hasBlock)
+	{
+		Con::printf("raycast buffer block failed!");
+		return false;
+	}
+
+	const physx::PxRaycastHit hit = buf.block;
+	physx::PxRigidActor *actor = hit.actor;
+	PhysicsUserData *userData = PhysicsUserData::cast( actor->userData );
+
+	if ( ri )
+	{
+		ri->object = ( userData != NULL ) ? userData->getObject() : NULL;
+
+		if ( ri->object == NULL )
+			ri->distance = hit.distance;
+
+		ri->normal = px3Cast<Point3F>( hit.normal );
+		ri->point = px3Cast<Point3F>( hit.position );
+		ri->t = maxDist / hit.distance;
+		//Con::printf("ground raycast hit a point: %f %f %f",ri->point.x,ri->point.y,ri->point.z);
+	} else 
+		Con::printf("ground raycast hit nothing!");
+	
+	return true;
 }
 
 PhysicsBody* Px3World::castRay( const Point3F &start, const Point3F &end, U32 bodyTypes )
@@ -654,10 +704,16 @@ DefineEngineFunction( physx3CastRay, S32, (Point3F start, Point3F vec, U32 bodyT
 	   return 0;
    }
 }
-//DefineEngineMethod( Px3World, physx3CastRay, void, ( Point3F start, Point3F vec ),, "Cast a physx ray from start in direction vec." )
-//{
-//   
-//}
+
+DefineEngineFunction( physx3CastGroundRay, Point3F, ( Point3F start ),, "Cast a physx ray toward the ground, return the contact point." )
+{
+   Px3World *kWorld = static_cast<Px3World *>(PHYSICSMGR->getWorld( "client" ));
+   RayInfo ri;
+
+   kWorld->castGroundRay(start,start + Point3F(0,0,-100000),&ri);
+
+   return ri.point; 
+}
 
 /*
 void PhysicsForce::attach( const Point3F &start, const Point3F &direction, F32 maxDist )
