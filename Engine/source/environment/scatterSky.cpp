@@ -329,7 +329,7 @@ void ScatterSky::initPersistFields()
          "Affects the size of the sun's disk." );
 
       addField( "colorizeAmount",      TypeF32,    Offset( mColorizeAmt, ScatterSky ),
-         "Controls how much the the alpha component of colorize brigthens the sky. Setting to 0 returns default behavior." );
+         "Controls how much the alpha component of colorize brigthens the sky. Setting to 0 returns default behavior." );
 
       addField( "colorize",            TypeColorF, Offset( mColorize, ScatterSky ),
          "Tints the sky the color specified, the alpha controls the brigthness. The brightness is multipled by the value of colorizeAmt." );
@@ -637,12 +637,13 @@ void ScatterSky::prepRenderImage( SceneRenderState *state )
       return;
 
    // Regular sky render instance.
-   ObjectRenderInst *ri = state->getRenderPass()->allocInst<ObjectRenderInst>();
+   RenderPassManager* renderPass = state->getRenderPass();
+   ObjectRenderInst *ri = renderPass->allocInst<ObjectRenderInst>();
    ri->renderDelegate.bind( this, &ScatterSky::_render );
    ri->type = RenderPassManager::RIT_Sky;
    ri->defaultKey = 10;
    ri->defaultKey2 = 0;
-   state->getRenderPass()->addInst( ri );
+   renderPass->addInst(ri);
 
    // Debug render instance.
    /*
@@ -685,13 +686,13 @@ void ScatterSky::prepRenderImage( SceneRenderState *state )
       mMatrixSet->setSceneProjection(GFX->getProjectionMatrix());
       mMatrixSet->setWorld(GFX->getWorldMatrix());
 
-      ObjectRenderInst *ri = state->getRenderPass()->allocInst<ObjectRenderInst>();
+      ObjectRenderInst *ri = renderPass->allocInst<ObjectRenderInst>();
       ri->renderDelegate.bind( this, &ScatterSky::_renderMoon );
       ri->type = RenderPassManager::RIT_Sky;
       // Render after sky objects and before CloudLayer!
       ri->defaultKey = 5;
       ri->defaultKey2 = 0;
-      state->getRenderPass()->addInst( ri );
+      renderPass->addInst(ri);
    }
 }
 
