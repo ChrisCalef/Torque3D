@@ -35,7 +35,7 @@ dataSource::dataSource(bool listening)
 		mListening = false;
 		mSending = true;
 	}
-	Con::printf("New data source object!!! Source IP: %s\n",mSourceIP);
+	Con::printf("New data source object!!! Source IP: %s listening %d\n",mSourceIP,listening);
 }
 
 dataSource::~dataSource()

@@ -1593,9 +1593,23 @@ public:
    /// @name Object Transforms
    /// @{
 
+   virtual S32 getEyeNode();
+
    /// Returns the eye transform of this shape, IE the eyes of a player
    /// @param   mat   Eye transform (out)
    virtual void getEyeTransform(MatrixF* mat);
+   
+   /// Sets the eye transform of this shape, IE the eyes of a player
+   /// @param   mat   Eye transform (out)
+   virtual void setEyeTransform(MatrixF mat);
+   
+   virtual void setEyePos(Point3F pos);
+
+   virtual void setEyeRot(EulerF rot);
+
+   /// Multiplies the eye transform of this shape by the new matrix
+   /// @param   mat   Eye transform (out)
+   virtual void mulEyeTransform(MatrixF mat);
 
    /// Returns the eye transform of this shape without including mounted images, IE the eyes of a player
    /// @param   mat   Eye transform (out)

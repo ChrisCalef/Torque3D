@@ -1046,7 +1046,6 @@ void TerrainBlock::_updatePhysics()
    }
    else
    {
-      
       _updateTextureIndex();
       // Get empty state of each vert
       bool *holes = new bool[ getBlockSize() * getBlockSize() ];
@@ -1055,12 +1054,14 @@ void TerrainBlock::_updatePhysics()
             holes[ row + (column * getBlockSize()) ] = mFile->isEmptyAt( row, column );
 
       colShape = PHYSICSMGR->createCollision();
+	  //HERE: For an open world project with a terrain paging system, adding every terrain tile in its entirety quickly overwhelms
+	  //the debug renderer, at least, and I wonder what impact it has on performance overall even without debug draw on.
+	  //To make this more reasonable, we need to construct a smaller heightfield for physx, consisting of the area within some 
+	  //radius of the player. Refresh this at something regular but much less than framerate.
       colShape->addHeightfield( mFile->getHeightMap().address(), holes, getBlockSize(), mSquareSize, MatrixF::Identity, this );
 
       delete [] holes;
-   }
-
-   
+   }   
 
    PhysicsWorld *world = PHYSICSMGR->getWorld( isServerObject() ? "server" : "client" );
    mPhysicsRep = PHYSICSMGR->createBody();

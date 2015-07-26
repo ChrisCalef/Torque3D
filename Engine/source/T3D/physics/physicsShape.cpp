@@ -864,7 +864,7 @@ bool PhysicsShape::_createShape()
 	   colShape->addBox(Point3F(0.03,0.02,0.015),localTrans);//TEMP server physics doesn't really matter for our immediate 
 			// purposes, but depending on the application, this could be replaced with a capsule or a character controller.
 
-	   //Oops, just realized this would break everything not articulated, or at least replace it with stupid little colshape
+	   //Oops, just realized this would break everything not articulated, or at least replace it with a colshape
 	   if (mIsArticulated)
 	   {
 		   mPhysicsRep->init(   colShape, 
@@ -1360,7 +1360,7 @@ void PhysicsShape::processTick( const Move *move )
    TSShape *kShape = mShapeInst->getShape();
 
    //Now, this really belongs somewhere over in the ts directory, it is not related to physics at all, but for now testing it here.
-   if ( (mIsGroundMoving) && (mCurrentSeq>=0) && !isServerObject() )
+   if ( (mIsGroundMoving) && (mCurrentSeq>=0) && !isServerObject() && (!mIsDynamic ) )
    {
 	   TSSequence currSeq = kShape->sequences[mCurrentSeq];
 	   //Rots: maybe later, maybe not even necessary this time around.
@@ -1394,8 +1394,6 @@ void PhysicsShape::processTick( const Move *move )
 	   //if (ri.distance > 0.0) 
 	   groundPos = findGroundPosition(tempPos + Point3F(0,0,1));
 	   m1.setPosition(groundPos);
-	   //Con::printf("id %d pos %f %f %f groundTrans: %f %f %f, lastGroundTrans %f %f %f",getId(),pos.x,pos.y,pos.z,
-		//  mulGroundTrans.x,mulGroundTrans.y,mulGroundTrans.z,mLastGroundTrans.x,mLastGroundTrans.y,mLastGroundTrans.z);
 	   setTransform(m1);
 	   mLastGroundTrans = mulGroundTrans;
 
@@ -1493,10 +1491,12 @@ void PhysicsShape::processTick( const Move *move )
 		  for (U32 i=0;i<mPhysicsBodies.size();i++)
 		  {
 			  mPhysicsBodies[i]->getState(&mStates[i]);
+			  F32 mass = mPhysicsBodies[i]->getMass();
 			  m1 = mStates[i].getTransform();
+			  globalPos = m1.getPosition();
+			  //Con::printf("bodypart %d globalPos: %f %f %f mass %f",i,globalPos.x,globalPos.y,globalPos.z,mass);
 			  if (i==0) //hip node, or base node on non biped model, the only node with no joint.
 			  {
-				  globalPos = m1.getPosition();
 				  //if (mCurrentTick==1) {
 				  mStartMat = m1;
 				  //mStartMat.setPosition(Point3F(0,0,0));
@@ -1514,9 +1514,9 @@ void PhysicsShape::processTick( const Move *move )
 				  invShapeTransform.mulP(defTrans,&mulDefTrans);
 				  m1 = invShapeTransform * m1;
 				  //m1.setPosition(defTrans + mulPos);
-				  //Con::printf("globalPos: %f %f %f  mStartPos %f %f %f, newPos %f %f %f, mulPos %f %f %f",
-				//	  globalPos.x,globalPos.y,globalPos.z,mStartPos.x,mStartPos.y,mStartPos.z,
-				//	  newPos.x,newPos.y,newPos.z,mulPos.x,mulPos.y,mulPos.z);
+				  //Con::printf("globalPos: %f %f %f  defTrans %f %f %f, newPos %f %f %f, mulPos %f %f %f",
+					//  globalPos.x,globalPos.y,globalPos.z,defTrans.x,defTrans.y,defTrans.z,
+					//  newPos.x,newPos.y,newPos.z,mulPos.x,mulPos.y,mulPos.z);
 				  m1.setPosition(mulPos - mulDefTrans);
 				  //Con::printf("setting hip node,  mulPos %f %f %f, newPos %f %f %f, globalPos %f %f %f",
 				//	 mulPos.x,mulPos.y,mulPos.z,newPos.x,newPos.y,newPos.z,globalPos.x,globalPos.y,globalPos.z);
@@ -1854,6 +1854,7 @@ void PhysicsShape::setDynamic(bool isDynamic)
 	if (isServerObject())
 	{        //SINGLE PLAYER HACK
 		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		//mPhysicsRep->setDynamic(isDynamic);
 		clientShape->setDynamic(isDynamic);
 		return;
 	}
@@ -1869,21 +1870,26 @@ void PhysicsShape::setDynamic(bool isDynamic)
 			if (isDynamic)
 			{//Add linear/angular velocity
 				Point3F posVel;
-
 				MatrixF curTrans,diffTrans,invLastTrans;
 				mPhysicsBodies[i]->getTransform(&curTrans);
 				posVel = curTrans.getPosition() - mLastTrans[i].getPosition();
+
 				posVel *= 32;//Times tick rate per second
 				mPhysicsBodies[i]->setLinVelocity(posVel);
 
-				EulerF angVel;
-				mLastTrans[i].invertTo(&invLastTrans);
-				diffTrans = curTrans * invLastTrans;
-				angVel = diffTrans.toEuler();
-				//angVel *= 180.0/M_PI;//Maybe?
-				angVel *= 32;//Times tick rate per second.
-				mPhysicsBodies[i]->setAngVelocity(angVel);
-				//Very difficult to see effect, but setAngVelocity does work. Not sure how to turn it up.
+				if (0)//hmm, did I even finish this? where is curTrans coming from?
+				{
+					EulerF angVel;
+					mLastTrans[i].invertTo(&invLastTrans);
+					diffTrans = curTrans * invLastTrans;
+					angVel = diffTrans.toEuler();
+
+					//angVel *= 180.0/M_PI;//Maybe?
+					angVel *= 32;//Times tick rate per second.
+					mPhysicsBodies[i]->setAngVelocity(angVel);
+					Con::printf("setting velocities: lin %f %f %f  ang %f %f %f",posVel.x,posVel.y,posVel.z,angVel.x,angVel.y,angVel.z);
+					//Very difficult to see effect, but setAngVelocity does work. Not sure how to turn it up.
+				}
 			}
 		}
 	}
@@ -1910,7 +1916,6 @@ S32 PhysicsShape::getContactBody()
 {
 	return mContactBody;
 }
-
 
 void PhysicsShape::setPosition(Point3F pos)
 {

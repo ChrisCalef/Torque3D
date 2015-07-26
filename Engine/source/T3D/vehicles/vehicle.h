@@ -39,6 +39,7 @@ class ClippedPolyList;
 struct RenderInst;
 class Vehicle;
 
+class vehicleDataSource;
 //----------------------------------------------------------------------------
 
 struct VehicleData: public ShapeBaseData
@@ -180,6 +181,9 @@ class Vehicle: public ShapeBase
 
    PhysicsBody *mPhysicsRep;
    void _createPhysics();
+
+   bool mUseDataSource;
+   vehicleDataSource *mDataSource;
 
    StateDelta mDelta;
    S32 mPredictionCount;            ///< Number of ticks to predict

@@ -21,6 +21,7 @@ class dataSource
 
 	   unsigned int mCurrentTick;
 	   unsigned int mLastSendTick;//Last time we sent a packet.
+	   unsigned int mLastSendTimeMS;//Last time we sent a packet.
 	   unsigned int mTickInterval;
 	   unsigned int mTalkInterval;
 	   unsigned int mStartDelay;//startup delay time.

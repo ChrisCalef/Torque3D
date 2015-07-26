@@ -124,12 +124,12 @@ void PhysicsPlugin::_debugDraw( SceneManager *graph, const SceneRenderState *sta
    bool debugRenderClient = true;
 
    PhysicsWorld *serverWorld,*clientWorld;
-   if (debugRenderServer)
+   if (0)//(debugRenderServer)
    {
 	   serverWorld = PHYSICSMGR->getWorld( smServerWorldName );
 
-	   if ( serverWorld )
-		   serverWorld->onDebugDraw( state,  ColorI("green") );
+	   //if ( serverWorld )
+		//   serverWorld->onDebugDraw( state,  ColorI("green") );
    }
    if (debugRenderClient)
    {

@@ -335,6 +335,8 @@ FlyingVehicle::FlyingVehicle()
 
    for (S32 i = 0; i < JetAnimCount; i++)
       mJetThread[i] = 0;
+
+   mUseDataSource = true;
 }
 
 FlyingVehicle::~FlyingVehicle()
@@ -423,6 +425,9 @@ void FlyingVehicle::advanceTime(F32 dt)
 
 void FlyingVehicle::updateMove(const Move* move)
 {
+	//if (mUseDataSource)
+	//	return;
+
    PROFILE_SCOPE( FlyingVehicle_UpdateMove );
 
    Parent::updateMove(move);
@@ -478,6 +483,9 @@ void FlyingVehicle::updateMove(const Move* move)
 
 void FlyingVehicle::updateForces(F32 /*dt*/)
 {
+	if (mUseDataSource)
+		return;
+
    PROFILE_SCOPE( FlyingVehicle_UpdateForces );
 
    MatrixF currPosMat;

@@ -45,7 +45,7 @@ TerrainPager::TerrainPager()
 
 	mLoadState = 0;//For now just use numbers, make an enum when you know what the states are going to be.
 
-	mWorldDataSource = NULL;
+	mDataSource = NULL;
 	mSentInitRequests = false;
 	mLoadedTileGrid = false;
 	mSentTerrainRequest = false;
@@ -86,8 +86,8 @@ TerrainPager::~TerrainPager()
 	///Although if they were added to the scene, then they should get deleted automatically on scene exit.
 	mTerrains.clear();
 	mTerrainGrid.clear();
-	if ((mUseDataSource)&&(mWorldDataSource))
-		delete mWorldDataSource;
+	if ((mUseDataSource)&&(mDataSource))
+		delete mDataSource;
 
 	//mSQL->CloseDatabase();
 	//delete mSQL;
@@ -137,6 +137,31 @@ bool TerrainPager::onAdd()
 
 	mD.mSkyboxRes = mSkyboxRes;
 	
+	Con::printf("Terrain Pager ON ADD ----------------------------------------------------------------");
+		
+	mSQL = new SQLiteObject();
+
+	if (mSQL->OpenDatabase("w130n40.db"))//FIX: make map naming convention using lat-lon coordinates at regular intervals. Ultimate solution:
+				// limit db size to something reasonable, and then use a quadtree system to subdivide larger or smaller regions as needed.
+	{
+		char select_query[512],insert_query[512];
+		int id,result;
+		sqlite_resultset *resultSet;
+
+		sprintf(select_query,"SELECT * FROM osmWay;");
+		result = mSQL->ExecuteSQL(select_query);
+		if (result!=0)
+		{		
+			resultSet = mSQL->GetResultSet(result);
+			Con::printf("OPENED MAP DATABASE: results: %d",resultSet->iNumRows);
+			for (U32 i=0;i<resultSet->iNumRows;i++)
+			{
+				id = dAtoi(resultSet->vRows[i]->vColumnValues[0]);
+				Con::printf("Way  %d  type: %s  name: %s",id,resultSet->vRows[i]->vColumnValues[1],resultSet->vRows[i]->vColumnValues[2]);
+			}
+		} else Con::printf("no results from query");
+	} else Con::printf("failed to open database");
+
 	//Con::printf("calling TerrainPager::onAdd() mTileLoadRadius %f, mTileDropRadius %f",
 	//	mTileLoadRadius,mTileDropRadius);
 	
@@ -224,7 +249,7 @@ bool TerrainPager::onAdd()
 	if (mUseDataSource)
 	{
 		Con::printf("Terrain pager is using a worldDataSource.");
-		mWorldDataSource = new worldDataSource(false,&mD);
+		mDataSource = new worldDataSource(false,&mD);
 	}
 
 	Con::executef(this, "onAdd", getIdString());
@@ -264,10 +289,10 @@ void TerrainPager::processTick()
 	}
 	else if (mLoadState==1) 
 	{//Next tick after finding client pos, here we have to split up based on whether we're using a dataSource or not.
-		 if (mWorldDataSource->mReadyForRequests)
+		 if (mDataSource->mReadyForRequests)
 		{
-			mWorldDataSource->addInitTerrainRequest(&mD,mD.mTerrainPath.c_str());
-			mWorldDataSource->addInitSkyboxRequest(mD.mSkyboxRes,0,mD.mSkyboxPath.c_str());
+			mDataSource->addInitTerrainRequest(&mD,mD.mTerrainPath.c_str());
+			mDataSource->addInitSkyboxRequest(mD.mSkyboxRes,0,mD.mSkyboxPath.c_str());
 			Con::printf("TerrainPager sending init requests.");
 			mSentInitRequests = true;
 			mLoadState = 2;
@@ -284,11 +309,11 @@ void TerrainPager::processTick()
 	}
 	else if ((mLoadState==3) &&(mUseDataSource))//Should never get here without mUseDataSource, but for safety..
 	{
-		if (mWorldDataSource->checkTerrainLock()==false)
+		if (mDataSource->checkTerrainLock()==false)
 		{
 			mLoadState=2;//If terrain is no longer locked, then go back and try load again.
 		} else {			
-			mWorldDataSource->tick();
+			mDataSource->tick();
 			if (mCurrentTick++ % mTickInterval == 0)
 				Con::printf("waiting for terrain lock...");
 		}
@@ -296,7 +321,7 @@ void TerrainPager::processTick()
 	}
 	else if ((mLoadState==4) &&(mUseDataSource))//Should never get here without mUseDataSource, but for safety..
 	{//Be very careful, could get stuck here forever and quietly stop checking terrain, if skybox lockfile not deleted.
-		if (mWorldDataSource->checkSkyboxLock()==false)
+		if (mDataSource->checkSkyboxLock()==false)
 		{
 			Con::printf("reloading skybox!!!!");
 			reloadSkybox();
@@ -304,7 +329,7 @@ void TerrainPager::processTick()
 			mLastSkyboxTick = mCurrentTick;
 			mLoadState=10;
 		} else {
-			mWorldDataSource->tick();
+			mDataSource->tick();
 			//if (mCurrentTick++ % mTickInterval == 0)
 			Con::printf("waiting for skybox lock...");
 		}
@@ -335,14 +360,14 @@ void TerrainPager::processTick()
 		//if (mCurrentTick % mTickInterval == 0)
 		//{
 		//	Con::printf("lastSkyboxTick %d, currentTick %d return controls %d, sent request %d",
-		//		mLastSkyboxTick,mCurrentTick,mWorldDataSource->mNumReturnControls,mSentSkyboxRequest);
+		//		mLastSkyboxTick,mCurrentTick,mDataSource->mNumReturnControls,mSentSkyboxRequest);
 		//}
 
-		if ((mUseDataSource)&&(mWorldDataSource->mNumReturnControls==1)&&
+		if ((mUseDataSource)&&(mDataSource->mNumReturnControls==1)&&
 			((S32)mLastSkyboxTick < ((S32)mCurrentTick - (S32)mSkyboxTickInterval))&&
 			(mSentSkyboxRequest == false))
 		{
-			mWorldDataSource->addSkyboxRequest(mTileStartLongitude,mTileStartLatitude,mD.mClientPosLongitude,mD.mClientPosLatitude,mD.mClientPosAltitude);
+			mDataSource->addSkyboxRequest(mTileStartLongitude,mTileStartLatitude,mD.mClientPosLongitude,mD.mClientPosLatitude,mD.mClientPosAltitude);
 			mLoadState = 4;
 			mSentSkyboxRequest = true;
 		}
@@ -350,7 +375,7 @@ void TerrainPager::processTick()
 	
 	if (mUseDataSource)
 	{
-		mWorldDataSource->tick();
+		mDataSource->tick();
 	}
 	
 	if ((mCurrentTick % 60 == 0)&&(mUseDataSource))
@@ -362,7 +387,7 @@ void TerrainPager::processTick()
 
 	/*
 	//Now, do this in the second tick, or whenever we're ready.
-	if (mUseDataSource && !mLoadedTileGrid && mWorldDataSource->mReadyForRequests)
+	if (mUseDataSource && !mLoadedTileGrid && mDataSource->mReadyForRequests)
 		loadTileGrid();
 
 	//Now, if we're past the first couple of ticks, find out if we've changed tiles.	
@@ -385,15 +410,15 @@ void TerrainPager::processTick()
 
 	if (mUseDataSource)
 	{  //First time we can, let's send init requests to set up data source for terrains and skyboxes.
-		if (!mSentInitRequests && mWorldDataSource->mReadyForRequests)
+		if (!mSentInitRequests && mDataSource->mReadyForRequests)
 		{
 			Con::printf("trying to send init requests!");
-			mWorldDataSource->addInitTerrainRequest(&mD,mD.mTerrainPath.c_str());
-			mWorldDataSource->addInitSkyboxRequest(mD.mSkyboxRes,0,mD.mSkyboxPath.c_str());
+			mDataSource->addInitTerrainRequest(&mD,mD.mTerrainPath.c_str());
+			mDataSource->addInitSkyboxRequest(mD.mSkyboxRes,0,mD.mSkyboxPath.c_str());
 			mSentInitRequests = true;
 			return;
 		} else { //Otherwise just give it a regular tick.
-			mWorldDataSource->tick();
+			mDataSource->tick();
 		}
 	}
 	*/
@@ -464,7 +489,7 @@ TerrainBlock *TerrainPager::addTerrainBlock(F32 startLong,F32 startLat)
 	block->mLatitude = startLat;
 	//Con::printf("added a terrainblock, long %f lat %f start %f %f",block->mLongitude,block->mLatitude,startLong,startLat);
 	Point3F blockPos = Point3F(((startLong-mD.mMapCenterLongitude)*mD.mMetersPerDegreeLongitude),
-						(startLat-mD.mMapCenterLatitude)*mD.mMetersPerDegreeLatitude,0);//FIX! need maxHeight/minHeight
+						(startLat-mD.mMapCenterLatitude)*mD.mMetersPerDegreeLatitude,0.0);//FIX! need maxHeight/minHeight
 	//Con::printf("Setting new block position: %f %f %f, long/lat %f %f",blockPos.x,blockPos.y,blockPos.z,startLong,startLat);
 	block->setPosition(blockPos );
 
@@ -738,7 +763,7 @@ void TerrainPager::loadTileGrid()
 						mTerrainGrid[y*mGridSize+x] = addTerrainBlock(kLong,kLat);
 					else if (mUseDataSource)//okay, now we need to make a call to worldDataSource. We should be able to safely assume 
 					{	//we're ready for packets and have already sent our init requests.
-						mWorldDataSource->addTerrainRequest(kLong,kLat);
+						mDataSource->addTerrainRequest(kLong,kLat);
 						mLoadState = 3;//waiting for terrain.
 					}
 				}
@@ -778,8 +803,8 @@ void TerrainPager::loadTileGrid()
 	} 
 	else if (mLoadState==3)//If we did set it to three, meaning we requested data, then make sure
 	{ // right now that we have a lockfile, so we don't think we're done already on the next tick.
-		if (mWorldDataSource->checkTerrainLock()==false)
-			mWorldDataSource->makeTerrainLock();
+		if (mDataSource->checkTerrainLock()==false)
+			mDataSource->makeTerrainLock();
 	}
 }
 
@@ -820,7 +845,7 @@ void TerrainPager::checkTileGrid()
 					mTerrainGrid[y*mGridSize+x] = addTerrainBlock(kLong,kLat);
 				else if (mUseDataSource)
 				{	
-					mWorldDataSource->addTerrainRequest(kLong,kLat);
+					mDataSource->addTerrainRequest(kLong,kLat);
 					mLoadState = 3;//waiting for terrain.
 				}
 				//loadTerrainData kData;
@@ -980,6 +1005,315 @@ void TerrainPager::updateSkyboxConsole()
 {
 	Con::executef(this,"UpdateSkybox");
 }
+
+
+Point3F TerrainPager::convertLatLongToXYZ(Point3F pos)
+{
+	Point3F newPos;
+
+	newPos.x = (pos.x - mD.mMapCenterLongitude) * mD.mMetersPerDegreeLongitude;
+	newPos.y = (pos.y - mD.mMapCenterLatitude) * mD.mMetersPerDegreeLatitude;
+	newPos.z = pos.z;
+	//Con::printf("pos.x %f  mapCenterLong %f metersPerDegreeLong %f",pos.x, mD.mMapCenterLongitude,mD.mMetersPerDegreeLongitude);
+	return newPos;
+}
+
+Point3F TerrainPager::convertLatLongToXYZ(double longitude,double latitude,float altitude)
+{
+	Point3F newPos;
+
+	newPos.x = (float)((longitude - (double)mD.mMapCenterLongitude) * (double)mD.mMetersPerDegreeLongitude);
+	newPos.y = (float)((latitude - (double)mD.mMapCenterLatitude) * (double)mD.mMetersPerDegreeLatitude);
+	newPos.z = altitude;
+	//Con::printf("pos.x %f  mapCenterLong %f metersPerDegreeLong %f",pos.x, mD.mMapCenterLongitude,mD.mMetersPerDegreeLongitude);
+	return newPos;
+}
+
+DefineConsoleMethod( TerrainPager, convertLatLongToXYZ, Point3F, (Point3F pos), , "" )
+{
+	Point3F newPos = object->convertLatLongToXYZ(pos);
+	return newPos;
+}
+
+Point3F TerrainPager::convertXYZToLatLong(Point3F pos)
+{
+	Point3F newPos;
+	newPos.x = mD.mMapCenterLongitude + (pos.x * mD.mDegreesPerMeterLongitude);
+	newPos.y = mD.mMapCenterLatitude + (pos.y * mD.mDegreesPerMeterLatitude);
+	newPos.z = pos.z;
+
+	return newPos;
+}
+
+DefineConsoleMethod( TerrainPager, convertXYZToLatLong, Point3F, (Point3F pos), , "" )
+{
+	Point3F newPos = object->convertXYZToLatLong(pos);
+	return newPos;
+}
+
+void TerrainPager::loadOSM(const char *xml_file)
+{
+	
+	if (!mSQL)
+		return;
+	
+	char select_query[512],insert_query[512],update_query[255],total_queries[56000];
+	int id,result,total_query_len=0;
+	
+	bool findingTag,foundTag;
+	sqlite_resultset *resultSet;
+
+	SimXMLDocument *doc = new SimXMLDocument();
+	doc->registerObject();
+
+	S32 loaded = doc->loadFile(xml_file);
+	if (loaded) 
+	{
+		
+		//Con::errorf("loaded xml file!!!!!");
+		bool osmLoad = false;
+		bool osmBounds = false;
+
+		F32 version,minlat,nodeLat,nodeLon;
+		S32 wayId,bogusId,nodeId;
+		
+
+		osmLoad = doc->pushFirstChildElement("osm");
+		if (doc->attributeExists("version") )
+			version = atof(doc->attribute("version"));
+
+		osmBounds = doc->pushFirstChildElement("bounds");
+		if (doc->attributeExists("minlat") )
+			minlat = atof(doc->attribute("minlat"));
+
+		Con::printf("opened the document %s, osm %d version %f bounds %d minLat %f",xml_file,osmLoad,version,osmBounds,minlat);
+
+
+		//NOTE: All of these separate database calls are very slow. This section could probably be massively optimized if 
+		//we accumulate all of the queries into one big string and then execute it all at once. Or not, but worth testing.
+		sprintf(insert_query,"BEGIN;\n");
+		result = mSQL->ExecuteSQL(insert_query);
+		Con::printf("result %d: %s",result,insert_query);
+		//total_query_len = strlen(total_queries);
+
+		while(doc->nextSiblingElement("node"))
+		{
+			nodeId = atof(doc->attribute("id"));
+			nodeLat = atof(doc->attribute("lat"));
+			nodeLon = atof(doc->attribute("lon"));
+			//Con::printf("node %d lat %f lon %f",nodeId,nodeLat,nodeLon);
+
+			sprintf(insert_query,"INSERT INTO osmNode (osmId,latitude,longitude) VALUES (%d,%f,%f);\n",nodeId,nodeLat,nodeLon);
+			//strcpy(total_queries+total_query_len,insert_query);
+			//total_query_len += strlen(insert_query);
+			result = mSQL->ExecuteSQL(insert_query);			
+			Con::printf("result %d: %s",result,insert_query);
+			foundTag = false;
+			findingTag = doc->pushFirstChildElement("tag");
+			foundTag = findingTag;
+			while (findingTag)
+			{				
+				if (!strcmp(doc->attribute("k"),"name"))
+				{
+					sprintf(insert_query,"UPDATE osmNode SET name='%s' WHERE osmId=%d;\n",doc->attribute("v"),nodeId);
+					//strcpy(total_queries+total_query_len,insert_query);
+					//total_query_len += strlen(insert_query);
+					result = mSQL->ExecuteSQL(insert_query);
+
+				} else if (!strcmp(doc->attribute("k"),"highway")) {
+					sprintf(insert_query,"UPDATE osmNode SET type='%s' WHERE osmId=%d;\n",doc->attribute("v"),nodeId);
+					//strcpy(total_queries+total_query_len,insert_query);
+					//total_query_len += strlen(insert_query);
+					result = mSQL->ExecuteSQL(insert_query);
+
+				} else if (!strcmp(doc->attribute("k"),"building") && !strcmp(doc->attribute("v"),"yes")) {
+					sprintf(insert_query,"UPDATE osmNode SET type='building' WHERE osmId=%d;\n",nodeId);
+					//strcpy(total_queries+total_query_len,insert_query);
+					//total_query_len += strlen(insert_query);
+					result = mSQL->ExecuteSQL(insert_query);
+				}
+				findingTag = doc->nextSiblingElement("tag");
+			}			
+			if (foundTag) doc->popElement();
+		}
+
+		doc->popElement();		
+
+		bool findingMyWay = doc->pushFirstChildElement("way");
+		while(findingMyWay)
+		{
+			wayId = atof(doc->attribute("id"));
+			sprintf(insert_query,"INSERT INTO osmWay (osmId) VALUES (%d);\n",wayId);
+			//strcpy(total_queries+total_query_len,insert_query);
+			//total_query_len += strlen(insert_query);
+			Con::printf("result %d: %s",result,insert_query);
+			result = mSQL->ExecuteSQL(insert_query);
+			//Con::printf("way %d",wayId);
+
+			bool findingNd = doc->pushFirstChildElement("nd");
+			while(findingNd)
+			{
+				S32 nodeId = dAtoi(doc->attribute("ref"));
+				//Con::printf("wayNode %d",nodeId);
+
+				sprintf(insert_query,"INSERT INTO osmWayNode (wayId,nodeId) VALUES (%d,%d);\n",wayId,nodeId);
+				//strcpy(total_queries+total_query_len,insert_query);
+				//total_query_len += strlen(insert_query);
+				Con::printf("result %d: %s",result,insert_query);
+				result = mSQL->ExecuteSQL(insert_query);
+
+				findingNd = doc->nextSiblingElement("nd");
+			}
+			doc->popElement();
+			bool foundTag = false;
+			bool findingTag = doc->pushFirstChildElement("tag");
+			foundTag = findingTag;
+			while (findingTag)
+			{				
+				Con::printf("tag %s : %s",doc->attribute("k"),doc->attribute("v"));
+
+				if (!strcmp(doc->attribute("k"),"name"))
+				{
+					sprintf(insert_query,"UPDATE osmWay SET name='%s' WHERE osmId=%d;\n",doc->attribute("v"),wayId);
+					//strcpy(total_queries+total_query_len,insert_query);
+					//total_query_len += strlen(insert_query);
+					result = mSQL->ExecuteSQL(insert_query);
+
+				} else if (!strcmp(doc->attribute("k"),"highway")) {
+					sprintf(insert_query,"UPDATE osmWay SET type='%s' WHERE osmId=%d;\n",doc->attribute("v"),wayId);
+					//strcpy(total_queries+total_query_len,insert_query);
+					//total_query_len += strlen(insert_query);
+					result = mSQL->ExecuteSQL(insert_query);
+
+				} else if (!strcmp(doc->attribute("k"),"building") && !strcmp(doc->attribute("v"),"yes")) {
+					sprintf(insert_query,"UPDATE osmWay SET type='building' WHERE osmId=%d;\n",wayId);
+					//strcpy(total_queries+total_query_len,insert_query);
+					//total_query_len += strlen(insert_query);
+					result = mSQL->ExecuteSQL(insert_query);
+				}
+
+				findingTag = doc->nextSiblingElement("tag");
+			}				
+			if (foundTag) doc->popElement();
+			findingMyWay = doc->nextSiblingElement("way");
+			
+		}
+
+		sprintf(insert_query,"COMMIT;\n");
+		result = mSQL->ExecuteSQL(insert_query);
+		Con::printf("result %d: %s",result,insert_query);
+		//strcpy(total_queries+total_query_len,insert_query);
+		//total_query_len += strlen(insert_query);
+
+		//Now run them all at once in one connection, so it's faster... ?
+		//result = mSQL->ExecuteSQL(total_queries);
+
+		//Con::printf("total query length: %d   result %d !!!!!!!!!!!!!!!!!!!",total_query_len,result);
+		
+		
+		//Con::printf("%s",total_queries);
+
+
+			/*
+		
+		while(doc->nextSiblingElement("Node"))
+		{
+			doc->pushFirstChildElement("ModelNodeName");
+			cfg->dtsNodes[nodeCount] = kShape->findNode(doc->getData());
+			doc->nextSiblingElement("BvhNodeName");
+			cfg->bvhNames[nodeCount] = doc->getData();
+			//cfg->bvhNodes[nodeCount] = ?;
+			doc->nextSiblingElement("NodeGroup");
+			cfg->nodeGroups[nodeCount] = dAtoi(doc->getData());
+			//Con::errorf("NodeGroup: %d",dAtoi(doc->getData()));
+			doc->nextSiblingElement("bvhPoseRotA");
+			dSscanf(doc->getData(),"%f %f %f",&x,&y,&z);
+			cfg->bvhPoseRotsA[nodeCount] = Point3F(mDegToRad(x),mDegToRad(y),mDegToRad(z));
+			//Con::errorf("bvhPoseRotA: %f %f %f",x,y,z);
+			doc->nextSiblingElement("bvhPoseRotB");
+			dSscanf(doc->getData(),"%f %f %f",&x,&y,&z);
+			cfg->bvhPoseRotsB[nodeCount] = Point3F(mDegToRad(x),mDegToRad(y),mDegToRad(z));
+			//Con::errorf("bvhPoseRotB: %s",doc->getData());
+			doc->nextSiblingElement("axesFixRotA");
+			dSscanf(doc->getData(),"%f %f %f",&x,&y,&z);
+			cfg->axesFixRotsA[nodeCount] = Point3F(mDegToRad(x),mDegToRad(y),mDegToRad(z));
+			//Con::errorf("axesFixRotA: %s",doc->getData());
+			doc->nextSiblingElement("axesFixRotB");
+			dSscanf(doc->getData(),"%f %f %f",&x,&y,&z);
+			cfg->axesFixRotsB[nodeCount] = Point3F(mDegToRad(x),mDegToRad(y),mDegToRad(z));
+			//Con::errorf("axesFixRotB: %s",doc->getData());
+			nodeCount++;
+			doc->popElement();
+		}
+		*/
+		
+	} else Con::errorf("Failed to load OpenStreetMap export file: %s",xml_file);
+
+	doc->deleteObject();
+
+	return;
+}
+
+DefineConsoleMethod(TerrainPager, loadOSM, void, (const char *xml_file), , "" )
+{
+	object->loadOSM(xml_file);
+}
+
+
+
+//Here, try this:
+/*
+
+	DecalRoad *newRoad = new DecalRoad;		
+
+	newRoad->mMaterialName = mMaterialName;
+
+    newRoad->registerObject();
+
+    // Add to MissionGroup                              
+    SimGroup *missionGroup;
+    if ( !Sim::findObject( "MissionGroup", missionGroup ) )               
+       Con::errorf( "GuiDecalRoadEditorCtrl - could not find MissionGroup to add new DecalRoad" );
+    else
+       missionGroup->addObject( newRoad );               
+
+    newRoad->insertNode( tPos, mDefaultWidth, 0 );
+    U32 newNode = newRoad->insertNode( tPos, mDefaultWidth, 1 );
+
+*/
+
+
+//TESTING - Actually we're going to do this in script, easier to instantiate game objects there. (This is a bad reason.)
+void TerrainPager::makeStreets()
+{
+	if (!mSQL)
+		return;
+	
+	char select_query[512];
+	int id,result;
+	
+	sqlite_resultset *resultSet;
+
+	
+	sprintf(select_query,"SELECT * FROM osmWay;");
+	result = mSQL->ExecuteSQL(select_query);
+	if (result==0)
+		return;
+
+	resultSet = mSQL->GetResultSet(result);
+	Con::printf("OPENED MAP DATABASE: results: %d",resultSet->iNumRows);
+	for (U32 i=0;i<resultSet->iNumRows;i++)
+	{
+		id = dAtoi(resultSet->vRows[i]->vColumnValues[0]);
+		Con::printf("Way  %d  type: %s  name: %s",id,resultSet->vRows[i]->vColumnValues[1],resultSet->vRows[i]->vColumnValues[2]);
+	}
+
+}
+
+DefineConsoleMethod(TerrainPager, makeStreets, void, (), , "" )
+{
+	object->makeStreets();
+}
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DefineConsoleMethod(TerrainPager, callUpdateSkybox, void, (), , "" )
@@ -1086,33 +1420,33 @@ DefineConsoleMethod( TerrainPager, getTileDropRadius, F32, (), , "" )
 DefineConsoleMethod( TerrainPager, openListenSocket, void, (), , "" )
 {
 	if (object->mUseDataSource)
-		object->mWorldDataSource->openListenSocket();
+		object->mDataSource->openListenSocket();
 	return;
 }
 DefineConsoleMethod( TerrainPager, connectListenSocket, void, (), , "" )
 {
 	if (object->mUseDataSource)
-		object->mWorldDataSource->connectListenSocket();
+		object->mDataSource->connectListenSocket();
 	return;
 }
 DefineConsoleMethod( TerrainPager, listenForPacket, void, (), , "" )
 {
 	if (object->mUseDataSource)
-		object->mWorldDataSource->listenForPacket();
+		object->mDataSource->listenForPacket();
 	return;
 }
 
 DefineConsoleMethod( TerrainPager, connectSendSocket, void, (), , "" )
 {
 	if (object->mUseDataSource)
-		object->mWorldDataSource->connectSendSocket();
+		object->mDataSource->connectSendSocket();
 	return;
 }
 
 DefineConsoleMethod( TerrainPager, sendPacket, void, (), , "" )
 {
 	if (object->mUseDataSource)
-		object->mWorldDataSource->sendPacket();
+		object->mDataSource->sendPacket();
 	return;
 }
 
@@ -1305,19 +1639,19 @@ DefineConsoleMethod( TerrainPager, setGridSize, void, (U32 gridSize), , "" )
 		if (fs.open(heightfilename,Torque::FS::File::Read))
 		{ 
 			fs.close();
-		} else if (mWorldDataSource->mReadyForRequests && mSentInitRequests) {
-			Con::printf("Can't find height file %s, adding request to world data source. ready %d",heightfilename,mWorldDataSource->mReadyForRequests);
+		} else if (mDataSource->mReadyForRequests && mSentInitRequests) {
+			Con::printf("Can't find height file %s, adding request to world data source. ready %d",heightfilename,mDataSource->mReadyForRequests);
 			if (mSentTerrainRequest==false)//(checkTerrainLock()==false) 
 			{
 				Con::printf("requesting terrain tile: %f %f",startLong,startLat);
-				//mWorldDataSource->addTerrainRequest(startLong,startLat);
-				mWorldDataSource->addSkyboxRequest(startLong,startLat,mD.mClientPosLongitude,mD.mClientPosLatitude);
+				//mDataSource->addTerrainRequest(startLong,startLat);
+				mDataSource->addSkyboxRequest(startLong,startLat,mD.mClientPosLongitude,mD.mClientPosLatitude);
 				mSentTerrainRequest = true;
 			} else Con::printf("can't request terrain, source busy");
 			return false;//Don't add anything until we can open the file. But first check for lockfile?
 		} else {
 			Con::printf("Can't find height file %s, not ready for requests.",heightfilename);
-			return false;//else Con::printf("Can't add terrain block, readyForRequests %d",mWorldDataSource->mReadyForRequests);
+			return false;//else Con::printf("Can't add terrain block, readyForRequests %d",mDataSource->mReadyForRequests);
 		}
 	}
 	

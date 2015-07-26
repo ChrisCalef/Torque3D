@@ -50,6 +50,7 @@
 #include "T3D/physics/physicsBody.h"
 #include "T3D/physics/physicsCollision.h"
 
+#include "sim/dataSource/vehicleDataSource.h"
 
 namespace {
 
@@ -693,6 +694,8 @@ Vehicle::Vehicle()
    mWorkingQueryBox.maxExtents.set(-1e9f, -1e9f, -1e9f);
    mWorkingQueryBoxCountDown = sWorkingQueryBoxStaleThreshold;
    mPhysicsRep = NULL;
+   
+   mUseDataSource = false;//TEMP, put this in the datablock
 }
 
 U32 Vehicle::getCollisionMask()
@@ -809,6 +812,9 @@ bool Vehicle::onAdd()
 
    _createPhysics();
 
+   if (mUseDataSource)
+	   mDataSource = new vehicleDataSource(true);
+
    return true;
 }
 
@@ -858,6 +864,9 @@ void Vehicle::processTick(const Move* move)
 
    Parent::processTick(move);
 
+   if (mUseDataSource)
+	   mDataSource->tick();
+
    // Warp to catch up to server
    if (mDelta.warpCount < mDelta.warpTicks)
    {
@@ -894,31 +903,71 @@ void Vehicle::processTick(const Move* move)
       // Process input move
       updateMove(move);
 
+	  
       // Save current rigid state interpolation
       mDelta.posVec = mRigid.linPosition;
       mDelta.rot[0] = mRigid.angPosition;
 
-      // Update the physics based on the integration rate
-      S32 count = mDataBlock->integration;
-      --mWorkingQueryBoxCountDown;
-      updateWorkingCollisionSet(getCollisionMask());
-      for (U32 i = 0; i < count; i++)
-         updatePos(TickSec / count);
+	//HMM, not sure where to put this for best results...
+	  if ( mUseDataSource )// && isServerObject()
+	  {
+		  //Con::printf("vehicle setting position: %f %f %d",mDataSource->mFGPacket.longitude,mDataSource->mFGPacket.latitude,mDataSource->mFGPacket.altitude);
+		  //setPosition(Point3F(mDataSource->mFGPacket.longitude,mDataSource->mFGPacket.latitude,mDataSource->mFGPacket.altitude),ori);
+		  if (isServerObject())
+		  {
+
+			  //MatrixF oriMat,pitchMat,rollMat,headMat;
+			  //QuatF oriQuat;
+			  //oriMat.identity();
+			  //pitchMat = MatrixF(EulerF(-1.0 * mDegToRad(mDataSource->mFGPacket.pitch),0,0));
+			  //rollMat =  MatrixF(EulerF(0,-1.0 * mDegToRad(mDataSource->mFGPacket.roll),0));
+			  //headMat =  MatrixF(EulerF(0,0,mDegToRad(mDataSource->mFGPacket.heading)));
+			  //oriMat = headMat;
+			  //oriMat.mul(pitchMat);
+			  //oriMat.mul(rollMat);
+
+			  QuatF oriQuat;
+			  oriQuat = QuatF(mDataSource->mFGTransform);//OMG IT WORKED?...
+			  mRigid.angPosition = oriQuat;// QuatF(oriEul);
+			  mRigid.linPosition = mDataSource->mFGTransform.getPosition();
+
+		  } else {
+
+			  //sigh, naughty single player hack, but see what happens...  nope, no better.
+			  Vehicle *serverVehicle = dynamic_cast<Vehicle *>(getServerObject());
+			  mRigid.linPosition = serverVehicle->mRigid.linPosition;
+			  mRigid.angPosition = serverVehicle->mRigid.angPosition;
+
+		  }
+	  } else  {
+
+		  // Update the physics based on the integration rate
+		  S32 count = mDataBlock->integration;
+		  --mWorkingQueryBoxCountDown;
+		  updateWorkingCollisionSet(getCollisionMask());
+		  for (U32 i = 0; i < count; i++)
+			  updatePos(TickSec / count);
+	  }
 
       // Wrap up interpolation info
       mDelta.pos     = mRigid.linPosition;
       mDelta.posVec -= mRigid.linPosition;
       mDelta.rot[1]  = mRigid.angPosition;
+	  
 
-      // Update container database
-      setPosition(mRigid.linPosition, mRigid.angPosition);
+	  // Update container database
+	  setPosition(mRigid.linPosition, mRigid.angPosition);
+	  
+	  //
       setMaskBits(PositionMask);
       updateContainer();
 
+	  //Con::printf("vehicle position: %f %f %f",mRigid.linPosition.x,mRigid.linPosition.y,mRigid.linPosition.z);
       //TODO: Only update when position has actually changed
       //no need to check if mDataBlock->enablePhysicsRep is false as mPhysicsRep will be NULL if it is
-      if(mPhysicsRep)
-         mPhysicsRep->moveKinematicTo(getTransform());
+	  //TEMP BROKEN
+      //if(mPhysicsRep)
+      //   mPhysicsRep->moveKinematicTo(getTransform());
    }
 }
 
@@ -936,6 +985,7 @@ void Vehicle::interpolateTick(F32 dt)
       rot.interpolate(mDelta.rot[1], mDelta.rot[0], dt);
       Point3F pos = mDelta.pos + mDelta.posVec * dt;
       setRenderPosition(pos,rot);
+	  //Con::printf("interpolating tick!  pos %f %f %f dt %f",pos.x,pos.y,pos.z,dt);
    }
    mDelta.dt = dt;
 }
@@ -1061,9 +1111,9 @@ void Vehicle::getCameraTransform(F32* pos,MatrixF* mat)
       mShapeInstance->mNodeTransforms[mDataBlock->cameraNode].getColumn(3,&osp);
       getRenderTransform().mulP(osp,&sp);
    }
-   else
+   else {
       eye.getColumn(3,&sp);
-
+   }
    // Make sure we don't hit ourself...
    disableCollision();
    if (isMounted())
@@ -1186,6 +1236,7 @@ void Vehicle::setPosition(const Point3F& pos,const QuatF& rot)
    rot.setMatrix(&mat);
    mat.setColumn(3,pos);
    Parent::setTransform(mat);
+   //Con::printf("vehicle setting position: %f %f %f",pos.x,pos.y,pos.z);
 }
 
 void Vehicle::setRenderPosition(const Point3F& pos, const QuatF& rot)
@@ -1194,6 +1245,7 @@ void Vehicle::setRenderPosition(const Point3F& pos, const QuatF& rot)
    rot.setMatrix(&mat);
    mat.setColumn(3,pos);
    Parent::setRenderTransform(mat);
+   //Con::printf("vehicle render position: %f %f %f",pos.x,pos.y,pos.z);
 }
 
 void Vehicle::setTransform(const MatrixF& newMat)
@@ -1697,7 +1749,7 @@ U32 Vehicle::packUpdate(NetConnection *con, U32 mask, BitStream *stream)
 void Vehicle::unpackUpdate(NetConnection *con, BitStream *stream)
 {
    Parent::unpackUpdate(con,stream);
-
+      
    mJetting = stream->readFlag();
 
    if (stream->readFlag())
@@ -1708,7 +1760,7 @@ void Vehicle::unpackUpdate(NetConnection *con, BitStream *stream)
    mSteering.x = (2 * yaw * mDataBlock->maxSteeringAngle) - mDataBlock->maxSteeringAngle;
    mSteering.y = (2 * pitch * mDataBlock->maxSteeringAngle) - mDataBlock->maxSteeringAngle;
    mDelta.move.unpack(stream);
-
+   
    if (stream->readFlag()) 
    {
       mPredictionCount = sMaxPredictionTicks;
@@ -1722,8 +1774,7 @@ void Vehicle::unpackUpdate(NetConnection *con, BitStream *stream)
       mathRead(*stream, &mRigid.angMomentum);
       mRigid.atRest = stream->readFlag();
       mRigid.updateVelocity();
-
-      if (isProperlyAdded()) 
+	  if (isProperlyAdded()) 
       {
          // Determine number of ticks to warp based on the average
          // of the client and server velocities.

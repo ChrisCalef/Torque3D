@@ -1879,6 +1879,55 @@ void ShapeBase::getEyeBaseTransform(MatrixF* mat, bool includeBank)
       *mat = getTransform();
 }
 
+S32 ShapeBase::getEyeNode()
+{
+	return mDataBlock->eyeNode;
+}
+
+void ShapeBase::setEyeTransform(MatrixF mat)
+{
+	S32 eyeNode = mDataBlock->eyeNode;
+	if (eyeNode != -1)
+	{
+		mShapeInstance->mNodeTransforms[eyeNode] = mat;
+	} else Con::printf("Shape has no eyeNode!");
+}
+
+void ShapeBase::setEyePos(Point3F pos)
+{
+	S32 eyeNode = mDataBlock->eyeNode;
+	if (eyeNode != -1)
+	{
+		MatrixF mat = mShapeInstance->mNodeTransforms[eyeNode];
+		mat.setPosition(pos);
+		mShapeInstance->mNodeTransforms[eyeNode] = mat;
+	} else Con::printf("Shape has no eyeNode!");
+}
+
+void ShapeBase::setEyeRot(EulerF rot)
+{
+	S32 eyeNode = mDataBlock->eyeNode;
+	if (eyeNode != -1)
+	{
+		MatrixF mat = mShapeInstance->mNodeTransforms[eyeNode];
+		MatrixF newMat(rot);
+		newMat.setPosition(mat.getPosition());
+		mShapeInstance->mNodeTransforms[eyeNode] = newMat;
+		Con::printf("setting new eye rot! %f %f %f  eye pos %f %f %f",rot.x,rot.y,rot.z);
+	} else Con::printf("Shape has no eyeNode!");
+}
+
+void ShapeBase::mulEyeTransform(MatrixF mat)
+{
+	S32 eyeNode = mDataBlock->eyeNode;
+	if (eyeNode != -1)
+	{
+		MatrixF eyeMat = mShapeInstance->mNodeTransforms[eyeNode];
+		eyeMat.mul(mat);
+		mShapeInstance->mNodeTransforms[eyeNode] = eyeMat;
+	} else Con::printf("Shape has no eyeNode!");
+}
+
 void ShapeBase::getRenderEyeTransform(MatrixF* mat)
 {
    getRenderEyeBaseTransform(mat, true);
@@ -4904,4 +4953,15 @@ DefineEngineMethod( ShapeBase, getModelFile, const char *, (),,
 
 	const char *fieldName = StringTable->insert( String("shapeFile") );
    return datablock->getDataField( fieldName, NULL );
+}
+DefineEngineMethod( ShapeBase, setEyePos, void, (Point3F pos),,
+	"@brief Set eye position\n")
+{
+	object->setEyePos(pos);
+}
+
+DefineEngineMethod( ShapeBase, setEyeRot, void, (Point3F rot),,
+   "@brief Set eye rotation (Euler)\n")
+{
+   object->setEyeRot(EulerF(mDegToRad(rot.x),mDegToRad(rot.y),mDegToRad(rot.z)));
 }

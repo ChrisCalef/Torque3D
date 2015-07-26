@@ -15,7 +15,8 @@
 #include "core/iTickable.h"
 #endif
 
-//#include "console/SQLiteObject.h"
+#include "console/SQLiteObject.h"
+#include "console/SimXMLDocument.h"
 
 class worldDataSource;
 class dataSource;
@@ -81,6 +82,8 @@ public:
 	
 	terrainPagerData mD;//This is a standalone data struct for easy portability.
 
+	SQLiteObject *mSQL;
+
 	Vector <TerrainBlock *>mTerrains;//This is the short list of actually loaded terrains. 
 	Vector <TerrainBlock *>mTerrainGrid;//This is the sparse array in the shape of a grid centered on player.
 	Vector <loadTerrainData> mRequestTiles;//Ever changing list of tiles that need to be requested.
@@ -88,7 +91,7 @@ public:
 	Vector <String> terrain_materials;
 
 	bool mUseDataSource;
-	worldDataSource *mWorldDataSource;
+	worldDataSource *mDataSource;
 	bool mSentInitRequests;
 	bool mSentTerrainRequest;
 	bool mSentSkyboxRequest;
@@ -161,6 +164,14 @@ public:
 	void reloadSkybox();
 
 	void updateSkyboxConsole();
+
+	void loadOSM(const char*);
+	void makeStreets();
+
+	Point3F convertLatLongToXYZ(Point3F pos);
+	Point3F convertLatLongToXYZ(double longitude,double latitude, float altitude);
+	Point3F convertXYZToLatLong(Point3F pos);
+
 
 };
 /*

@@ -43,6 +43,9 @@
 #include "gfx/primBuilder.h"
 #include "scene/sceneObject.h"
 
+#include "T3D/camera.h"
+#include "T3D/player.h"
+
 #include <physxvisualdebuggersdk\PvdNetworkStreams.h>
 #include <physxvisualdebuggersdk\PvdConnectionManager.h>
 #include <foundation\PxFoundation.h>
@@ -611,6 +614,41 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
    //mScene->setVisualizationParameter(physx::PxVisualizationParameter::eBODY_JOINT_GROUPS,1.0f);
 
    const physx::PxRenderBuffer *renderBuffer = &mScene->getRenderBuffer();
+   
+
+
+   //TEMP, trying to figure out how to limit scope of debug rendering instead of dumping all physics objects into it, 
+   //but this isn't the place, it's too late.
+   Vector<SceneObject*> kCameras;
+   Vector<SceneObject*> kPlayers;
+   Point3F clientPos;
+   clientPos.zero();
+
+   Box3F bounds;
+   bounds.set(Point3F(-1024000,-1024000,0),Point3F(1024000,1024000,10000));
+   gServerContainer.findObjectList(bounds, CameraObjectType, &kCameras);
+   gServerContainer.findObjectList(bounds, PlayerObjectType, &kPlayers);
+   for (U32 i=0;i<kPlayers.size();i++)
+   {
+	   Player *myPlayer = (Player *)(kPlayers[i]);
+	   Point3F playerPos = myPlayer->getPosition();
+	   if (kCameras.size()>0)
+	   {
+		   Camera *myCamera = dynamic_cast<Camera *>(kCameras[i]);//... sort out which belongs to controlling client.
+		   Point3F cameraPos = myCamera->getPosition();
+		   GameConnection *cameraClient = myCamera->getControllingClient();
+		   GameConnection *playerClient = myPlayer->getControllingClient();
+		   if (cameraClient) 
+		   {
+			   clientPos = cameraPos;
+		   } else if (playerClient) {
+			   clientPos = playerPos;
+		   } 
+	   } else {
+		   clientPos = playerPos;
+	   }
+	   Con::printf("clientPos: %f %f %f",clientPos.x,clientPos.y,clientPos.z);
+   }
 
    if(!renderBuffer)
       return;
@@ -618,36 +656,45 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
    // Render points
    {
       physx::PxU32 numPoints = renderBuffer->getNbPoints();
-      const physx::PxDebugPoint *points = renderBuffer->getPoints();
+	  if (numPoints>0)
+	  {
+		  const physx::PxDebugPoint *points = renderBuffer->getPoints();
+		  PrimBuild::begin( GFXPointList, numPoints );
 
-      PrimBuild::begin( GFXPointList, numPoints );
-      
-      while ( numPoints-- )
-      {
-         PrimBuild::color( color );//( getDebugColor(points->color) );
-         PrimBuild::vertex3fv(px3Cast<Point3F>(points->pos));
-         points++;
-      }
+		  while ( numPoints-- )
+		  {
+			  PrimBuild::color( color );//( getDebugColor(points->color) );
+			  PrimBuild::vertex3fv(px3Cast<Point3F>(points->pos));
+			  points++;
+		  }
 
-      PrimBuild::end();
+		  PrimBuild::end();
+	  }
    }
 
    // Render lines
    {
       physx::PxU32 numLines = renderBuffer->getNbLines();
       const physx::PxDebugLine *lines = renderBuffer->getLines();
-
+	  
+	  Con::printf("debug drawing %d lines",numLines);
       PrimBuild::begin( GFXLineList, numLines * 2 );
 	  
       while ( numLines-- )
       {
-         //PrimBuild::color( color );
-		 PrimBuild::color( getDebugColor( lines->color0 ) );
-         PrimBuild::vertex3fv( px3Cast<Point3F>(lines->pos0));
-         //PrimBuild::color( color );
-         PrimBuild::color( getDebugColor( lines->color1 ) );
-         PrimBuild::vertex3fv( px3Cast<Point3F>(lines->pos1));
-         lines++;
+		  Point3F point0,diff;
+		  point0 = px3Cast<Point3F>(lines->pos0);
+		  diff = clientPos - point0;
+		  if (diff.len() < 100.0)
+		  {
+			  //PrimBuild::color( color );
+			  PrimBuild::color( getDebugColor( lines->color0 ) );
+			  PrimBuild::vertex3fv( px3Cast<Point3F>(lines->pos0));
+			  //PrimBuild::color( color );
+			  PrimBuild::color( getDebugColor( lines->color1 ) );
+			  PrimBuild::vertex3fv( px3Cast<Point3F>(lines->pos1));
+		  }
+		  lines++;
       }
 
       PrimBuild::end();
