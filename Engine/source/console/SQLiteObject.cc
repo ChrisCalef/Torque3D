@@ -90,7 +90,6 @@ bool SQLiteObject::onAdd()
       Namespace *parent = getClassRep()->getNameSpace();
       Con::linkNamespaces(parent->mName, name);
       mNameSpace = Con::lookupNamespace(name);
-   
    }
 
    return true;
