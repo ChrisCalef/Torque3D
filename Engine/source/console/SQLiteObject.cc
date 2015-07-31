@@ -20,6 +20,8 @@
 #include "console/SQLiteObject.h"
 
 #include "console/simBase.h"
+#include "console/engineAPI.h"
+
 #include "console/consoleInternal.h"
 #include <STDLIB.H>
 
