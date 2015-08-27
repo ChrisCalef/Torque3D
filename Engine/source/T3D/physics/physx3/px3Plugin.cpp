@@ -59,7 +59,7 @@ PhysicsPlugin* Px3Plugin::create()
 Px3Plugin::Px3Plugin()
 {
 	mSQL = new SQLiteObject();
-	if (mSQL->OpenDatabase("physicsData.db"))
+	if (mSQL->OpenDatabase("openSimEarth.db"))//HERE, get this from prefs???
 	{
 		char select_query[512],insert_query[512];
 		int id,result;
