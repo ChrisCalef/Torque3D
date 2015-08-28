@@ -687,8 +687,10 @@ template<class T> inline T& Vector<T>::operator[](U32 index)
 	int myPain = 1;
 	if (index >= mElementCount)
 		myPain++;
-   AssertFatal(index < mElementCount, "Vector<T>::operator[] - out of bounds array access!");
-   return mArray[index];
+
+	AssertFatal(index < mElementCount, avar("Vector<T>::operator[%i/%i] - out of bounds array access!", index, mElementCount));
+
+	return mArray[index];
 }
 
 template<class T> inline const T& Vector<T>::operator[](U32 index) const
@@ -696,8 +698,9 @@ template<class T> inline const T& Vector<T>::operator[](U32 index) const
 	int myPain = 1;
 	if (index >= mElementCount)
 		myPain++;
-   AssertFatal(index < mElementCount, "Vector<T>::operator[] - out of bounds array access!");
-   return mArray[index];
+	AssertFatal(index < mElementCount, avar("Vector<T>::operator[%i/%i] - out of bounds array access!", index, mElementCount));
+
+	return mArray[index];
 }
 
 template<class T> inline void Vector<T>::reserve(U32 size)
