@@ -45,6 +45,9 @@
    #include "T3D/physics/physicsJoint.h"
 #endif
 
+#include <string>
+#include <map>
+
 class TSShapeInstance;
 class PhysicsBody;
 class PhysicsWorld;
@@ -180,10 +183,15 @@ class PhysicsShape : public GameBase
 public: //protected:
    /// Datablock
    PhysicsShapeData *mDataBlock;
-   /// The abstracted physics actor.
-   PhysicsBody *mPhysicsRep;
+   
+   ///
+   PhysicsWorld *mWorld;
 
-   Vector<PhysicsBody*> mPhysicsBodies; //For articulated shapes.
+   /// The abstracted physics actor.
+   PhysicsBody *mPhysicsRep;//OpenSimEarth: I would declare this redundant, and use mPhysicsBodies[0], but for the number of places
+   //mPhysicsRep is still in use, and the confusion between server/client and articulated/not articulated. Needs major refactor.
+
+   Vector<PhysicsBody*> mPhysicsBodies; //For articulated shapes. Currently clientside only.
    PhysicsJoint *mJoint;
    Vector<PhysicsJoint*> mPhysicsJoints;
    Vector<S32> mBodyNodes;
@@ -194,12 +202,27 @@ public: //protected:
 
    Point3F mStartPos;
 
-   ///
-   PhysicsWorld *mWorld;
-
    /// The starting position to place the shape when
    /// the level begins or is reset.
    MatrixF mResetPos;
+
+   //For recording physics results into sequences.
+   Vector<Quat16>   mNodeRotations;
+   Vector<Point3F>  mNodeTranslations;
+   Vector<S32> mOrderNodes;
+
+   Point3F mRecordInitialPosition;
+   QuatF mRecordInitialOrientation;
+   U32 mRecordSampleRate;
+   U32 mRecordCount;	
+   bool mIsRecording;
+   bool mSaveTranslations;
+
+   void setIsRecording(bool);
+   S32 getRecordingSize();//Return sum: (nodeRotations.length()*sizeof(Quat16) + nodeTranslations.length()*sizeof(Point3F))
+   void recordTick();
+   void setupOrderNodes();
+   void makeSequence(const char*);
 
    //VectorF mBuildScale;
    //F32 mBuildAngDrag;
@@ -223,16 +246,11 @@ public: //protected:
    /// when the PhysicsShape is loaded.
    bool mPlayAmbient;
 
-   S32 mAmbientSeq;
    S32 mCurrentSeq;//This will be set to whatever sequence we are currently playing, need one per thread when we get that far.
-   S32 mIdleSeq;
-   S32 mWalkSeq;
-   S32 mRunSeq;
-   S32 mAttackSeq;
-   S32 mBlockSeq;
-   S32 mFallSeq;
-   S32 mGetupSeq;
+   
+   std::map<std::string,int> mActionSeqs;//Associate arrays for C++! This should give us e.g. mActions["attack"] = 15
 
+   S32 mAmbientSeq;//Obsolete, but need to replace all references with mActionSeqs["ambient"] now...
    TSThread* mAmbientThread;//Really this should be called mActiveThread now...
 
    /// If a specified to create one in the PhysicsShape data, this is the 
@@ -246,6 +264,8 @@ public: //protected:
    bool mIsArticulated;// If true, shape maintains arrays of PhysicsBody and PhysicsJoint objects, instead of one PhysicsBody.
    bool mIsGroundMoving;//Probably not the final answer for this, but trying it out for testing. 
    S32 mShapeID;    //Database ID of the physicsShape, to find all the physicsShapePart objects with body and joint data.
+   S32 mSceneShapeID;
+   S32 mSceneID;
    S32 mCurrentTick;
    F32 mLastThreadPos;
    Point3F mLastGroundTrans;
@@ -338,7 +358,9 @@ public:
    void setHasGravity(bool hasGrav);
    void setPartHasGravity(S32 partID,bool hasGrav);
    void setDynamic(bool isDynamic);
+   bool getDynamic();
    void setPartDynamic(S32 partID,bool isDynamic);
+   bool getPartDynamic(S32 partID);
    S32 getContactBody();
 
    void setPosition(Point3F pos);
@@ -347,26 +369,13 @@ public:
    
    Point3F findGroundPosition(Point3F pos);//use our mWorld to do a ground raycast and return the contact point.
 
-   //NOTE: all this logic would be just as useful in a setting without physics, consider moving up or over to somewhere else.
-   bool setAmbientSeq(const char *name);
-   bool setIdleSeq(const char *name);
-   bool setWalkSeq(const char *name);
-   bool setRunSeq(const char *name);
-   bool setAttackSeq(const char *name);
-   bool setBlockSeq(const char *name);
-   bool setFallSeq(const char *name);
-   bool setGetupSeq(const char *name);
+   bool setActionSeq(const char *name, S32 seq);
 
+   bool setAmbientSeq(const char *name);//Obsolete, but need to replace all references with mActionSeqs["ambient"] now...
    bool setAmbientSeq(S32);
-   bool setIdleSeq(S32);
-   bool setWalkSeq(S32);
-   bool setRunSeq(S32);
-   bool setAttackSeq(S32);
-   bool setBlockSeq(S32);
-   bool setFallSeq(S32);
-   bool setGetupSeq(S32);
 
    bool setCurrentSeq(S32);
+   bool loadSequence(const char *path);
 
 };
 

@@ -647,7 +647,7 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
 	   } else {
 		   clientPos = playerPos;
 	   }
-	   Con::printf("clientPos: %f %f %f",clientPos.x,clientPos.y,clientPos.z);
+	   //Con::printf("clientPos: %f %f %f",clientPos.x,clientPos.y,clientPos.z);
    }
 
    if(!renderBuffer)
@@ -677,7 +677,7 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
       physx::PxU32 numLines = renderBuffer->getNbLines();
       const physx::PxDebugLine *lines = renderBuffer->getLines();
 	  
-	  Con::printf("debug drawing %d lines",numLines);
+	  //Con::printf("debug drawing %d lines",numLines);
       PrimBuild::begin( GFXLineList, numLines * 2 );
 	  
       while ( numLines-- )

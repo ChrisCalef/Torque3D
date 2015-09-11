@@ -245,6 +245,7 @@ class TSShapeInstance
    /// @}
 	
 	TSMaterialList* mMaterialList;    ///< by default, points to hShape material list
+
 //-------------------------------------------------------------------------------------
 // Misc.
 //-------------------------------------------------------------------------------------
@@ -323,6 +324,8 @@ protected:
    public:
 
    TSShape* getShape() const { return mShape; }
+   
+   const Resource<TSShape> *getShapeResource() const { return &mShapeResource; }
 
    TSMaterialList* getMaterialList() const { return mMaterialList; }
    
@@ -681,9 +684,10 @@ protected:
 
 //-------------------------------------------------------------------------------------
 // accumulation
-//-------------------------------------------------------------------------------------
+   //-------------------------------------------------------------------------------------
 
    bool hasAccumulation();
+
 };
 
 

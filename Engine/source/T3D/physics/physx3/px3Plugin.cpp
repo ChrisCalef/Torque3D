@@ -59,25 +59,16 @@ PhysicsPlugin* Px3Plugin::create()
 Px3Plugin::Px3Plugin()
 {
 	mSQL = new SQLiteObject();
-	if (mSQL->OpenDatabase("openSimEarth.db"))//HERE, get this from prefs???
-	{
-		char select_query[512],insert_query[512];
-		int id,result;
-		sqlite_resultset *resultSet;
 
-		sprintf(select_query,"SELECT id,name FROM px3Joint;");
-		result = mSQL->ExecuteSQL(select_query);
-		if (result==0)
-			return; 				
-		
-		resultSet = mSQL->GetResultSet(result);
-		Con::printf("OPENED SQLITE DATABASE: results: %d",resultSet->iNumRows);
-		for (U32 i=0;i<resultSet->iNumRows;i++)
-		{
-			id = dAtoi(resultSet->vRows[i]->vColumnValues[0]);
-			Con::printf("Result one: %d   %s",id,resultSet->vRows[i]->vColumnValues[1]);
-		}
-	}
+	char dbName[65];
+    dStrncpy( dbName, Con::getVariable( "pref::OpenSimEarthDB" ), 64 );
+    dbName[64] = 0;
+
+	if (mSQL->OpenDatabase(dbName))
+		Con::printf("Opened SQLITE Database %s",dbName);
+	else
+		Con::printf("Could not open SQLITE Database: %s",dbName);
+
 }
 
 Px3Plugin::~Px3Plugin()

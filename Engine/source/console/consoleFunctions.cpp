@@ -25,6 +25,7 @@
 #include <string.h>
 #include <iostream>
 #include <fstream>
+#include <windows.h>  //??? OpenSimEarth, CreateDirectory
 #include "platform/platform.h"
 #include "console/console.h"
 #include "console/consoleInternal.h"
@@ -2623,4 +2624,15 @@ ConsoleFunction( copyFile, bool, 3, 3,
 	fout << fin.rdbuf();
 
    return true;
+}
+
+
+///////////////  OpenSimEarth  /////////////////////////////////////////
+
+DefineEngineFunction( createDirectory, bool, (String dirPath),,
+   "Make a directory at the given path." )
+{
+	if (CreateDirectoryA (dirPath.c_str(),NULL))
+		return true;
+	else return false;
 }

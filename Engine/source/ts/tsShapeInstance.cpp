@@ -812,4 +812,3 @@ Vector<TSShapeInstance::MeshObjectInstance*> TSShapeInstance::findMeshInstances(
 	}
 	return results;
 }
-

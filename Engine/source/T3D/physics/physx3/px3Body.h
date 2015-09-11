@@ -73,7 +73,12 @@ protected:
    /// The body flags set at creation time.
    U32 mBodyFlags;
 
-   S32 mBodyIndex;//index into mPHysicsBodies array on an articulated PhysicsShape, -1 if not relevant.
+   S32 mBodyIndex;//index into mPhysicsBodies array on an articulated PhysicsShape, -1 if not relevant.
+   S32 mParentBodyIndex;//parent bodypart 
+   S32 mNodeIndex;//index into nodes array on TSShape
+   S32 mParentNodeIndex;//parent node, might as well keep all these and then delete the ones we don't end up using.
+
+
    /// Is true if this body is enabled and active
    /// in the simulation of the scene.
    bool mIsEnabled;
@@ -128,6 +133,12 @@ public:
    virtual void setDynamic( bool isDynamic );
    virtual void setBodyIndex( S32 ID );
    virtual S32 getBodyIndex();
+   virtual void setNodeIndex( S32 ID );
+   virtual S32 getNodeIndex();
+   virtual void setParentBodyIndex( S32 ID );
+   virtual S32 getParentBodyIndex();
+   virtual void setParentNodeIndex( S32 ID );
+   virtual S32 getParentNodeIndex();
 };
 
 #endif // _PX3BODY_H_

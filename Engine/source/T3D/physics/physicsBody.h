@@ -124,7 +124,12 @@ public:
    virtual void setDynamic( bool isDynamic ) = 0;
    virtual void setBodyIndex( S32 ID) = 0;
    virtual S32 getBodyIndex() = 0;
-
+   virtual void setNodeIndex( S32 ID) = 0;
+   virtual S32 getNodeIndex() = 0;
+   virtual void setParentBodyIndex( S32 ID) = 0;
+   virtual S32 getParentBodyIndex() = 0;
+   virtual void setParentNodeIndex( S32 ID) = 0;
+   virtual S32 getParentNodeIndex() = 0;
 };
 
 

@@ -41,7 +41,10 @@ Px3Body::Px3Body() :
    mBodyFlags( 0 ),
    mIsEnabled( true ),
    mIsStatic(false),
-   mBodyIndex( -1 )
+   mBodyIndex( -1 ),
+   mParentBodyIndex( -1 ),
+   mNodeIndex( -1 ),
+   mParentNodeIndex( -1 )
 {
 }
 
@@ -519,4 +522,34 @@ void Px3Body::setBodyIndex( S32 ID )
 S32 Px3Body::getBodyIndex()
 { 
 	return mBodyIndex;
+}
+
+void Px3Body::setNodeIndex( S32 ID )
+{ 
+	mNodeIndex = ID;
+}
+
+S32 Px3Body::getNodeIndex()
+{ 
+	return mNodeIndex;
+}
+
+void Px3Body::setParentBodyIndex( S32 ID )
+{ 
+	mParentBodyIndex = ID;
+}
+
+S32 Px3Body::getParentBodyIndex()
+{ 
+	return mParentBodyIndex;
+}
+
+void Px3Body::setParentNodeIndex( S32 ID )
+{ 
+	mParentNodeIndex = ID;
+}
+
+S32 Px3Body::getParentNodeIndex()
+{ 
+	return mParentNodeIndex;
 }

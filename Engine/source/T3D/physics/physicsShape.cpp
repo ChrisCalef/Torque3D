@@ -25,6 +25,7 @@
 
 #include "console/consoleTypes.h"
 #include "core/stream/bitStream.h"
+#include "core/stream/fileStream.h"
 #include "core/resourceManager.h"
 #include "math/mathIO.h"
 #include "T3D/physics/physicsPlugin.h"
@@ -180,7 +181,7 @@ void PhysicsShapeData::initPersistFields()
 	  
       addField( "shapeID", TypeS32, Offset( shapeID, PhysicsShapeData ),
          "@brief The database ID of the physicsShape, to find all the bodypart and joint data.\n\n");
-
+	  
    endGroup( "Physics" );   
 
    addGroup( "Networking" );
@@ -425,19 +426,18 @@ PhysicsShape::PhysicsShape()
       mAmbientThread( NULL ),
       mAmbientSeq( -1 ),
       mCurrentSeq( -1 ),
-	  mIdleSeq( -1 ),
-	  mWalkSeq( -1 ),
-	  mRunSeq( -1 ),
-	  mAttackSeq( -1 ),
-	  mBlockSeq( -1 ),
-	  mFallSeq( -1 ),
-	  mGetupSeq( -1 ),
 	  mHasGravity( true ),
 	  mIsDynamic( true ),
 	  mIsArticulated( false ),
+	  mIsRecording( false ),
+	  mSaveTranslations( false ),
 	  mCurrentTick( 0 ),
-	  mStartPos( Point3F(0,0,0)//maybe use mResetPos for this?
-	   )
+	  mStartPos( Point3F(0,0,0) ),//maybe use mResetPos for this?
+	  mRecordSampleRate( 3 ),
+	  mRecordCount( 0 ),
+	  mShapeID( -1 ),
+	  mSceneID( -1 ),
+	  mSceneShapeID( -1 )	   
 {
    mNetFlags.set( Ghostable | ScopeAlways );
    mTypeMask |= DynamicShapeObjectType;
@@ -482,6 +482,12 @@ void PhysicsShape::initPersistFields()
 
 	  addField( "isDynamic", TypeBool, Offset( mIsDynamic, PhysicsShape ),
 		  "@brief Turns object kinematic if set to false.\n\n");
+	  
+	  addField( "sceneShapeID", TypeS32, Offset( mSceneShapeID, PhysicsShape ),
+		  "@brief Database ID for this sceneShape.\n\n");
+
+	  addField( "sceneID", TypeS32, Offset( mSceneID, PhysicsShape ),
+		  "@brief Database ID for this scene.\n\n");
 
    endGroup( "PhysicsShape" );
 
@@ -704,13 +710,6 @@ void PhysicsShape::onRemove()
    mAmbientThread = NULL;
    mAmbientSeq = -1;
    mCurrentSeq = -1;
-   mIdleSeq = -1;
-   mWalkSeq = -1;
-   mRunSeq = -1;
-   mAttackSeq = -1;
-   mBlockSeq = -1;
-   mFallSeq = -1;
-   mGetupSeq = -1;
    mWorld = NULL;
 
    if ( isServerObject() )
@@ -761,13 +760,6 @@ bool PhysicsShape::_createShape()
    mWorld = NULL;
    mAmbientSeq = -1;
    mCurrentSeq = -1;
-   mIdleSeq = -1;
-   mWalkSeq = -1;
-   mRunSeq = -1;
-   mAttackSeq = -1;
-   mBlockSeq = -1;
-   mFallSeq = -1;
-   mGetupSeq = -1;
 
    if ( !mDataBlock )
       return false;
@@ -786,25 +778,11 @@ bool PhysicsShape::_createShape()
       return true;
    }
 
-   // Create the shape instance.
-   
+   // Create the shape instance.   
    TSShape *kShape = mDataBlock->shape;
    mShapeInst = new TSShapeInstance( mDataBlock->shape, isClientObject() );
    //mShapeInst = new TSShapeInstance( kShape, isClientObject() );//NOPE! const Resource<TSShape> version is not same as TSShape* version!
    //With a pointer I get a "no material" on my shape, unknown if anything else breaks.
-
-   //These are all being set in script by use of set(Ambient,etc)SeqByName("") functions. Taking them out here.
-   //mAmbientSeq = kShape->findSequence( "ambient" );
-   //mIdleSeq = kShape->findSequence( "ambient" );//This will be different when we start accumulating more idle seqs.
-   //mWalkSeq = kShape->findSequence( "walk" );
-   //mRunSeq = kShape->findSequence( "run" );
-   //mAttackSeq = kShape->findSequence( "power_punch_down" );
-   //mBlockSeq = kShape->findSequence( "ambient" );//just a placeholder for the moment
-   //mFallSeq = kShape->findSequence( "runscerd" );//ditto, need a falling seq.
-   //mGetupSeq = kShape->findSequence( "frontGetup" );//this will be selected in script
-
-	//Con::printf("swingUnder seq ground frames: %d, first ground frame %d",
-	//	  kShape->sequences[mAmbientSeq].numGroundFrames,kShape->sequences[mAmbientSeq].firstGroundFrame);
 
    if ( isClientObject() )
    {	  
@@ -1054,6 +1032,7 @@ bool PhysicsShape::_createShape()
 		   partBody->setTransform(finalTrans);
 		   
 		   partBody->setBodyIndex(mPhysicsBodies.size());
+		   partBody->setNodeIndex(PD->baseNode); 
 		   //Con::printf("Pushing back a physics body, isServer %d",isServerObject());
 		   mPhysicsBodies.push_back(partBody);
 
@@ -1075,7 +1054,7 @@ bool PhysicsShape::_createShape()
 			   parentNode = kShape->nodes[PD->baseNode].parentIndex;
 			   int notForever=0;
 			   PhysicsBody *parentBody;
-			   while ((finalParentNode<0)&&(notForever<100))
+			   while ((finalParentNode<0)&&(notForever<200))
 			   {
 				   for (int k=0;k<mBodyNodes.size();k++)
 				   {
@@ -1083,10 +1062,12 @@ bool PhysicsShape::_createShape()
 					   {
 						   finalParentNode = parentNode;
 						   parentBody = mPhysicsBodies[k];
+						   mPhysicsBodies[mPhysicsBodies.size()-1]->setParentBodyIndex(k);
 					   }
 				   }
 				   parentNode = kShape->nodes[parentNode].parentIndex;
-				   notForever++;//Just to make sure we don't get bodypart order mixed up and wind up in forever loop.
+				   mPhysicsBodies[mPhysicsBodies.size()-1]->setParentNodeIndex(parentNode);//Set parent node for body we just created.
+				   notForever++;//(Just to make sure we don't get bodypart order mixed up and wind up in forever loop.)
 			   }
 			   if (notForever==100) break;
 
@@ -1120,6 +1101,7 @@ bool PhysicsShape::_createShape()
 				   mNodeBodies[i] = true;
 		   }		   
 	   }
+	   setupOrderNodes();
    }
    return true;
 }
@@ -1243,6 +1225,495 @@ F32 PhysicsShape::getMass() const
    return mDataBlock->mass; 
 }
 
+void PhysicsShape::setIsRecording(bool record)
+{
+	if (isServerObject())
+	{
+		mIsRecording = record;
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());//SINGLE PLAYER HACK
+		clientShape->setIsRecording(record);
+		return;
+	}
+
+	if (record)
+	{
+		mIsRecording = true;
+		Con::printf("client starting recording!");
+		mRecordInitialPosition = getTransform().getPosition();
+		MatrixF kTransform = getTransform();
+		mRecordInitialOrientation.set(kTransform);
+
+		mRecordCount = 0;
+		mNodeTranslations.clear();
+		mNodeRotations.clear();
+	}
+	else
+		mIsRecording = false;
+
+}
+
+DefineEngineMethod( PhysicsShape, setIsRecording, void, (bool isRecording),, 
+   "@brief \n\n" )
+{
+	object->setIsRecording(isRecording);
+	return;
+}
+
+
+S32 PhysicsShape::getRecordingSize()
+{
+	S32 size;
+	if (isServerObject())
+	{       
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());//SINGLE PLAYER HACK
+		size = clientShape->getRecordingSize();
+		return size;
+	}
+
+	//This should never happen, but...
+	size = (mNodeRotations.size()*sizeof(Quat16) + mNodeTranslations.size()*sizeof(Point3F));		
+	return  size;
+}
+
+DefineEngineMethod( PhysicsShape, getRecordingSize, S32, (),, 
+   "@brief \n\n" )
+{
+	return object->getRecordingSize();
+}
+
+
+void PhysicsShape::recordTick()
+{
+	if (isServerObject())
+		return;//For now, all important physics is being done on the client.
+
+	mRecordCount++;
+	//Con::printf("recording tick! mRecordCount %d, orderNodes %d",mRecordCount,mOrderNodes.size());
+	if (!(mRecordCount % mRecordSampleRate)&&(mIsArticulated))// Should make this possible for non articulated
+	{																	//shapes as well, and also for the server sim in that case.
+		mNodeTranslations.increment();
+		//nodeTranslations[nodeTranslations.size()-1] = mCurrPosition;
+		//nodeTranslations[nodeTranslations.size()-1] = mBodyParts[0]->mRB->getLinearPosition();
+		
+		Point3F kDiff,kPos;
+		Quat16 tempRots[200];//TEMP, make expandable, but 200 nodes should 
+		Point3F tempTrans[200];// be plenty for quite a while...
+		QuatF kRot = mRecordInitialOrientation;
+		kRot.inverse();
+		//NOW: make the conversion to global position happen 
+		bool kRelativePosition = true;    //ONLY at export time.
+		//bool kRelativePosition = dynamic_cast<nxPhysManager*>(mPM)->mSceneRecordLocal;
+		MatrixF bodyTransform;
+		mPhysicsBodies[0]->getTransform(&bodyTransform);
+		if (kRelativePosition)
+		{//TEMP - kRelativePosition: trying to figure out what will work for iClone.  Doesn't rotate  
+			//bvh position when you rotate actor.			
+			kDiff = bodyTransform.getPosition() - mRecordInitialPosition;
+			kRot.mulP(kDiff,&kPos);
+			//Con::printf("kPos recording relative: %3.2f %3.2f %3.2f, initial %3.2f %3.2f %3.2f",kPos.x,kPos.y,kPos.z,
+			//	mRecordInitialPosition.x,mRecordInitialPosition.y,mRecordInitialPosition.z);
+		} else {
+			kPos = bodyTransform.getPosition();
+			//Con::printf("kPos recording: %3.2f %3.2f %3.2f",kPos.x,kPos.y,kPos.z);
+		}
+		kPos /= mObjScale;
+		mNodeTranslations[mNodeTranslations.size()-1] = kPos;
+
+		for (U32 i=0;i<mPhysicsBodies.size();i++)
+		{
+			QuatF q,p;
+			//q = mBodyParts[i-kNumWeapons]->mRB->getAngularPosition();
+			MatrixF bodypartTransform,parentTransform;
+			mPhysicsBodies[i]->getTransform(&bodypartTransform);
+			q = QuatF(bodypartTransform);
+			
+			if (i>0) //only node 0 doesn't have a parent, unless we're a weird case.
+			{
+				S32 parentBody = mPhysicsBodies[i]->getParentBodyIndex();
+				if (parentBody>=0) 
+				{
+					mPhysicsBodies[parentBody]->getTransform(&parentTransform);
+					p = QuatF(parentTransform);
+					p.inverse();
+					q *= p;
+				} 
+			} else {
+				if (kRelativePosition)
+					q *= kRot;
+			}
+
+			tempRots[i].set(q);
+
+			kPos = bodypartTransform.getPosition();
+			kPos -= getPosition();
+			kPos /= mObjScale;//HERE: also rotate! inverse of flexbody transform?
+			tempTrans[i] = kPos;
+
+
+			//HERE: loop through mWeapons
+			//if (mWeapons[i]) { mWeapons[i]->recordTick(); }
+			//WHOOPS!  But don't do that if you already doing it in RECORD SCENE.
+
+			//if (mWeapon)//&&(i==mWeaponBodypart->mPartID))
+			//{
+			//	nodeRotations.increment();
+			//	q = mWeapon->mBodyParts[0]->mRB->getAngularPosition();
+			//	p = mWeapon->mWielderBodypart->mRB->getAngularPosition();
+			//	p.inverse();
+			//	q *= p;
+			//	nodeRotations[nodeRotations.size()-1].set(q);
+			//	//kNumWeapons++;
+			//	//Con::printf("adding weapon %d node %d, mount node %d",
+			//	//	mWeaponBodypart->mPartID,mWeaponBodypart->mNodeIndex,mWeaponMountNode);
+			//}
+			
+			//if ((mWeapon2)&&(i==mWeapon2Bodypart->mPartID))
+			//{
+			//	nodeRotations.increment();
+			//	q = mWeapon2->mBodyParts[0]->mRB->getAngularPosition();
+			//	p = mWeapon2Bodypart->mRB->getAngularPosition();
+			//	p.inverse();
+			//	q *= p;
+			//	nodeRotations[nodeRotations.size()-1].set(q);
+			//	//kNumWeapons++;
+			//	//Con::printf("adding weapon2 %d",mWeapon2Bodypart->mPartID);
+			//}
+		}
+		//Need OrderNodes[]
+		for (U32 i=0;i<mPhysicsBodies.size();i++)
+		{//Now, copy them all to nodeRotations in the right order.
+			mNodeRotations.increment();
+			mNodeRotations[mNodeRotations.size()-1] = tempRots[mOrderNodes[i]];
+			if (i==0) {
+				QuatF q;
+				tempRots[mOrderNodes[i]].getQuatF(&q);
+				Con::printf("nodeRot [0]: %f %f %f %f",
+					q.x,q.y,q.z,q.w);
+			}
+			////nodeRotations[nodeRotations.size()-1] = tempRots[i];//same as old way, just testing first step
+
+			if ((mSaveTranslations)&&(i>0))//(We already saved i==0 above)
+			{
+				mNodeTranslations.increment();
+				mNodeTranslations[mNodeTranslations.size()-1] = tempTrans[mOrderNodes[i]];
+			}
+		}
+	}
+}
+
+void PhysicsShape::setupOrderNodes()
+{
+	U32 sortList[200];
+
+	for (U32 i = 0; i < mPhysicsBodies.size(); i++)
+	{
+		sortList[i] = mPhysicsBodies[i]->getNodeIndex();
+		mOrderNodes.increment();
+	}
+
+	for (U32 i = 0; i < mPhysicsBodies.size(); i++)
+	{
+		for (U32 j = 0; j < mPhysicsBodies.size()-1; j++)
+		{
+			S32 temp = -1;
+			if (sortList[j] > sortList[j+1]) 
+			{
+				temp = sortList[j];
+				sortList[j] = sortList[j+1];
+				sortList[j+1] = temp;				
+			}
+		}
+	}
+	
+	for (U32 i=0; i<mPhysicsBodies.size(); i++)
+		for (U32 j=0; j<mPhysicsBodies.size(); j++)
+			if (mPhysicsBodies[j]->getNodeIndex() == sortList[i]) 
+			{
+				mOrderNodes[i] = j;
+			}
+
+}
+
+void PhysicsShape::makeSequence(const char *seqName)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());//SINGLE PLAYER HACK
+		clientShape->makeSequence(seqName);
+		return;
+	}
+	
+	U32 importGround = 0;
+	S32 numRealKeyframes;
+   TSShape *kShape = mDataBlock->shape;
+	//Con::errorf("sequences: %d, rotations: %d, translations %d",kShape->sequences.size(),kShape->nodeRotations.size(),kShape->nodeTranslations.size());
+
+	//NOW: make the conversion to global position happen 
+	bool kRelativePosition = true;    //ONLY at export time.
+	//bool kRelativePosition = dynamic_cast<nxPhysManager*>(mPM)->mSceneRecordLocal;
+		
+	//Thread& st = mScriptThread[0];
+	//if (st.thread )
+	//{
+	//	st.sequence = 0;
+	//	st.thread->setSequence(0,0.0);
+	//	st.state = fxFlexBody::Thread::Stop;
+	//	updateThread(st);
+	//}
+	
+	const String dsqExt(".dsq");
+	/*
+	String seqDir(seqName);
+	//remove ".dsq" from filename if it's there
+	//if (dStrlen(seqDir.find(dsqExt.c_str(),0))) 
+	//	seqDir.erase(seqDir.length()-dsqExt.length(),dsqExt.length());
+	if (dStrstr((const char *)seqDir.c_str(),".dsq"))
+		seqDir.erase(seqDir.length()-dsqExt.length(),dsqExt.length());
+	//if (strpos(seqDir.c_str(),dsqExt.c_str())>-1)         // seqDir.find(dsqExt.c_str(),0,String::Case|String::Left) > -1) 
+	//	seqDir.erase(seqDir.length()-dsqExt.length(),dsqExt.length());
+
+	//then separate the sequence name, to get it by itself and the path by itself.
+	U32 nameLength = dStrlen(dStrrchr(seqDir.c_str(),'/'))-1;
+	String sequenceName(seqDir);
+	sequenceName.erase(0,seqDir.length()-nameLength);
+	seqDir.erase(seqDir.length()-nameLength,nameLength);
+	*/
+	String sequenceName(seqName);
+	//and make sure there's no spaces
+	sequenceName.replace(' ','_');
+
+	//Now, make the new sequence.
+	kShape->sequences.increment();
+	TSShape::Sequence & seq = kShape->sequences.last();
+	constructInPlace(&seq);
+
+	S32 numKeys = mNodeRotations.size() / mPhysicsBodies.size();//This should be safe no matter what.
+	if (kRelativePosition)
+		seq.numKeyframes = numKeys;//nodeTranslations.size();//safe (NO LONGER) because only base node has translations, one per keyframe.
+	else//NOW - for iClone, adding ten frames at the beginning to interpolate out from (0,0,0) to starting position.
+		seq.numKeyframes = numKeys + 10;//nodeTranslations.size() + 10;
+	seq.duration = (F32)seq.numKeyframes * (TickSec*mRecordSampleRate);
+	seq.baseRotation = kShape->nodeRotations.size();
+	seq.baseTranslation = kShape->nodeTranslations.size();
+	seq.baseScale = 0;
+	seq.baseObjectState = 1;
+	seq.baseDecalState = 0;
+	seq.firstGroundFrame = kShape->groundTranslations.size();
+	//if (importGround) seq.numGroundFrames = numSamples;
+	//else seq.numGroundFrames = 0;//1;?
+	seq.numGroundFrames = 0;//TEMP, groundRotations.size();
+	seq.firstTrigger = kShape->triggers.size();
+	seq.numTriggers = 0;
+	seq.toolBegin = 0.0;
+	seq.flags = 0;//TSShape::Cyclic;// | TSShape::Blend;// | TSShape::MakePath;
+	seq.priority = 5;
+
+	Con::errorf("New sequence!  numKeyframes %d, duration %f",seq.numKeyframes,seq.duration);
+	
+	seq.rotationMatters.clearAll();
+	//seq.rotationMatters.set(0);
+	//seq.rotationMatters.set(1);
+	//seq.rotationMatters.set(2);
+	//seq.rotationMatters.set(3);
+	//for (U32 i=0;i<rc;i++) seq.rotationMatters.set(dtsNodes[i]);//numJoints
+	for (U32 i=0;i<mPhysicsBodies.size();i++) { 
+		seq.rotationMatters.set(mPhysicsBodies[i]->getNodeIndex()); 
+		//Con::errorf("rotation matters: %d",mBodyParts[i]->mNodeIndex);
+	}
+
+	seq.translationMatters.clearAll();
+	if (mSaveTranslations)
+	{
+		for (U32 i=0;i<mPhysicsBodies.size();i++) { 
+			seq.translationMatters.set(mPhysicsBodies[i]->getNodeIndex()); 
+		}
+	} 	else {
+		seq.translationMatters.set(0);//ASSUMPTION: only root node has position data
+	}
+
+	seq.scaleMatters.clearAll();
+	seq.visMatters.clearAll();
+	seq.frameMatters.clearAll();
+	seq.matFrameMatters.clearAll();
+	//seq.decalMatters.clearAll();
+	//seq.iflMatters.clearAll();
+
+	kShape->names.increment();
+	kShape->names.last() = StringTable->insert(seqName);
+
+	seq.nameIndex = kShape->findName(seqName);
+
+	//if ((!kRelativePosition)&&(!importGround))
+	//{
+		//for (U32 i=0;i<10;i++)
+		//{
+		//	kShape->nodeTranslations.increment();
+		//	//nodeTranslations[0].z = 0.0;//For iClone specifically - vertical axis has to be zero, iClone keeps 
+		//	//it on ground as long as there is no Z (actually Y in bvh/iClone world) value.
+		//	Point3F pos;
+		//	pos.x = nodeTranslations[0].x * ((F32)i/10.0);
+		//	pos.y = nodeTranslations[0].y * ((F32)i/10.0);
+		//	pos.z = nodeTranslations[0].z;
+		//	//kShape->nodeTranslations[kShape->nodeTranslations.size()-1] = nodeTranslations[0] * ((F32)i/10.0);
+		//	kShape->nodeTranslations[kShape->nodeTranslations.size()-1] = pos;
+		//}
+	//	numRealKeyframes = seq.numKeyframes - 10;
+	//} else numRealKeyframes = seq.numKeyframes;
+	numRealKeyframes = seq.numKeyframes;
+
+	if (mSaveTranslations==false)
+	{//Normal skeleton animations, only rotation is used on bodyparts, root node has translation.
+		for (U32 i=0;i<numRealKeyframes;i++)
+		{
+			if (importGround)
+			{
+				kShape->nodeTranslations.increment();
+				kShape->nodeTranslations[kShape->nodeTranslations.size()-1].x = 0.0;
+				kShape->nodeTranslations[kShape->nodeTranslations.size()-1].y = 0.0;
+				kShape->nodeTranslations[kShape->nodeTranslations.size()-1].z = mNodeTranslations[i].z;
+
+				kShape->groundRotations.increment();
+				kShape->groundRotations[kShape->groundRotations.size()-1].identity();
+
+				kShape->groundTranslations.increment();
+				kShape->groundTranslations[kShape->groundTranslations.size()-1].x = mNodeTranslations[i].x;
+				kShape->groundTranslations[kShape->groundTranslations.size()-1].y = mNodeTranslations[i].y;
+				kShape->groundTranslations[kShape->groundTranslations.size()-1].z = 0.0;
+			} else {
+				
+				
+				kShape->nodeTranslations.increment();
+				kShape->nodeTranslations[kShape->nodeTranslations.size()-1] = mNodeTranslations[i];
+			
+				//nodeTranslations[i].z = 0.0;//iClone, see above. [Nope - didn't work either.]
+				//Con::errorf("nodeTranslations: %f %f %f",nodeTranslations[i].x,nodeTranslations[i].y,nodeTranslations[i].z);
+			}
+		}
+	} else {//Non-normal situation, destructible buildings, avalanche, etc. - no joints, all node translations stored.
+		for(U32 j=0;j<mPhysicsBodies.size();j++)
+		{
+			for (U32 i=0;i<numRealKeyframes;i++)
+			{
+				//TEMP
+				kShape->nodeTranslations.increment();
+				Point3F pos = mNodeTranslations[(i*mPhysicsBodies.size())+j];
+				kShape->nodeTranslations[kShape->nodeTranslations.size()-1] = pos;
+			}
+		}
+	}
+
+	//U32 kTotalParts = mNumBodyParts;//for i=0 - numBodyparts, if (mWeapons[i]) kTotalParts++;
+	//if (mWeapon) kTotalParts++;//((mWeapon)&&(mWeaponBodypart->mPartID>=0))
+	//if (mWeapon2) kTotalParts++;//((mWeapon2)&&(mWeapon2Bodypart->mPartID>=0))
+
+	for(U32 j=0;j<mPhysicsBodies.size();j++)
+	{
+		if ((!kRelativePosition)&&(!importGround))
+		{
+			for (U32 i=0;i<10;i++)
+			{
+				kShape->nodeRotations.increment();
+				kShape->nodeRotations[kShape->nodeRotations.size()-1] = mNodeRotations[j];//Should duplicate 
+			}                                                             //first frame rotations ten times.
+		}
+		for (U32 i=0;i<numRealKeyframes;i++)
+		{
+			//q16.set(rots[(i*numJoints)+orderNodes[j]]);
+			//q16.set(nodeRotations[(i*mNumBodyParts)+j]);
+
+			//TEMP
+			kShape->nodeRotations.increment();
+			kShape->nodeRotations[kShape->nodeRotations.size()-1] = mNodeRotations[(i*mPhysicsBodies.size())+j];
+			
+			QuatF qF = mNodeRotations[(i*mPhysicsBodies.size())+j].getQuatF();
+			//Con::printf("  final nodeRots, bodypart %d:  %f %f %f %f",j,qF.x,qF.y,qF.z,qF.w);
+			//kShape->nodeRotations[kShape->nodeRotations.size()-1] = nodeRotations[(i*mNumBodyParts)+j];
+		}
+	}
+
+	mNodeTranslations.clear();
+	mNodeRotations.clear();
+	mRecordCount = 0;
+
+	//Con::printf("BVH -- nodes %d nodeTranslations %d nodeRotations %d sequences: %d",kShape->nodes.size(),
+	//	kShape->nodeTranslations.size(),kShape->nodeRotations.size(),kShape->sequences.size());
+	//for (U32 i=0;i<kShape->sequences.size();i++)
+	//{
+	//	TSShape::Sequence & seq = kShape->sequences[i];
+
+	//	Con::printf("Seq[%d] %s frames: %d duration %3.2f baseObjectState %d baseScale %d baseDecalState %d toolbegin %f",
+	//		i,kShape->getName(seq.nameIndex).c_str(),seq.numKeyframes,
+	//		seq.duration,kShape->sequences[i].baseObjectState,kShape->sequences[i].baseScale,
+	//		kShape->sequences[i].baseDecalState,seq.toolBegin);
+	//	Con::printf("   groundFrames %d isBlend %d isCyclic %d flags %d",
+	//		seq.numGroundFrames,seq.isBlend(),seq.isCyclic(),seq.flags);
+	//}
+
+	//HA!  Yay, finally T3D has its own exportSequence (singular) function, don't 
+	//kShape->dropAllButOneSeq(kShape->sequences.size()-1); // have to do this anymore.
+
+
+	//HERE: It's working, but we do need to find the directory the model lives in first.
+	FileStream *outstream;
+	String dsqPath(seqName);
+	if (!dStrstr(dsqPath.c_str(),".dsq")) dsqPath += dsqExt;
+	//if (!gResourceManager->openFileForWrite(outstream,dsqPath.c_str())) {
+	if ((outstream = FileStream::createAndOpen( dsqPath.c_str(), Torque::FS::File::Write))==NULL) {
+		Con::printf("whoops, name no good: %s!",dsqPath.c_str()); 
+	} else {
+		//kShape->exportSequences((Stream *)outstream);
+		kShape->exportSequence((Stream *)outstream,seq,1);//1 = save in old format (v24) for show tool
+		outstream->close();
+		Con::printf("Exported sequence to file: %s",dsqPath.c_str());
+		//HERE, maybe choose this moment to insert this sequence into the database.  Still need to strip
+		//the non-relative part of path off of it first.
+		//String relativePath(dsqPath);
+		//String::SizeType relativePos = dsqPath.find("art/shapes");
+		//if (relativePos>0)
+		//	relativePath = dsqPath.substr(relativePos,dsqPath.length() - relativePos);
+		//Con::printf("We think the relative path is:  %s",relativePath.c_str());
+		//SQLiteObject *sql = new SQLiteObject();
+		//if (sql)
+		//{
+		//	if (sql->OpenDatabase(dynamic_cast<physManagerCommon*>(mPM)->mDatabaseName.c_str()))
+		//	{
+		//		char insert_query[512];//WARNING id_query[512],
+		//		//WARNING sqlite_resultset *resultSet;
+		//		int result;
+
+		//		sprintf(insert_query,"INSERT INTO sequence (skeleton_id,filename,name) VALUES (%d,'%s','%s');",
+		//			mSkeletonID,relativePath.c_str(),seqName.c_str());
+		//		result = sql->ExecuteSQL(insert_query);
+		//		//sprintf(id_query,"SELECT id FROM sequence WHERE filename = '%s';",relativePath.c_str());//Could use last id generated?
+		//		//resultSet = sql->GetResultSet(result);
+		//		sql->CloseDatabase();
+		//	}
+		//	delete sql;
+		//}
+	}
+
+
+	//Now, save any weapons:
+	//for(U32 i=0;i<mNumBodyParts;i++)
+	//{
+	//	if (mWeapons[i])
+	//	{
+	//		char weapSeqName[512];
+	//		sprintf(weapSeqName,"%s.%s",mWeapons[i]->mActorName,seqName.c_str());
+	//		mWeapons[i]->makeSequence(weapSeqName);
+	//	}
+	//}
+
+
+}
+
+DefineEngineMethod( PhysicsShape, makeSequence, void, (const char *seqName),, 
+   "@brief \n\n" )
+{
+	object->makeSequence(seqName);
+	return;
+}
+
 void PhysicsShape::applyImpulse( const Point3F &pos, const VectorF &vec )
 {
    if ( mPhysicsRep && mPhysicsRep->isDynamic() )
@@ -1253,8 +1724,8 @@ void PhysicsShape::applyImpulseToPart(  S32 partIndex, const Point3F &pos, const
 {
 	//Uh oh, need to reach across and apply this to the _client_, though.
 	if (isServerObject())
-	{        //SINGLE PLAYER HACK
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+	{       
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());//SINGLE PLAYER HACK
 		clientShape->applyImpulseToPart(partIndex,pos,vec);
 		return;
 	}
@@ -1358,6 +1829,10 @@ void PhysicsShape::processTick( const Move *move )
 
    mCurrentTick++;
    TSShape *kShape = mShapeInst->getShape();
+
+   //Now, this also only makes sense on the client, for articulated shapes at least...
+   if (mIsRecording)
+	   recordTick();
 
    //Now, this really belongs somewhere over in the ts directory, it is not related to physics at all, but for now testing it here.
    if ( (mIsGroundMoving) && (mCurrentSeq>=0) && !isServerObject() && (!mIsDynamic ) )
@@ -1555,6 +2030,8 @@ void PhysicsShape::processTick( const Move *move )
 	  }
       return;
    }
+
+
 
    // Store the last render state.
    mRenderState[0] = mRenderState[1];
@@ -1849,50 +2326,59 @@ void PhysicsShape::setPartHasGravity(S32 partID,bool hasGrav)
 
 void PhysicsShape::setDynamic(bool isDynamic)
 {
-	mIsDynamic = isDynamic;
-
-	if (isServerObject())
-	{        //SINGLE PLAYER HACK
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		//mPhysicsRep->setDynamic(isDynamic);
-		clientShape->setDynamic(isDynamic);
-		return;
-	}
-
-	if (!mIsArticulated)
+	if (mIsDynamic != isDynamic)
 	{
-		mPhysicsRep->setDynamic(isDynamic);
-		//HERE: add linear/angular velocity if (isDynamic==true) and we were animating/moving before.
-	} else {
-		for (U32 i=0;i<mPhysicsBodies.size();i++)
+		mIsDynamic = isDynamic;
+
+		if (isServerObject())
+		{        //SINGLE PLAYER HACK
+			PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+			//mPhysicsRep->setDynamic(isDynamic);
+			clientShape->setDynamic(isDynamic);
+			return;
+		}
+
+		if (!mIsArticulated)
 		{
-			mPhysicsBodies[i]->setDynamic(isDynamic);
-			if (isDynamic)
-			{//Add linear/angular velocity
-				Point3F posVel;
-				MatrixF curTrans,diffTrans,invLastTrans;
-				mPhysicsBodies[i]->getTransform(&curTrans);
-				posVel = curTrans.getPosition() - mLastTrans[i].getPosition();
+			mPhysicsRep->setDynamic(isDynamic);
+			//HERE: add linear/angular velocity if (isDynamic==true) and we were animating/moving before.
+		} else {
+			for (U32 i=0;i<mPhysicsBodies.size();i++)
+			{
+				mPhysicsBodies[i]->setDynamic(isDynamic);
+				if (isDynamic)
+				{//Add linear/angular velocity
+					Point3F posVel;
+					MatrixF curTrans,diffTrans,invLastTrans;
+					mPhysicsBodies[i]->getTransform(&curTrans);
+					posVel = curTrans.getPosition() - mLastTrans[i].getPosition();
 
-				posVel *= 32;//Times tick rate per second
-				mPhysicsBodies[i]->setLinVelocity(posVel);
+					posVel *= 32;//Times tick rate per second
+					mPhysicsBodies[i]->setLinVelocity(posVel);
 
-				if (0)//hmm, did I even finish this? where is curTrans coming from?
-				{
-					EulerF angVel;
-					mLastTrans[i].invertTo(&invLastTrans);
-					diffTrans = curTrans * invLastTrans;
-					angVel = diffTrans.toEuler();
+					if (0)//hmm, did I even finish this? where is curTrans coming from?
+					{
+						EulerF angVel;
+						mLastTrans[i].invertTo(&invLastTrans);
+						diffTrans = curTrans * invLastTrans;
+						angVel = diffTrans.toEuler();
 
-					//angVel *= 180.0/M_PI;//Maybe?
-					angVel *= 32;//Times tick rate per second.
-					mPhysicsBodies[i]->setAngVelocity(angVel);
-					Con::printf("setting velocities: lin %f %f %f  ang %f %f %f",posVel.x,posVel.y,posVel.z,angVel.x,angVel.y,angVel.z);
-					//Very difficult to see effect, but setAngVelocity does work. Not sure how to turn it up.
+						//angVel *= 180.0/M_PI;//Maybe?
+						angVel *= 32;//Times tick rate per second.
+						mPhysicsBodies[i]->setAngVelocity(angVel);
+						Con::printf("setting velocities: lin %f %f %f  ang %f %f %f",posVel.x,posVel.y,posVel.z,angVel.x,angVel.y,angVel.z);
+						//Very difficult to see effect, but setAngVelocity does work. Not sure how to turn it up.
+					}
 				}
 			}
 		}
 	}
+}
+
+
+bool PhysicsShape::getDynamic()
+{
+	return mIsDynamic;
 }
 
 void PhysicsShape::setPartDynamic(S32 partID,bool isDynamic)
@@ -1901,15 +2387,27 @@ void PhysicsShape::setPartDynamic(S32 partID,bool isDynamic)
 	if ( (!mIsArticulated) || (partID<0) )
 		return;
 
-	if (isServerObject())
-	{        //SINGLE PLAYER HACK
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setPartDynamic(partID,isDynamic);
-		return;
+	if (mPhysicsBodies[partID]->isDynamic() != isDynamic)
+	{
+
+		if (isServerObject())
+		{        //SINGLE PLAYER HACK
+			PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+			clientShape->setPartDynamic(partID,isDynamic);
+			return;
+		}
+
+		if (partID<=mPhysicsBodies.size()-1)
+			mPhysicsBodies[partID]->setDynamic(isDynamic);
 	}
-	
+}
+
+bool PhysicsShape::getPartDynamic(S32 partID)
+{
 	if (partID<=mPhysicsBodies.size()-1)
-		mPhysicsBodies[partID]->setDynamic(isDynamic);
+		return mPhysicsBodies[partID]->isDynamic();
+	else
+		return false;	 
 }
 
 S32 PhysicsShape::getContactBody()
@@ -1953,7 +2451,14 @@ bool PhysicsShape::setCurrentSeq(S32 seq)
 	}
 }
 
-//////////////////////////////////////////
+bool PhysicsShape::setActionSeq(const char *name,S32 seq)
+{
+	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size())&&(dStrlen(name)>0))
+	{
+		mActionSeqs[name] = seq;
+		return true;
+	} else return false;
+}
 
 bool PhysicsShape::setAmbientSeq(S32 seq)
 {
@@ -1973,124 +2478,8 @@ bool PhysicsShape::setAmbientSeq(S32 seq)
 	}
 }
 
-bool PhysicsShape::setIdleSeq(S32 seq)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setIdleSeq(seq);
-	}
+////////////////////////////////////////////////
 
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mIdleSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setWalkSeq(S32 seq)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setWalkSeq(seq);
-	}
-
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mWalkSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setRunSeq(S32 seq)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setRunSeq(seq);
-	}
-
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mRunSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setAttackSeq(S32 seq)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setAttackSeq(seq);
-	}
-
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mAttackSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setBlockSeq(S32 seq)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setBlockSeq(seq);
-	}
-
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mBlockSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setFallSeq(S32 seq)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setFallSeq(seq);
-	}
-
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mFallSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setGetupSeq(S32 seq)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setGetupSeq(seq);
-	}
-
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mGetupSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
 
 ////////////////////////////////////////////////////
 
@@ -2109,133 +2498,6 @@ bool PhysicsShape::setAmbientSeq(const char *name)
 		mAmbientSeq = seq;
 		if (!isServerObject())
 			_initAmbient();
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setIdleSeq(const char *name)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setIdleSeq(name);
-	}
-
-	S32 seq = mDataBlock->shape->findSequence( name );
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mIdleSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setWalkSeq(const char *name)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setWalkSeq(name);
-	}
-	
-	Con::printf("server %d setting walk seq: %s",isServerObject(),name);
-	S32 seq = mDataBlock->shape->findSequence( name );
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mWalkSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setRunSeq(const char *name)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setRunSeq(name);
-	}
-
-	S32 seq = mDataBlock->shape->findSequence( name );
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mRunSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setAttackSeq(const char *name)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setAttackSeq(name);
-	}
-
-	S32 seq = mDataBlock->shape->findSequence( name );
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mAttackSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setBlockSeq(const char *name)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setBlockSeq(name);
-	}
-
-	S32 seq = mDataBlock->shape->findSequence( name );
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mBlockSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setFallSeq(const char *name)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setFallSeq(name);
-	}
-
-	S32 seq = mDataBlock->shape->findSequence( name );
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mFallSeq = seq;
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool PhysicsShape::setGetupSeq(const char *name)
-{
-	if (isServerObject())
-	{
-		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setGetupSeq(name);
-	}
-
-	S32 seq = mDataBlock->shape->findSequence( name );
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
-	{
-		mGetupSeq = seq;
 		return true;
 	} else {
 		return false;
@@ -2307,6 +2569,108 @@ Point3F PhysicsShape::findGroundPosition(Point3F pos)
 		Con::printf("ground raycast failed from %f %f %f",pos.x,pos.y,pos.z);
 		return Point3F(0,0,0);
 	}
+}
+
+
+////  UNTESTED  ///////////////////////
+bool PhysicsShape::loadSequence(const char *dsqPath)
+{
+	//Here:  open the file, and give the shape->importSequences function a filestream, and you're done.
+	FileStream  fileStream;
+
+	//String dsqFilename = dsqPath;
+	/*
+	String relativePath;
+	S32 gamePos = dsqFilename.find("game/art",0);//?? Arbitrary, FIX!
+	if (gamePos > -1)
+		relativePath = dsqFilename.substr(gamePos + 5);
+	else
+		relativePath = dsqFilename;
+	//FIRST: find the sequence name from the database, given this filename and skeleton id, and make
+	//sure we haven't already loaded it.
+	char seq_name[255];
+	S32 seq_id = 0;
+	SQLiteObject *sql = new SQLiteObject();
+	if (sql)
+	{
+		if (sql->OpenDatabase(dynamic_cast<physManagerCommon*>(mPM)->mDatabaseName.c_str()))
+		{
+			char sequence_query[512];
+			int result,sequence_id=0;
+			sqlite_resultset *resultSet;
+			sprintf(sequence_query,"SELECT name,id FROM sequence WHERE filename LIKE '%s' AND skeleton_id=%d",
+				relativePath.c_str(),mSkeletonID);
+			result = sql->ExecuteSQL(sequence_query);//Should really keep sequence ids around somewhere, but just looking them up for now.
+			if (result)
+			{
+				resultSet = sql->GetResultSet(result);
+				if (resultSet->iNumRows == 1)
+				{
+					sprintf(seq_name,"%s",resultSet->vRows[0]->vColumnValues[0]);
+					seq_id = dAtoi(resultSet->vRows[0]->vColumnValues[1]);
+				}
+			}
+			sql->CloseDatabase();
+		}
+		delete sql;
+	}
+	*/
+	const String myPath = mShapeInst->getShapeResource()->getPath().getPath();
+	const String myFileName = mShapeInst->getShapeResource()->getPath().getFileName();
+	const String myFullPath = mShapeInst->getShapeResource()->getPath().getFullPath();
+	
+	Con::printf("shape adding sequence, myPath %s, myFileName %s fullPath %s",myPath.c_str(),myFileName.c_str(),myFullPath.c_str());
+
+	TSShape *kShape = mShapeInst->getShape();
+
+	//S32 seqindex = kShape->findSequence(seq_name);
+	//if (seqindex>=0)
+	//{
+	//	Con::errorf("trying to load a sequence that is already loaded: %s",seq_name);
+	//	return false;
+	//}
+
+	fileStream.open(dsqPath, Torque::FS::File::Read);
+
+	if (fileStream.getStatus() != Stream::Ok)
+	{
+		Con::errorf("Missing sequence %s",dsqPath);
+		return false;
+	}
+	if (!kShape->importSequences(&fileStream,myPath) || fileStream.getStatus()!= Stream::Ok)
+	{
+		fileStream.close();
+		Con::errorf("Load sequence %s failed",dsqPath);
+		return false;
+	}
+	fileStream.close();
+	Con::printf("Load sequence succeeded?  %s",dsqPath);
+	
+}
+
+DefineEngineMethod( PhysicsShape, loadSequence, void, (const char *path),,
+   "@brief.\n\n")
+{  
+	S32 seqID = object->loadSequence(path);
+	//object->setCurrentSeq(seqID);
+}
+
+DefineEngineMethod( PhysicsShape, getPath, const char *, (),,
+   "@brief.\n\n")
+{  
+	return object->mShapeInst->getShapeResource()->getPath().getPath();
+}
+
+DefineEngineMethod( PhysicsShape, getFile, const char *, (),,
+   "@brief.\n\n")
+{  
+	return object->mShapeInst->getShapeResource()->getPath().getFileName();
+}
+
+DefineEngineMethod( PhysicsShape, getFullPath, const char *, (),,
+   "@brief.\n\n")
+{  
+	return object->mShapeInst->getShapeResource()->getPath().getFullPath();
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -2448,6 +2812,34 @@ DefineEngineMethod( PhysicsShape, groundMove, void, (),,
 	//Con::printf("ground moving is set!");
 }
 
+
+DefineEngineMethod( PhysicsShape, getSceneShapeID, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mSceneShapeID;	
+}
+
+///////////////////////////////////////////////////////
+//SO, okay, here is where we get rid of all the functions below except possibly setAmbientSeq, maybe.
+
+DefineEngineMethod( PhysicsShape, setActionSeq, bool, (const char *name,const char *seqname),,
+   "@brief \n\n")
+{  
+	S32 seq = object->mShapeInst->getShape()->findSequence(seqname);
+	if ((seq >= 0)&&(strlen(name)>0))
+	{
+		object->setActionSeq(name,seq);
+		return true;
+	} else return false;
+
+}
+
+DefineEngineMethod( PhysicsShape, getActionSeq, S32, (const char *name),,
+   "@brief \n\n")
+{  	
+	return object->mActionSeqs[name];
+}
+
 ///////////////////////////////////////////////////////
 
 DefineEngineMethod( PhysicsShape, setAmbientSeq, bool, (S32 seq),,
@@ -2460,75 +2852,6 @@ DefineEngineMethod( PhysicsShape, setAmbientSeq, bool, (S32 seq),,
 	} else return false;
 }
 
-DefineEngineMethod( PhysicsShape, setIdleSeq, bool, (S32 seq),,
-   "@brief \n\n")
-{  
-	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
-	{
-		object->setIdleSeq(seq);
-		return true;
-	} else return false;
-}
-
-DefineEngineMethod( PhysicsShape, setWalkSeq, bool, (S32 seq),,
-   "@brief \n\n")
-{  
-	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
-	{
-		object->setWalkSeq(seq);
-		return true;
-	} else return false;
-}
-
-DefineEngineMethod( PhysicsShape, setRunSeq, bool, (S32 seq),,
-   "@brief \n\n")
-{  
-	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
-	{
-		object->setRunSeq(seq);
-		return true;
-	} else return false;
-}
-
-DefineEngineMethod( PhysicsShape, setAttackSeq, bool, (S32 seq),,
-   "@brief \n\n")
-{  
-	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
-	{
-		object->setAttackSeq(seq);
-		return true;
-	} else return false;
-}
-
-DefineEngineMethod( PhysicsShape, setBlockSeq, bool, (S32 seq),,
-   "@brief \n\n")
-{  
-	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
-	{
-		object->setBlockSeq(seq);
-		return true;
-	} else return false;
-}
-
-DefineEngineMethod( PhysicsShape, setFallSeq, bool, (S32 seq),,
-   "@brief \n\n")
-{  
-	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
-	{
-		object->setFallSeq(seq);
-		return true;
-	} else return false;
-}
-
-DefineEngineMethod( PhysicsShape, setGetupSeq, bool, (S32 seq),,
-   "@brief \n\n")
-{  
-	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
-	{
-		object->setGetupSeq(seq);
-		return true;
-	} else return false;
-}
 
 ///////////////////////////////////////////////////////
 
@@ -2538,47 +2861,6 @@ DefineEngineMethod( PhysicsShape, getAmbientSeq, S32, (),,
 	return object->mAmbientSeq;	
 }
 
-DefineEngineMethod( PhysicsShape, getIdleSeq, S32, (),,
-   "@brief \n\n")
-{  
-	return object->mIdleSeq;	
-}
-
-DefineEngineMethod( PhysicsShape, getWalkSeq, S32, (),,
-   "@brief \n\n")
-{  
-	return object->mWalkSeq;	
-}
-
-DefineEngineMethod( PhysicsShape, getRunSeq, S32, (),,
-   "@brief \n\n")
-{  
-	return object->mRunSeq;	
-}
-
-DefineEngineMethod( PhysicsShape, getAttackSeq, S32, (),,
-   "@brief \n\n")
-{  
-	return object->mAttackSeq;	
-}
-
-DefineEngineMethod( PhysicsShape, getBlockSeq, S32, (),,
-   "@brief \n\n")
-{  
-	return object->mBlockSeq;	
-}
-
-DefineEngineMethod( PhysicsShape, getFallSeq, S32, (),,
-   "@brief \n\n")
-{  
-	return object->mFallSeq;	
-}
-
-DefineEngineMethod( PhysicsShape, getGetupSeq, S32, (),,
-   "@brief \n\n")
-{  
-	return object->mGetupSeq;	
-}
 
 ///////////////////////////////////////////////////////
 
@@ -2588,140 +2870,24 @@ DefineEngineMethod( PhysicsShape, getAmbientSeqName, const char *, (),,
 	return object->mShapeInst->getShape()->getSequenceName(object->mAmbientSeq);
 }
 
-DefineEngineMethod( PhysicsShape, getIdleSeqName, const char *, (),,
-   "@brief \n\n")
-{  
-	return object->mShapeInst->getShape()->getSequenceName(object->mIdleSeq);	
-}
-
-DefineEngineMethod( PhysicsShape, getWalkSeqName, const char *, (),,
-   "@brief \n\n")
-{  
-	return object->mShapeInst->getShape()->getSequenceName(object->mWalkSeq);	
-}
-
-DefineEngineMethod( PhysicsShape, getRunSeqName, const char *, (),,
-   "@brief \n\n")
-{  
-	return object->mShapeInst->getShape()->getSequenceName(object->mRunSeq);	
-}
-
-DefineEngineMethod( PhysicsShape, getAttackSeqName, const char *, (),,
-   "@brief \n\n")
-{  
-	return object->mShapeInst->getShape()->getSequenceName(object->mAttackSeq);	
-}
-
-DefineEngineMethod( PhysicsShape, getBlockSeqName, const char *, (),,
-   "@brief \n\n")
-{  
-	return object->mShapeInst->getShape()->getSequenceName(object->mBlockSeq);	
-}
-
-DefineEngineMethod( PhysicsShape, getFallSeqName, const char *, (),,
-   "@brief \n\n")
-{  
-	return object->mShapeInst->getShape()->getSequenceName(object->mFallSeq);	
-}
-
-DefineEngineMethod( PhysicsShape, getGetupSeqName, const char *, (),,
-   "@brief \n\n")
-{  
-	return object->mShapeInst->getShape()->getSequenceName(object->mGetupSeq);	
-}
 ///////////////////////////////////////////////////////
 
+//HERE: all of these should be stored in the DB as actionSequences.
 DefineEngineMethod( PhysicsShape, setAmbientSeqByName, bool, (const char* name),,
    "@brief \n\n")
 {  
 	return object->setAmbientSeq(name);
 }
 
-DefineEngineMethod( PhysicsShape, setIdleSeqByName, bool, (const char* name),,
-   "@brief \n\n")
-{  
-	return object->setIdleSeq(name);
-}
 
-DefineEngineMethod( PhysicsShape, setWalkSeqByName, bool, (const char* name),,
-   "@brief \n\n")
+DefineEngineMethod( PhysicsShape, actionSeq, void, (const char *name),,
+   "@brief.\n\n")
 {  
-	return object->setWalkSeq(name);
-}
-
-DefineEngineMethod( PhysicsShape, setRunSeqByName, bool, (const char* name),,
-   "@brief \n\n")
-{  
-	return object->setRunSeq(name);
-}
-
-DefineEngineMethod( PhysicsShape, setAttackSeqByName, bool, (const char* name),,
-   "@brief \n\n")
-{  
-	return object->setAttackSeq(name);
-}
-
-DefineEngineMethod( PhysicsShape, setBlockSeqByName, bool, (const char* name),,
-   "@brief \n\n")
-{  
-	return object->setBlockSeq(name);
-}
-
-DefineEngineMethod( PhysicsShape, setFallSeqByName, bool, (const char* name),,
-   "@brief \n\n")
-{  
-	return object->setFallSeq(name);
-}
-
-DefineEngineMethod( PhysicsShape, setGetupSeqByName, bool, (const char* name),,
-   "@brief \n\n")
-{  
-	return object->setGetupSeq(name);
+	object->setCurrentSeq(object->mActionSeqs[name]);
 }
 
 ///////////////////////////////////////////////////
 
-DefineEngineMethod( PhysicsShape, seqIdle, void, (),,
-   "@brief.\n\n")
-{  
-	object->setCurrentSeq(object->mIdleSeq);
-}
-
-DefineEngineMethod( PhysicsShape, seqWalk, void, (),,
-   "@brief.\n\n")
-{  
-	object->setCurrentSeq(object->mWalkSeq);
-}
-
-DefineEngineMethod( PhysicsShape, seqRun, void, (),,
-   "@brief.\n\n")
-{  
-	object->setCurrentSeq(object->mRunSeq);
-}
-
-DefineEngineMethod( PhysicsShape, seqAttack, void, (),,
-   "@brief.\n\n")
-{  
-	object->setCurrentSeq(object->mAttackSeq);
-}
-
-DefineEngineMethod( PhysicsShape, seqBlock, void, (),,
-   "@brief.\n\n")
-{  
-	object->setCurrentSeq(object->mBlockSeq);
-}
-
-DefineEngineMethod( PhysicsShape, seqFall, void, (),,
-   "@brief.\n\n")
-{  
-	object->setCurrentSeq(object->mFallSeq);
-}
-
-DefineEngineMethod( PhysicsShape, seqGetup, void, (),,
-   "@brief.\n\n")
-{  
-	object->setCurrentSeq(object->mGetupSeq);
-}
 
 /////////////////////////////////////////////////////
 
@@ -2741,4 +2907,31 @@ DefineEngineMethod( PhysicsShape, findGroundPosition, Point3F, (Point3F pos),,
    "@brief.\n\n")
 {  
 	return object->findGroundPosition(pos);
+}
+
+DefineEngineMethod( PhysicsShape, playSeq, void, (const char *name),,
+   "@brief.\n\n")
+{  
+	S32 seqID = object->mShapeInst->getShape()->findSequence(name);
+	object->setDynamic(0);
+	object->setCurrentSeq(seqID);
+}
+
+DefineEngineMethod( PhysicsShape, showSeqs, void, (),,
+   "@brief.\n\n")
+{	
+	TSShape *kShape = object->mShapeInst->getShape();
+
+	Con::errorf("ground Rotations: %d, translations %d",kShape->groundRotations.size(),kShape->groundTranslations.size());
+	for (U32 i=0;i<kShape->sequences.size();i++)
+	{
+		TSShape::Sequence & seq = kShape->sequences[i];
+
+		Con::printf("Seq[%d] %s frames: %d duration %3.2f baseObjectState %d baseScale %d baseDecalState %d toolbegin %f",
+			i,kShape->getName(seq.nameIndex).c_str(),seq.numKeyframes,
+			seq.duration,kShape->sequences[i].baseObjectState,kShape->sequences[i].baseScale,
+			kShape->sequences[i].baseDecalState,seq.toolBegin);
+		Con::printf("   groundFrames %d first %d isBlend %d isCyclic %d flags %d",
+			seq.numGroundFrames,seq.firstGroundFrame,seq.isBlend(),seq.isCyclic(),seq.flags);
+	}
 }
