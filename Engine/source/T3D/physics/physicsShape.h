@@ -67,7 +67,7 @@ enum physicsShapeType
 
 struct physicsPartData
 {
-	U32 jointID;
+	S32 jointID;
     S32 baseNode;
     S32 childNode;
     S32 shapeType;
@@ -190,7 +190,7 @@ public: //protected:
    /// The abstracted physics actor.
    PhysicsBody *mPhysicsRep;//OpenSimEarth: I would declare this redundant, and use mPhysicsBodies[0], but for the number of places
    //mPhysicsRep is still in use, and the confusion between server/client and articulated/not articulated. Needs major refactor.
-
+   
    Vector<PhysicsBody*> mPhysicsBodies; //For articulated shapes. Currently clientside only.
    PhysicsJoint *mJoint;
    Vector<PhysicsJoint*> mPhysicsJoints;

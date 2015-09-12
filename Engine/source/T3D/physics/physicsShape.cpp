@@ -450,6 +450,7 @@ PhysicsShape::PhysicsShape()
 
 PhysicsShape::~PhysicsShape()
 {
+	Con::printf("calling physicsShape destructor, sceneShapeID %d",mSceneShapeID);
 }
 
 void PhysicsShape::consoleInit()
@@ -949,7 +950,7 @@ bool PhysicsShape::_createShape()
 			   resultSet2 = kSQL->GetResultSet(result2);
 		   if (resultSet2->iNumRows!=1)
 			   hasJoint = false;
-		  
+		   kSQL->ClearResultSet(result2);
 
 		   //////////////////////////////////////////
 		   // Create Physics Body
@@ -1087,6 +1088,8 @@ bool PhysicsShape::_createShape()
 
 		   delete PD;
 	   }
+		   
+	   kSQL->ClearResultSet(result);
 	   
 	   for (U32 i=0;i<kShape->nodes.size();i++)
 	   {
@@ -2820,7 +2823,6 @@ DefineEngineMethod( PhysicsShape, getSceneShapeID, S32, (),,
 }
 
 ///////////////////////////////////////////////////////
-//SO, okay, here is where we get rid of all the functions below except possibly setAmbientSeq, maybe.
 
 DefineEngineMethod( PhysicsShape, setActionSeq, bool, (const char *name,const char *seqname),,
    "@brief \n\n")
@@ -2840,7 +2842,15 @@ DefineEngineMethod( PhysicsShape, getActionSeq, S32, (const char *name),,
 	return object->mActionSeqs[name];
 }
 
+//Call this at runtime to actually use the action.
+DefineEngineMethod( PhysicsShape, actionSeq, void, (const char *name),,
+   "@brief.\n\n")
+{  
+	object->setCurrentSeq(object->mActionSeqs[name]);
+}
+
 ///////////////////////////////////////////////////////
+//Obsolete... 
 
 DefineEngineMethod( PhysicsShape, setAmbientSeq, bool, (S32 seq),,
    "@brief \n\n")
@@ -2852,17 +2862,11 @@ DefineEngineMethod( PhysicsShape, setAmbientSeq, bool, (S32 seq),,
 	} else return false;
 }
 
-
-///////////////////////////////////////////////////////
-
 DefineEngineMethod( PhysicsShape, getAmbientSeq, S32, (),,
    "@brief \n\n")
 {  
 	return object->mAmbientSeq;	
 }
-
-
-///////////////////////////////////////////////////////
 
 DefineEngineMethod( PhysicsShape, getAmbientSeqName, const char *, (),,
    "@brief \n\n")
@@ -2870,24 +2874,12 @@ DefineEngineMethod( PhysicsShape, getAmbientSeqName, const char *, (),,
 	return object->mShapeInst->getShape()->getSequenceName(object->mAmbientSeq);
 }
 
-///////////////////////////////////////////////////////
-
 //HERE: all of these should be stored in the DB as actionSequences.
 DefineEngineMethod( PhysicsShape, setAmbientSeqByName, bool, (const char* name),,
    "@brief \n\n")
 {  
 	return object->setAmbientSeq(name);
 }
-
-
-DefineEngineMethod( PhysicsShape, actionSeq, void, (const char *name),,
-   "@brief.\n\n")
-{  
-	object->setCurrentSeq(object->mActionSeqs[name]);
-}
-
-///////////////////////////////////////////////////
-
 
 /////////////////////////////////////////////////////
 
@@ -2934,4 +2926,20 @@ DefineEngineMethod( PhysicsShape, showSeqs, void, (),,
 		Con::printf("   groundFrames %d first %d isBlend %d isCyclic %d flags %d",
 			seq.numGroundFrames,seq.firstGroundFrame,seq.isBlend(),seq.isCyclic(),seq.flags);
 	}
+}
+
+////////////////////////////////////////////////////////////////
+
+
+DefineEngineMethod( PhysicsShape, setSceneID, void, (S32 id),,
+   "@brief \n\n")
+{  
+	if (id>0)
+		object->mSceneID = id;
+}
+
+DefineEngineMethod( PhysicsShape, getSceneID, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mSceneID;
 }

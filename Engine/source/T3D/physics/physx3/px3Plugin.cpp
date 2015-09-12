@@ -332,6 +332,8 @@ void Px3Plugin::loadJointData(U32 jointID, physicsJointData* jD)
 	jD->maxForce = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 	jD->maxTorque = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 	
+	mSQL->ClearResultSet(result);
+
 	//And then later, the limit planes...
 	//...
 	
