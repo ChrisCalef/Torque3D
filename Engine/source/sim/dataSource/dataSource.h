@@ -41,30 +41,39 @@ class dataSource
 	   bool mSending;//about sending and receiving, but only about who initially connects to whom.
 
 	   char *mReturnBuffer;
-	   float *mFloatBuffer;
+	   char *mStringBuffer;
 
-	   unsigned int mNumReturnControls;
-	   unsigned int mNumReturnBytes;
+	   unsigned int mReturnControls;
 	   unsigned int mByteCounter;
 
 	   dataSource(bool listening=false);
 	   ~dataSource();
 
-	   virtual void tick();
+	   void tick();
 	   
-	   virtual void openListenSocket();
-	   virtual void connectListenSocket();
-	   virtual void listenForPacket();
+	   void openListenSocket();
+	   void connectListenSocket();
+	   void listenForPacket();
 
-	   virtual void connectSendSocket();
-	   virtual void sendPacket();
-	   virtual void clearPacket();
+	   void connectSendSocket();
+	   void sendPacket();
+	   void clearPacket();
+	   
+	   void disconnectSockets();	   
+
+	   void writeShort(short);
+	   void writeInt(int);
+	   void writeFloat(float);
+	   void writeDouble(double);
+	   void writeString(char *);
+
+	   short readShort();
+	   int readInt();
+	   float readFloat();
+	   double readDouble();
+	   char *readString();
 	   
 	   void addBaseRequest();
-
-	   float *getFloatBytes(unsigned int num_args);
-
-	   void disconnectSockets();
 };
 
 #endif // _DATASOURCE_H_

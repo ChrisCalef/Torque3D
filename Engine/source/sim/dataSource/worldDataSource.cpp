@@ -84,7 +84,7 @@ void worldDataSource::tick()
 			}
 		}
 	} else if (mCurrentTick % mTalkInterval == 0) {
-		Con::printf("\nworldDataSource current tick: %d\n",mCurrentTick);
+		//Con::printf("\nworldDataSource current tick: %d\n",mCurrentTick);
 	}
 }
 
@@ -114,8 +114,9 @@ void worldDataSource::listenForPacket()
 	//char *bytes = &(buffer[0]);
 	//for (int i=0;i<sizeof(float);i++) floatBytes[i] = bytes[i];
 	//mByteCounter += sizeof(float);
-
-	//float *argArray
+	
+	/*
+	float *argArray
 	mFloatBuffer = getFloatBytes(1);
 	float controlCount = mFloatBuffer[0];
 
@@ -132,8 +133,8 @@ void worldDataSource::listenForPacket()
 			hostFrame = mFloatBuffer[0];
 			Con::printf("Host frame: %d\n",(int)hostFrame);
 		} 
+	}*/
 
-	}
 	//delete [] buffer;
 }
 
@@ -143,10 +144,11 @@ void worldDataSource::connectSendSocket()
 	struct sockaddr_in source_addr;
 	
 	mReturnBuffer = new char[mPacketSize];
-	mFloatBuffer = new float[mPacketSize/sizeof(float)];
+	//mFloatBuffer = new float[mPacketSize/sizeof(float)];
 	
 	mReadyForRequests = true;
-	addBaseRequest();
+
+	addBaseRequest();//Do this just so there's always something to send...
 
 	mWorkSockfd = socket(AF_INET, SOCK_STREAM,IPPROTO_TCP);
 	if (mWorkSockfd < 0) {
@@ -162,9 +164,10 @@ void worldDataSource::connectSendSocket()
 	source_addr.sin_addr.s_addr = inet_addr( mSourceIP );
     source_addr.sin_port = htons(mPort);
 	
-	if (connect(mWorkSockfd,(struct sockaddr *) &source_addr,sizeof(source_addr)) < 0) 
+	int result = connect(mWorkSockfd,(struct sockaddr *) &source_addr,sizeof(source_addr));
+	if ( result < 0) 
 	{
-        Con::printf("ERROR connecting send socket\n");
+        Con::printf("worldDataSource: ERROR connecting send socket, errno %d error %s\n",errno,strerror(errno));
 		return;
 	}
 	
@@ -183,7 +186,7 @@ void worldDataSource::sendPacket()
 	//mFloatBuffer[1] = 103.0f;//CIGI code for StartOfFrame
 	//mFloatBuffer[2] = (float)mCurrentTick;//Mandatory frame argument, so we know where we're at.
 	
-	mReturnBuffer = reinterpret_cast<char*>(mFloatBuffer);
+	//mReturnBuffer = reinterpret_cast<char*>(mFloatBuffer);
 
 	int n = send(mWorkSockfd,mReturnBuffer,mPacketSize,0);
 	Con::printf("worldDataSource sent packet, n=%d",n);
@@ -201,98 +204,106 @@ void worldDataSource::sendPacket()
 
 void worldDataSource::clearPacket()
 {
-	memset((void *)(mFloatBuffer),NULL,1024);	
-	mNumReturnControls = 0;
-	mNumReturnBytes = 0;	
+	memset((void *)(mReturnBuffer),NULL,1024);	
+	mReturnControls = 0;
+	mByteCounter = 0;	
 }
 
 //These functions can be called from the terrainPager, just make sure all the data variables are set first.
 void worldDataSource::addInitTerrainRequest(terrainPagerData *data,const char *path)
 {
 	float OPCODE = 101.0f;
-	mNumReturnControls++;//Increment mNumReturnControls every time you add a control.
+	mReturnControls++;//Increment mNumReturnControls every time you add a control.
+	/*
 	mFloatBuffer[0] = (float)mNumReturnControls;
 
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = OPCODE;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = OPCODE;
 	//num args = 6
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = data->mTileWidth;
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = (float)(data->mHeightmapRes);
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = (float)(data->mTextureRes);
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = data->mMapCenterLongitude;
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = data->mMapCenterLatitude;
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = (float)(strlen(path));
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = data->mTileWidth;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = (float)(data->mHeightmapRes);
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = (float)(data->mTextureRes);
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = data->mMapCenterLongitude;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = data->mMapCenterLatitude;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = (float)(strlen(path));
 	//And then send the actual path...
-
-	Con::printf("adding init terrain request, numControls %d, numReturnBytes %d\n",mNumReturnControls,mNumReturnBytes);
+	*/
+	Con::printf("adding init terrain request, numControls %d, numReturnBytes %d\n",mReturnControls,mByteCounter);
 }
 
 //void worldDataSource::addTerrainRequest(loadTerrainData *data)
 void worldDataSource::addTerrainRequest(float playerLong,float playerLat)
 {
 	float OPCODE = 102.0f;
-	mNumReturnControls++;//Increment mNumReturnControls every time you add a control.
+	mReturnControls++;//Increment mNumReturnControls every time you add a control.
+	/*
 	mFloatBuffer[0] = (float)mNumReturnControls;
 
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = OPCODE;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = OPCODE;
 
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = playerLong;//data->startLongitude
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = playerLat;//data->startLatitude
-	//mNumReturnBytes++;
-	//mFloatBuffer[mNumReturnBytes] = data->loadPriority;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = playerLong;//data->startLongitude
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = playerLat;//data->startLatitude
+	//mByteCounter++;
+	//mFloatBuffer[mByteCounter] = data->loadPriority;
 
 	Con::printf("adding terrain request, numControls %d, long %f lat %f\n",mNumReturnControls,playerLong,playerLat);
+		*/
 }
 
 void worldDataSource::addInitSkyboxRequest(unsigned int skyboxRes,int cacheMode,const char *path)
 {
 	float OPCODE = 201.0f;
-	mNumReturnControls++;//Increment mNumReturnControls every time you add a control.
+	mReturnControls++;//Increment mNumReturnControls every time you add a control.
+
+	/*
 	mFloatBuffer[0] = (float)mNumReturnControls;
 
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = OPCODE;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = OPCODE;
 
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = (float)skyboxRes;
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = (float)cacheMode;
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = (float)(strlen(path));
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = (float)skyboxRes;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = (float)cacheMode;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = (float)(strlen(path));
 
-	Con::printf("adding init skybox request, numControls %d, numReturnBytes %d\n",mNumReturnControls,mNumReturnBytes);
+	Con::printf("adding init skybox request, numControls %d, numReturnBytes %d\n",mNumReturnControls,mByteCounter);
+		*/
 }
 
 void worldDataSource::addSkyboxRequest(float tileLong,float tileLat,float playerLong,float playerLat,float playerAlt)
 {
 	float OPCODE = 202.0f;
-	mNumReturnControls++;//Increment mNumReturnControls every time you add a control.
+	mReturnControls++;//Increment mNumReturnControls every time you add a control.
+	/*
 	mFloatBuffer[0] = (float)mNumReturnControls;
 
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = OPCODE;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = OPCODE;
 
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = tileLong;
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = tileLat;
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = playerLong;
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = playerLat;
-	mNumReturnBytes++;
-	mFloatBuffer[mNumReturnBytes] = playerAlt;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = tileLong;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = tileLat;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = playerLong;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = playerLat;
+	mByteCounter++;
+	mFloatBuffer[mByteCounter] = playerAlt;
 
 	Con::printf("adding skybox request, numControls %d, tileLong %f tileLat %f\n",mNumReturnControls,tileLong,tileLat);
+		*/
 }
 
 void worldDataSource::skyboxSocketDraw()

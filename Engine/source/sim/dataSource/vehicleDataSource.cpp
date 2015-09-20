@@ -39,7 +39,6 @@ vehicleDataSource::vehicleDataSource(bool listening)
 		mListening = false;
 		mSending = true;
 	}
-
 	
 	mTerrainPager = NULL;
 	TerrainPager* pager = dynamic_cast<TerrainPager*>(Sim::findObject("TheTP"));
@@ -118,8 +117,8 @@ void vehicleDataSource::listenForPacket()
 			//mFGPacket.longitude = buff.longitude;//double_swap(buff.longitude);
 			mFGPacket.latitude = buff.latitude;//float_swap(buff.latitude);
 			mFGPacket.longitude = buff.longitude;//float_swap(buff.longitude);
-			//mFGPacket.altitude = (int)((float)(ntohl(buff.altitude))*(12.0/39.0));//converting to meters...
-			mFGPacket.altitude = buff.altitude * (12.0/39.0);//float_swap(buff.altitude) * (12.0/39.0);//converting to meters...
+			//mFGPacket.altitude = (int)((float)(ntohl(buff.altitude))*(12.0/39.37));//converting to meters...
+			mFGPacket.altitude = buff.altitude * (12.0/39.37);//converting to meters...
 			mFGPacket.airspeed = buff.airspeed;//ntohl(buff.airspeed);
 			mFGPacket.roll = buff.roll;//float_swap(buff.roll);
 			mFGPacket.pitch = buff.pitch;//float_swap(buff.pitch);

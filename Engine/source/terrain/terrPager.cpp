@@ -291,11 +291,17 @@ void TerrainPager::processTick()
 	{//Next tick after finding client pos, here we have to split up based on whether we're using a dataSource or not.
 		 if (mDataSource->mReadyForRequests)
 		{
+			/* //TEMP, removing this while we test baseRequest under new system...
 			mDataSource->addInitTerrainRequest(&mD,mD.mTerrainPath.c_str());
 			mDataSource->addInitSkyboxRequest(mD.mSkyboxRes,0,mD.mSkyboxPath.c_str());
 			Con::printf("TerrainPager sending init requests.");
 			mSentInitRequests = true;
-			mLoadState = 2;
+			mLoadState = 2;  */
+			
+			if (mUseDataSource)
+			{
+				mDataSource->tick();
+			}
 			return;
 		} else Con::printf("TerrainPager waiting for worldDataSource to be ready.");
 	}
@@ -363,7 +369,7 @@ void TerrainPager::processTick()
 		//		mLastSkyboxTick,mCurrentTick,mDataSource->mNumReturnControls,mSentSkyboxRequest);
 		//}
 
-		if ((mUseDataSource)&&(mDataSource->mNumReturnControls==1)&&
+		if ((mUseDataSource)&&(mDataSource->mReturnControls==1)&&
 			((S32)mLastSkyboxTick < ((S32)mCurrentTick - (S32)mSkyboxTickInterval))&&
 			(mSentSkyboxRequest == false))
 		{
