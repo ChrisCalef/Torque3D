@@ -1304,13 +1304,13 @@ void TerrainBlock::getMinMaxHeight( F32 *minHeight, F32 *maxHeight ) const
    *maxHeight = fixedToFloat( sq->maxHeight );
 }
 
-
 bool TerrainBlock::loadTerrainData( const char *heightFile,const char *textureFile,unsigned int textureRes,unsigned int material_count,const char *treeFile) 
 {
 	//Con::printf("loading terrain data: %s",fileName);
 
 	//HERE: when we're ready, this is where we will open the hght.(tileName).bin file, as well as text.(tileName).bin 
 	//and eventually trees.(tileName).bin and whatever else comes up.
+	//But, FIX! Make this use write/readBinary and pass all the data over the socket, instead of writing .bin files.
 	FileStream fs;
 	F32 data;
 	S32 numHeightBinArgs = 5;

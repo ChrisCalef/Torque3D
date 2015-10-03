@@ -3,39 +3,20 @@
 //-----------------------------------------------------------------------------
 
 #include "sim/dataSource/worldDataSource.h"
-
 #include "console/consoleTypes.h"//Torque specific, should do #ifdef TORQUE or something
-
 #include "core/stream/fileStream.h"
+#include "time.h"
 
-worldDataSource::worldDataSource(bool listening,terrainPagerData *data)
+worldDataSource::worldDataSource(bool server,terrainPagerData *data)
 {
-	mPacketSize = 1024;
-	mSocketTimeout = 0;
-	mPort = 9934;
-	mCurrentTick = 0;
 	mSkyboxStage = 0;
-	mLastSendTick = 0;
-	mTickInterval = 30;
-	mTalkInterval = 20;
-	mStartDelay = 50;
-	sprintf(mSourceIP,"127.0.0.1");
-	
-	if (listening)
-	{
-		mListening = true;
-		mSending = false;
-	} else {
-		mListening = false;
-		mSending = true;
-	}
 
 	if (data)
 	{
 		mD.mTerrainPath = data->mTerrainPath;
-		mD.mTerrainLockfile = data->mTerrainLockfile;
+		//mD.mTerrainLockfile = data->mTerrainLockfile;
 		mD.mSkyboxPath = data->mSkyboxPath;
-		mD.mSkyboxLockfile = data->mSkyboxLockfile;
+		//mD.mSkyboxLockfile = data->mSkyboxLockfile;
 		mD.mTileWidth = data->mTileWidth;
 		mD.mTileWidthLongitude = data->mTileWidthLongitude;
 		mD.mTileWidthLatitude = data->mTileWidthLatitude;
@@ -49,318 +30,197 @@ worldDataSource::worldDataSource(bool listening,terrainPagerData *data)
 		mD.mTileDropRadius = data->mTileDropRadius;
 		mD.mGridSize = data->mGridSize;
 	}
+		
+	if (server)
+	{
+		mServer = true;
+		mListening = true;
+	}
 
-	Con::printf("New world data source object!!! Source IP: %s\n",mSourceIP);
+	mTerrainDone = false;
+	mSkyboxDone = false;
+
+	Con::printf("New world data source object!!! Source IP: %s packetSize %d mAlternating %d\n",
+		mSourceIP,mPacketSize,mAlternating);
 }
 
 worldDataSource::~worldDataSource()
 {
-	
-	//delete [] mReturnBuffer;
-	//delete [] mFloatBuffer;
-	//deletePacket();
-	disconnectSockets();
+	disconnectSockets();//Is this redundant with dataSource::~dataSource() doing the same thing?
 }
 
 void worldDataSource::tick()
-{	
-    if ((mCurrentTick++ % mTickInterval == 0)&&
+{
+	if ((mCurrentTick++ % mTickInterval == 0)&&
 		(mCurrentTick > mStartDelay)) 
 	{ 
-		if (mListening)
+		if (mConnectionEstablished == false)
 		{
-			if (mListenSockfd == INVALID_SOCKET)
-				openListenSocket();
-			else if (mWorkSockfd == INVALID_SOCKET)
-				connectListenSocket();
-			else
+			trySockets();
+		} else {
+			if (mListening) {
 				listenForPacket();
-		} else if (mSending) {
-			if (mWorkSockfd == INVALID_SOCKET)
-			{
-				connectSendSocket();
+				if (mAlternating) {
+					mListening = false;
+					addBaseRequest();
+					if (mServer) tick();
+				}
 			} else {
+				unsigned long currentTime =  clock();
+				unsigned int latencyMS = currentTime - mLastSendTimeMS;
+				mLastSendTimeMS = currentTime;
+				writeInt(latencyMS);
+
 				sendPacket();
+
+				if (mAlternating) {
+					mListening = true;
+					if (!mServer) tick();
+				} else 
+					addBaseRequest();
 			}
 		}
-	} else if (mCurrentTick % mTalkInterval == 0) {
-		//Con::printf("\nworldDataSource current tick: %d\n",mCurrentTick);
 	}
 }
 
 void worldDataSource::listenForPacket()
-{
-	//char *buffer;
-	//buffer = new char[mPacketSize];//,buffer2[packetsize];//I do need a number for my input buffer size though.
-	
-	struct sockaddr_in client_addr;
-	int n=0;
-	int i=0;
-	mByteCounter = 0;
-	//char floatBytes[256];//sizeof(float)?
-	float OPCODE,hostFrame;
-	int num_args,pathLength;
+{ 	
+	mPacketCount = 0;
 
-	//on dataSource side, do pre-receive logic here like drawing skyboxes, if necessary
-
-	n = recv(mWorkSockfd,mReturnBuffer,mPacketSize,0);
-	if (n>0) {
-		Con::printf("\nwork socket received %d bytes!\n",n);
-	} else {
+	int n = recv(mWorkSockfd,mReturnBuffer,mPacketSize,0);
+	if (n<=0) {
 		Con::printf(".");
+		clearReturnPacket();
 		return;
 	}
 
-	//char *bytes = &(buffer[0]);
-	//for (int i=0;i<sizeof(float);i++) floatBytes[i] = bytes[i];
-	//mByteCounter += sizeof(float);
-	
-	/*
-	float *argArray
-	mFloatBuffer = getFloatBytes(1);
-	float controlCount = mFloatBuffer[0];
+	readPacket();
 
-	//HERE: might pay to split these out into separate functions, for readability.
-	Con::printf("control count = %d\n",(int)controlCount);
-	for (int i=0;i<(int)controlCount;i++)
-	{
-		mFloatBuffer = getFloatBytes(1);
-		OPCODE = mFloatBuffer[0];
-		printf("dealing with control type: %d\n",(int)OPCODE);
-
-		if (OPCODE==1.0) {//Basic contact, no request.
-			mFloatBuffer = getFloatBytes(1);
-			hostFrame = mFloatBuffer[0];
-			Con::printf("Host frame: %d\n",(int)hostFrame);
-		} 
-	}*/
-
-	//delete [] buffer;
+	//HERE: not sure how/where to do this, but this is how you suck up mPacketCount's worth of data packets in a single tick.
+	//for (int j=0;j<mPacketCount;j++)
+	//{
+	//	n = recv(mWorkSockfd,mReturnBuffer,mPacketSize,0);
+	//	if (n<=0) j--;
+	//	else {
+	//		readPacket();
+	//	}
+	//}
 }
 
-void worldDataSource::connectSendSocket()
+
+void worldDataSource::readPacket()
 {
-	Con::printf("worldDataSource::connectSendSocket\n");
-	struct sockaddr_in source_addr;
-	
-	mReturnBuffer = new char[mPacketSize];
-	//mFloatBuffer = new float[mPacketSize/sizeof(float)];
-	
-	mReadyForRequests = true;
+	short opcode,controlCount;//,packetCount;
 
-	addBaseRequest();//Do this just so there's always something to send...
+	controlCount = readShort();
+	for (short i=0;i<controlCount;i++)
+	{		
+		opcode = readShort();
+		if (opcode == OPCODE_BASE) {   ////  keep contact, but no request /////////////////////////
+			//Con::printf("worldDataSource got a base request");
+			handleBaseRequest();
+		} else if (opcode == OPCODE_INIT_TERRAIN) { //initTerrainRequest finished
+			Con::printf("initTerrainRequest finished");
+			//HERE: set a variable! 
+		} else if (opcode == OPCODE_TERRAIN) {//terrainRequest finished
+			Con::printf("terrainRequest finished");
+			mTerrainDone = true;
+		} else if (opcode == OPCODE_INIT_SKYBOX) {//initSkyboxRequest finished
+			Con::printf("initSkyboxRequest finished");
+		} else if (opcode == OPCODE_SKYBOX) {//skybox finished
+			Con::printf("skyboxRequest finished");
+			mSkyboxDone = true;
+		}
 
-	mWorkSockfd = socket(AF_INET, SOCK_STREAM,IPPROTO_TCP);
-	if (mWorkSockfd < 0) {
-		Con::printf("ERROR opening send socket\n");
-		return;
-	} else { Con::printf("SUCCESS opening send socket\n"); }
-	
-	u_long iMode=1;
-	ioctlsocket(mWorkSockfd,FIONBIO,&iMode);//Make it a non-blocking socket.
+		//And later, "here is the skybox image data", if we don't just render it to the buffer directly or 
+		//pass it as shared memory / shared pointer
 
-	ZeroMemory((char *) &source_addr, sizeof(source_addr));
-    source_addr.sin_family = AF_INET;
-	source_addr.sin_addr.s_addr = inet_addr( mSourceIP );
-    source_addr.sin_port = htons(mPort);
-	
-	int result = connect(mWorkSockfd,(struct sockaddr *) &source_addr,sizeof(source_addr));
-	if ( result < 0) 
-	{
-        Con::printf("worldDataSource: ERROR connecting send socket, errno %d error %s\n",errno,strerror(errno));
-		return;
+		//else if (opcode==22) { // send us some number of packets after this one
+		//	packetCount = readShort();
+		//	if ((packetCount>0)&&(packetCount<=mMaxPackets))
+		//		mPacketCount = packetCount;
+		//}
 	}
 	
-	Con::printf("world data source connection successful! Port %d\n",mPort);
-}
-
-void worldDataSource::sendPacket()
-{
-	//char *returnBuffer;
-	//mReturnBuffer = new char[mPacketSize];
-	//float *outArray;
-	//mFloatBuffer = new float[mPacketSize/sizeof(float)];
-	//mNumReturnControls = 1;
-
-	//mFloatBuffer[0] = (float)mNumReturnControls;//May become relevant if we start returning more complex data.
-	//mFloatBuffer[1] = 103.0f;//CIGI code for StartOfFrame
-	//mFloatBuffer[2] = (float)mCurrentTick;//Mandatory frame argument, so we know where we're at.
+	//Might want to ditch this, or plug it in optionally, it is useful at times.
+	unsigned int latency = readInt();
+	//if (mServer) Con::printf("client latency: %d",latency);
+	//else Con::printf("server latency: %d",latency);
 	
-	//mReturnBuffer = reinterpret_cast<char*>(mFloatBuffer);
-
-	int n = send(mWorkSockfd,mReturnBuffer,mPacketSize,0);
-	Con::printf("worldDataSource sent packet, n=%d",n);
-	
-	clearPacket();
-
-	addBaseRequest();//Do this just so there's always something to send... unless/until we move to not send
-	//anything at all until there is a request waiting.
-	
-
-	//delete [] mReturnBuffer;
-	//delete [] mFloatBuffer;
-
-}
-
-void worldDataSource::clearPacket()
-{
-	memset((void *)(mReturnBuffer),NULL,1024);	
-	mReturnControls = 0;
-	mByteCounter = 0;	
+	clearReturnPacket();
 }
 
 //These functions can be called from the terrainPager, just make sure all the data variables are set first.
 void worldDataSource::addInitTerrainRequest(terrainPagerData *data,const char *path)
 {
-	float OPCODE = 101.0f;
-	mReturnControls++;//Increment mNumReturnControls every time you add a control.
-	/*
-	mFloatBuffer[0] = (float)mNumReturnControls;
+	char* localPath = new char[mPacketSize];
+	strcpy(localPath,path);
 
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = OPCODE;
-	//num args = 6
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = data->mTileWidth;
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = (float)(data->mHeightmapRes);
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = (float)(data->mTextureRes);
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = data->mMapCenterLongitude;
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = data->mMapCenterLatitude;
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = (float)(strlen(path));
-	//And then send the actual path...
-	*/
-	Con::printf("adding init terrain request, numControls %d, numReturnBytes %d\n",mReturnControls,mByteCounter);
+	mSendControls++;//Increment mNumSendControls every time you add a control.
+
+	writeShort(OPCODE_INIT_TERRAIN);
+	writeFloat(data->mTileWidth);
+	writeInt(data->mHeightmapRes);
+	writeInt(data->mTextureRes);
+	writeFloat(data->mMapCenterLongitude);
+	writeFloat(data->mMapCenterLatitude);
+	writeString(localPath);
+
+	delete localPath;
+
+	Con::printf("adding init terrain request, numControls %d, numSendBytes %d currentTick %d",
+		mSendControls,mSendByteCounter,mCurrentTick);
 }
 
 //void worldDataSource::addTerrainRequest(loadTerrainData *data)
 void worldDataSource::addTerrainRequest(float playerLong,float playerLat)
 {
-	float OPCODE = 102.0f;
-	mReturnControls++;//Increment mNumReturnControls every time you add a control.
-	/*
-	mFloatBuffer[0] = (float)mNumReturnControls;
+	mSendControls++;//Increment mNumSendControls every time you add a control.
 
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = OPCODE;
+	writeShort(OPCODE_TERRAIN);
+	writeFloat(playerLong);
+	writeFloat(playerLat);
 
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = playerLong;//data->startLongitude
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = playerLat;//data->startLatitude
-	//mByteCounter++;
-	//mFloatBuffer[mByteCounter] = data->loadPriority;
+	mTerrainDone = false;
 
-	Con::printf("adding terrain request, numControls %d, long %f lat %f\n",mNumReturnControls,playerLong,playerLat);
-		*/
+	Con::printf("adding terrain request, playerLong %f, playerLat %f currentTick %d",
+		playerLong,playerLat,mCurrentTick);
 }
 
 void worldDataSource::addInitSkyboxRequest(unsigned int skyboxRes,int cacheMode,const char *path)
 {
-	float OPCODE = 201.0f;
-	mReturnControls++;//Increment mNumReturnControls every time you add a control.
+	char* localPath = new char[mPacketSize];
+	strcpy(localPath,path);
 
-	/*
-	mFloatBuffer[0] = (float)mNumReturnControls;
+	mSendControls++;//Increment mNumSendControls every time you add a control.
 
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = OPCODE;
+	writeShort(OPCODE_INIT_SKYBOX);
+	writeInt(skyboxRes);
+	writeInt(cacheMode);
+	writeString(localPath);
 
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = (float)skyboxRes;
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = (float)cacheMode;
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = (float)(strlen(path));
+	delete localPath;
 
-	Con::printf("adding init skybox request, numControls %d, numReturnBytes %d\n",mNumReturnControls,mByteCounter);
-		*/
+	Con::printf("adding init skybox request, currentTick %d",mCurrentTick);
 }
 
 void worldDataSource::addSkyboxRequest(float tileLong,float tileLat,float playerLong,float playerLat,float playerAlt)
 {
-	float OPCODE = 202.0f;
-	mReturnControls++;//Increment mNumReturnControls every time you add a control.
-	/*
-	mFloatBuffer[0] = (float)mNumReturnControls;
+	mSendControls++;//Increment mNumSendControls every time you add a control.
+	
+	writeShort(OPCODE_SKYBOX);
+	writeFloat(tileLong);
+	writeFloat(tileLat);
+	writeFloat(playerLong);
+	writeFloat(playerLat);
+	writeFloat(playerAlt);
 
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = OPCODE;
+	mSkyboxDone = false;
 
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = tileLong;
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = tileLat;
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = playerLong;
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = playerLat;
-	mByteCounter++;
-	mFloatBuffer[mByteCounter] = playerAlt;
-
-	Con::printf("adding skybox request, numControls %d, tileLong %f tileLat %f\n",mNumReturnControls,tileLong,tileLat);
-		*/
+	Con::printf("adding skybox request, playerLong %f playerLat %f, currentTick %d",
+		playerLong,playerLat,mCurrentTick);
 }
 
-void worldDataSource::skyboxSocketDraw()
-{
-	//(This is only on the dataSource side.)
-}
-
-void worldDataSource::makeTerrainLock()
-{
-	FILE *fs;
-	if (fs = fopen(mD.mTerrainLockfile.c_str(),"w"))
-	{
-		fprintf(fs,"%d",1);//A byte, so we can open for read.
-	}
-	fclose(fs);
-}
-
-void worldDataSource::removeTerrainLock()
-{
-	remove(mD.mTerrainLockfile.c_str());
-}
-
-bool worldDataSource::checkTerrainLock()
-{
-	FileStream fs;
-	if (fs.open(mD.mTerrainLockfile.c_str(),Torque::FS::File::Read))
-	{ 
-		fs.close();
-		return true;
-	} else return false;
-}
-
-void worldDataSource::makeSkyboxLock()
-{
-	FILE *fs;
-	if (fs = fopen(mD.mSkyboxLockfile.c_str(),"w"))
-	{
-		fprintf(fs,"%d",1);//A byte, so we can open for read.
-	}
-	fclose(fs);
-}
-
-void worldDataSource::removeSkyboxLock()
-{
-	Con::printf("removing skybox lockfile: %s",mD.mSkyboxLockfile.c_str());
-	remove(mD.mSkyboxLockfile.c_str());
-}
-
-bool worldDataSource::checkSkyboxLock()
-{
-	FileStream fs;
-	Con::printf("checking skybox lock file: %s  %s",mD.mSkyboxLockfile.c_str());
-	if (fs.open(mD.mSkyboxLockfile.c_str(),Torque::FS::File::Read))
-	{ 
-		fs.close();
-		return true;
-	} else return false;
-}
-
-
+//void worldDataSource::skyboxSocketDraw()
+//{	//(This is only implemented on the source/server side.)
+//}

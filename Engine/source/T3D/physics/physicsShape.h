@@ -188,8 +188,8 @@ public: //protected:
    PhysicsWorld *mWorld;
 
    /// The abstracted physics actor.
-   PhysicsBody *mPhysicsRep;//OpenSimEarth: I would declare this redundant, and use mPhysicsBodies[0], but for the number of places
-   //mPhysicsRep is still in use, and the confusion between server/client and articulated/not articulated. Needs major refactor.
+   PhysicsBody *mPhysicsRep;//OpenSimEarth: need to declare this redundant, and use mPhysicsBodies[0] instead.
+   //However This might get confusing and touch on a lot of other files that refer to mPhysicsRep. Needs major refactor.
    
    Vector<PhysicsBody*> mPhysicsBodies; //For articulated shapes. Currently clientside only.
    PhysicsJoint *mJoint;

@@ -15,11 +15,9 @@
 #include "sim/dataSource/worldDataSource.h"
 #include <stdio.h>
 
-
 #include <iostream>
 #include <sstream>
 #include <fstream>
-
 
 #include <vector>
 #include <string>
@@ -40,8 +38,11 @@ TerrainPager::TerrainPager()
 	mSkyboxRes = 800;
 
 	mLastSkyboxTick = 0;
-	mSkyboxTickInterval = 1200;// 30/sec * 60, about a minute
-	mSkyboxLoadDelay = 60;//two seconds
+	mSkyboxTickInterval = 360;//FIX!!! GUI!!
+	mSkyboxLoadDelay = 8;
+	
+	mTerrainRequestTick = 0;
+	mSkyboxRequestTick = 0;
 
 	mLoadState = 0;//For now just use numbers, make an enum when you know what the states are going to be.
 
@@ -69,12 +70,19 @@ TerrainPager::TerrainPager()
 	mD.mTileWidthLongitude = 0.0f;
 	mD.mTileWidthLatitude = 0.0f;
 	
-	//Would like to receive these through console, but TypeString seems to be failing for me.
-	mD.mTerrainPath = "art/terrains/terrainFiles/";
-	mD.mSkyboxPath = "art/skies/night/";
+	//Now, dip into wide characters for a minute to use GetModuleFileName, in order to retreive the path to our game 
+	//directory. (Easier way somewhere?). Meanwhile, note to self, fix this to use wide strings all the time, because unicode.
+	wchar_t wtext[MAX_PATH];
+	long x = GetModuleFileName(NULL, wtext, MAX_PATH); 
+	String gamePath = wtext;
+	gamePath.replace("OpenSimEarthGame.exe","");
+	gamePath.replace("\\","/");//not too confident about sending backslashes through the system...
 
-	mD.mTerrainLockfile = "art/terrains/terrainFiles/lockfile.terrain.tmp";//Revisit this when paths are
-	mD.mSkyboxLockfile = "art/skies/night/lockfile.skybox.tmp";//   working from script as they should.
+	mD.mTerrainPath = gamePath + "art/terrains/openSimEarth/";//FIX: Hard coded for now,
+	mD.mSkyboxPath  = gamePath + "art/skies/night/";//   allow user prefs for these later.
+	
+	//mD.mTerrainLockfile = mD.mTerrainPath + "lockfile.terrain.tmp";//Revisit this when paths are
+	//mD.mSkyboxLockfile = mD.mSkyboxPath + "lockfile.skybox.tmp";//   working from script as they should.
 
 	mD.mSkyboxRes = mSkyboxRes;
 	//////////////////////////////
@@ -136,11 +144,11 @@ bool TerrainPager::onAdd()
 	mD.mTileDropRadius = mTileDropRadius;
 
 	mD.mSkyboxRes = mSkyboxRes;
-	
-	Con::printf("Terrain Pager ON ADD ----------------------------------------------------------------");
 		
 	mSQL = new SQLiteObject();
 
+	/*
+	//OpenStreetMap Testing...
 	if (mSQL->OpenDatabase("w130n40.db"))//FIX: make map naming convention using lat-lon coordinates at regular intervals. Ultimate solution:
 				// limit db size to something reasonable, and then use a quadtree system to subdivide larger or smaller regions as needed.
 	{
@@ -161,6 +169,8 @@ bool TerrainPager::onAdd()
 			}
 		} else Con::printf("no results from query");
 	} else Con::printf("failed to open database");
+	*/
+
 
 	//Con::printf("calling TerrainPager::onAdd() mTileLoadRadius %f, mTileDropRadius %f",
 	//	mTileLoadRadius,mTileDropRadius);
@@ -187,8 +197,6 @@ bool TerrainPager::onAdd()
 	terrain_materials.push_back( "TT_Snow_02" );
 	terrain_materials.push_back( "TT_Mud_07" );
 
-	Con::printf("Terrain pager skybox path: %s",mD.mSkyboxPath.c_str());
-
 	SimSet* scopeAlwaysSet = Sim::getGhostAlwaysSet();
 	const TerrainBlock *tempTerrain;
 	for(SimSet::iterator itr = scopeAlwaysSet->begin(); itr != scopeAlwaysSet->end(); itr++)
@@ -197,7 +205,7 @@ bool TerrainPager::onAdd()
 		if( block )
 		{
 			mTerrain = block;
-
+			
 			mD.mLightmapRes = block->getLightMapSize();
 			mD.mTextureRes = block->mBaseTexSize;
 			mD.mHeightmapRes = block->getBlockSize();
@@ -217,7 +225,6 @@ bool TerrainPager::onAdd()
 			mD.mTileWidthLongitude = mD.mDegreesPerMeterLongitude * mD.mTileWidth;
 			mD.mTileWidthLatitude = mD.mDegreesPerMeterLatitude * mD.mTileWidth;
 
-			Con::printf("terrain materials: %d",mTerrain->mBaseTextures.size());
 			//for (U32 i=0;i<mTerrain->mBaseTextures.size();i++)
 			//{
 			//	Con::printf("material %d: %s",i,mTerrain->mBaseTextures[i].??? // Is there any way to get name back out??
@@ -250,6 +257,7 @@ bool TerrainPager::onAdd()
 	{
 		Con::printf("Terrain pager is using a worldDataSource.");
 		mDataSource = new worldDataSource(false,&mD);
+		//mDataSource = new dataSource(false);
 	}
 
 	Con::executef(this, "onAdd", getIdString());
@@ -262,93 +270,84 @@ void TerrainPager::processTick()
 	bool newTile = false;
 
 	//First, establish current position.
-	findClientTile();
+	findClientTile();	
 
 	if (mClientPos.len()==0.0)
 	{//Check to make sure we have a reasonable player location. [NOTE: Do *not* make player spawn at perfect (0,0,0)!]
 		return;//No player yet.
 	}
-
-	if (mLoadState==0)
-	{//Just found our first useful client position.
+	
+	if (mUseDataSource)
+	{
+		mDataSource->tick();
+	}
+	if (mLoadState==0)//First pass, just found our first useful client position.
+	{
 		Con::printf("terrainPager first client info: long/lat %f %f, pos %f %f",
 					mD.mClientPosLongitude,mD.mClientPosLatitude,mClientPos.x,mClientPos.y);
 
 		mLastTileStartLong = mTileStartLongitude;
 		mLastTileStartLat = mTileStartLatitude;
 		
-		if (!mUseDataSource) //Fortunately, the path is short if we're not.
+		if (!mUseDataSource) //If not using data source, just page around the finished terrains.
 		{
-			loadTileGrid();//Don't do this till we're ready to send requests, if we have a dataSource.
-			mLoadState = 10;//arbitrary, 10 = done with initial terrain loads, go to steady checking from here.
-			return;
+			loadTileGrid();
+			mLoadState = 10;//10 is the holding pattern loop.
 		} else {
 			mLoadState = 1;
-			return;
 		}
 	}
-	else if (mLoadState==1) 
-	{//Next tick after finding client pos, here we have to split up based on whether we're using a dataSource or not.
-		 if (mDataSource->mReadyForRequests)
+	else if (mLoadState==1) //Wait till dataSource is hooked up and ready to go, then send init terrain and skybox requests.
+	{	
+		if (mDataSource->mReadyForRequests)
 		{
-			/* //TEMP, removing this while we test baseRequest under new system...
 			mDataSource->addInitTerrainRequest(&mD,mD.mTerrainPath.c_str());
 			mDataSource->addInitSkyboxRequest(mD.mSkyboxRes,0,mD.mSkyboxPath.c_str());
-			Con::printf("TerrainPager sending init requests.");
 			mSentInitRequests = true;
-			mLoadState = 2;  */
-			
-			if (mUseDataSource)
-			{
-				mDataSource->tick();
-			}
-			return;
-		} else Con::printf("TerrainPager waiting for worldDataSource to be ready.");
+			mLoadState = 2;  
+		} else 
+			Con::printf("TerrainPager waiting for worldDataSource to be ready.");
 	}
-	else if (mLoadState==2) 
-	{//first time in a new position, ready for fresh load.
-		Con::printf("TerrainPager loading tile grid");
+	else if (mLoadState==2) //Call loadTileGrid, which will try to load existing terrains and request 
+	{						// data for anything it can't find locally.
 		loadTileGrid();
-		//mLoadState=10;//arbitrary, 10 = done with initial terrain loads, go to steady checking from here.
-		//Whoops, can't assign a loadState here, because loadTileGrid needs to make that decision.
-		return;
 	}
-	else if ((mLoadState==3) &&(mUseDataSource))//Should never get here without mUseDataSource, but for safety..
+	else if (mLoadState==3) //Waiting for terrain data.
 	{
-		if (mDataSource->checkTerrainLock()==false)
+		if (mDataSource->mTerrainDone==true)
 		{
-			mLoadState=2;//If terrain is no longer locked, then go back and try load again.
-		} else {			
-			mDataSource->tick();
-			if (mCurrentTick++ % mTickInterval == 0)
-				Con::printf("waiting for terrain lock...");
-		}
-		return;//otherwise just keep coming here.
-	}
-	else if ((mLoadState==4) &&(mUseDataSource))//Should never get here without mUseDataSource, but for safety..
-	{//Be very careful, could get stuck here forever and quietly stop checking terrain, if skybox lockfile not deleted.
-		if (mDataSource->checkSkyboxLock()==false)
-		{
-			Con::printf("reloading skybox!!!!");
-			reloadSkybox();
-			mSentSkyboxRequest = false;
-			mLastSkyboxTick = mCurrentTick;
-			mLoadState=10;
+			mLoadState=2;
 		} else {
-			mDataSource->tick();
-			//if (mCurrentTick++ % mTickInterval == 0)
-			Con::printf("waiting for skybox lock...");
+			Con::printf("TerrainPager waiting for terrain data...");
+			if ((S32)mTerrainRequestTick < ((S32)mCurrentTick - (S32)mSkyboxTickInterval))
+			{
+				mLoadState=10;//Give up on this load, it got lost in transmission. (?)
+			}
 		}
-		return;//otherwise just keep coming here.
 	}
-	//else if ((mLoadState==5)&&(mUseDataSource))//Should never get here without mUseDataSource, but for safety..
+	//else if (mLoadState==4) //Waiting for skybox images.
 	//{
-	//	if ((mCurrentTick - mLastSkyboxTick) > mSkyboxLoadDelay)
+	//	if (mDataSource->mSkyboxDone==true)
 	//	{
-	//		Con::executef(this,"UpdateSkybox");
-	//		mLoadState = 10;
+	//		Con::printf("reloading skybox!!!!");
+	//		reloadSkyboxImages(); //Rotate and flip the raw images from Flightgear to make them work in T3D skybox material.
+	//		mSentSkyboxRequest = false;
+	//		mLastSkyboxTick = mCurrentTick;
+	//		mLoadState=5;
+	//	} else {
+	//		Con::printf("TerrainPager waiting for skybox images...");
 	//	}
 	//}
+	else if (mLoadState==5) 
+	{
+		//if ((mCurrentTick - mLastSkyboxTick) > mSkyboxLoadDelay)
+		//{
+		//Hmm, trying this again, with no delay except one tick, is that enough?
+			Con::printf("updating skybox!!!!!!!!!!");
+			Con::executef(this,"UpdateSkybox");
+			mLoadState = 10;
+		//}
+	}
 	else if (mLoadState==10)
 	{
 		if (mLastTileStartLong != mTileStartLongitude) newTile = true;
@@ -362,35 +361,43 @@ void TerrainPager::processTick()
 			if (mCurrentTick++ % mTickInterval == 0)
 				checkTileGrid();
 		}		
+		
+		//Con::printf("terrain pager load state: %d sendControls %d skyboxInterval %d currentTick %d",
+		//	mLoadState,mDataSource->mSendControls,mSkyboxTickInterval,mCurrentTick);
 
-		//if (mCurrentTick % mTickInterval == 0)
-		//{
-		//	Con::printf("lastSkyboxTick %d, currentTick %d return controls %d, sent request %d",
-		//		mLastSkyboxTick,mCurrentTick,mDataSource->mNumReturnControls,mSentSkyboxRequest);
-		//}
-
-		if ((mUseDataSource)&&(mDataSource->mReturnControls==1)&&
+		if ((mUseDataSource)&&(mDataSource->mSendControls==1)&&
 			((S32)mLastSkyboxTick < ((S32)mCurrentTick - (S32)mSkyboxTickInterval))&&
 			(mSentSkyboxRequest == false))
 		{
 			mDataSource->addSkyboxRequest(mTileStartLongitude,mTileStartLatitude,mD.mClientPosLongitude,mD.mClientPosLatitude,mD.mClientPosAltitude);
-			mLoadState = 4;
+			//mLoadState = 4;
 			mSentSkyboxRequest = true;
+			mDataSource->mSkyboxDone = false;
+			//mLastSkyboxTick = mCurrentTick;
+			mSkyboxRequestTick = mCurrentTick;
+			Con::printf("adding a skybox request! ");
 		}
-	}
-	
-	if (mUseDataSource)
-	{
-		mDataSource->tick();
-	}
-	
-	if ((mCurrentTick % 60 == 0)&&(mUseDataSource))
-	{
-		Con::executef(this,"UpdateSkybox");//hell with it, this takes almost no time, do it every couple of seconds for now.
-	}
-	
+		else if ( (mSentSkyboxRequest) && //Either we're done, or we've waited too long and should give up on this one.
+				((mDataSource->mSkyboxDone) || ((S32)mSkyboxRequestTick < ((S32)mCurrentTick - (S32)mSkyboxTickInterval))) )
+		{
+			Con::printf("reloading skybox!!!!");
+			reloadSkyboxImages(); //Rotate and flip the raw images from Flightgear to make them work in T3D skybox material.
+			mSentSkyboxRequest = false;
+			mLastSkyboxTick = mCurrentTick;
+			mLoadState=5;
+		}
+	}	
+}
 
-
+	//if (mUseDataSource)
+	//{
+	//	mDataSource->tick();
+	//}
+	
+	//if ((mCurrentTick % 60 == 0)&&(mUseDataSource))
+	//{
+	//	Con::executef(this,"UpdateSkybox");//hell with it, this takes almost no time, do it every couple of seconds for now.
+	//}
 	/*
 	//Now, do this in the second tick, or whenever we're ready.
 	if (mUseDataSource && !mLoadedTileGrid && mDataSource->mReadyForRequests)
@@ -428,8 +435,8 @@ void TerrainPager::processTick()
 		}
 	}
 	*/
-	//mCurrentTick++;
-}
+
+
 
 void TerrainPager::interpolateTick(F32 f)
 {
@@ -457,6 +464,8 @@ TerrainBlock *TerrainPager::addTerrainBlock(F32 startLong,F32 startLat)
 	TerrainBlock *block;
 	bool terrExists = false;
 
+	//HERE: height files are 257K, texture files are 64K. It would take approximately 15 ticks, or half a second, to pass
+	//all one tile's worth of this data across the socket instead of writing it to disk. Eight tiles should take four seconds.
 	sprintf(heightfilename,"%shght.%s.bin",mD.mTerrainPath.c_str(),getTileName(startLong,startLat));
 	sprintf(texturefilename,"%stext.%s.bin",mD.mTerrainPath.c_str(),getTileName(startLong,startLat));
 	sprintf(terrainName,"terrain.%s.ter",getTileName(startLong,startLat));
@@ -474,7 +483,7 @@ TerrainBlock *TerrainPager::addTerrainBlock(F32 startLong,F32 startLat)
 		//materials.push_back( "sand_hires" );
 		//materials.push_back( "water" );
 		//materials.push_back( "asphalt" );
-		//Con::printf("trying to make terrain file: %s heightmapres %d  materials[0] %s",terrFileName.c_str(),mD.mHeightmapRes, materials[0].c_str());	
+		Con::printf("trying to make terrain file: %s heightmapres %d ",terrFileName.c_str(),mD.mHeightmapRes );	
 		TerrainFile::createByName( &terrFileName, mD.mHeightmapRes, terrain_materials );
 	} else 
 		terrExists = true;
@@ -501,7 +510,6 @@ TerrainBlock *TerrainPager::addTerrainBlock(F32 startLong,F32 startLat)
 
 	mTerrains.increment();
 	mTerrains.last() = block;
-
 	
 	block->registerObject( terrainName );
 	block->addToScene();
@@ -651,11 +659,10 @@ void TerrainPager::findClientPos()
 	Vector<SceneObject*> kPlayers;
 
 	Box3F bounds;
-	bounds.set(Point3F(-1024000,-1024000,0),Point3F(1024000,1024000,10000));
+	bounds.set(Point3F(-FLT_MAX,-FLT_MAX,-FLT_MAX),Point3F(FLT_MAX,FLT_MAX,FLT_MAX));
 	gServerContainer.findObjectList(bounds, CameraObjectType, &kCameras);
 	gServerContainer.findObjectList(bounds, PlayerObjectType, &kPlayers);
 
-	//Con::printf("seeking client pos... cameras %d  players %d",kCameras.size(),kPlayers.size());
 	mClientPos.zero();
 	for (U32 i=0;i<kPlayers.size();i++)
 	{
@@ -690,7 +697,7 @@ void TerrainPager::findClientTile()
 	findClientPos();
 	
 	Point2F clientPos = Point2F(mD.mClientPosLongitude,mD.mClientPosLatitude);
-	//The following is off by one half tile width because of my (perhaps questionable) decision to put 
+	//FIX: The following is off by one half tile width because of my (perhaps questionable) decision to put 
 	//map center in the center of a tile rather than at the lower left corner of that tile. Subject to review.
 	Point2F mapCenter = Point2F(mD.mMapCenterLongitude-(mD.mTileWidthLongitude/2.0f),
 								mD.mMapCenterLatitude-(mD.mTileWidthLatitude/2.0f));
@@ -706,29 +713,33 @@ void TerrainPager::findClientTile()
 void TerrainPager::loadTileGrid()
 {
 	bool loaded;
-	bool verbose = false;
+	bool verbose = true;
 	char tileName[20],heightfilename[256],texturefilename[256],terrainfilename[256];
 	U32 gridMidpoint = (mGridSize-1)/2;
+	Vector <loadTerrainData> loadTerrains;
 
 	F32 startLong = mTileStartLongitude - (gridMidpoint * mD.mTileWidthLongitude);
 	F32 startLat = mTileStartLatitude - (gridMidpoint * mD.mTileWidthLatitude);
-	Con::printf("loading tile grid, client pos %f %f, client tile start %f %f, local grid start %f %f\n",
+	Con::printf("loading tile grid, client pos %f %f, client tile start %f %f, local grid start %f %f",
 		mD.mClientPosLongitude,mD.mClientPosLatitude,mTileStartLongitude,mTileStartLatitude,startLong,startLat);
+
 	//Wait, okay, *first* we need to clear the grid, *then* go ahead and fill it again.
 	for (int y=0;y<mGridSize;y++) 
 	{
 		for (int x=0;x<mGridSize;x++) 
 		{
 			mTerrainGrid[y*mGridSize+x]=NULL;
+
+			loadTerrains.increment();
+			loadTerrainData *kData = &(loadTerrains.last());
+			kData->startLongitude = 0.0;
+			kData->startLatitude = 0.0;
+			kData->tileDistance = FLT_MAX;
 		}
 	}
 	if (verbose) 
-	{
 		for (int c=0;c<mTerrains.size();c++)
-		{
 			Con::printf("terrain %d longitude %f latitude %f",c,mTerrains[c]->mLongitude,mTerrains[c]->mLatitude);
-		}
-	}
 	for (int y=0;y<mGridSize;y++) 
 	{
 		for (int x=0;x<mGridSize;x++) 
@@ -740,6 +751,7 @@ void TerrainPager::loadTileGrid()
 			Point2F tileCenterDiff = Point2F((mD.mClientPosLongitude-midLong)*mD.mMetersPerDegreeLongitude,
 				                          (mD.mClientPosLatitude-midLat)*mD.mMetersPerDegreeLatitude);
 			F32 tileDistance = tileCenterDiff.len();
+
 			sprintf(tileName,getTileName(kLong,kLat));
 			sprintf(heightfilename,"%shght.%s.bin",mD.mTerrainPath.c_str(),tileName);
 			sprintf(texturefilename,"%stext.%s.bin",mD.mTerrainPath.c_str(),tileName);
@@ -747,29 +759,34 @@ void TerrainPager::loadTileGrid()
 
 			if (mTerrainGrid[y*mGridSize+x]==NULL) loaded = false;
 			else loaded = true;
-			if (verbose) Con::printf("terrain %d %d loaded = %d distance %f kLong %f kLat %f ",x,y,loaded,tileDistance,kLong,kLat);
-			//Now, to the meat of the issue:
+
+			if (verbose) 
+				Con::printf("terrain %d %d loaded = %d distance %f kLong %f kLat %f ",x,y,loaded,tileDistance,kLong,kLat);
+
 			if ((tileDistance<mD.mTileLoadRadius)&&(loaded==false))
 			{
 				//HERE: okay, the difference is that first, you need to check your mTerrains.
 				for (int c=0;c<mTerrains.size();c++)
 				{//Could have based this off tilename comparison, but would rather do it with numbers.
 					if ((fabs(mTerrains[c]->mLongitude-kLong)<0.0001)&&(fabs(mTerrains[c]->mLatitude-kLat)<0.0001))
-					{//(Even though the floating point error is annoying.)
-						if (verbose) Con::printf("found terrain already loaded! %f %f",kLong,kLat);
+					{//("<0.0001" because "==" doesn't work, floating point error is annoying.)
 						loaded=true;
 						mTerrainGrid[y*mGridSize+x]=mTerrains[c];
 					}
 
 				}
 				if (loaded==false)
-				{//Here, let's check for the bin file existing first, and if not handle request here, don't call.
-					if ((checkFileExists(terrainfilename)) || 
-						((checkFileExists(heightfilename))&&(checkFileExists(texturefilename))))
+				{//Here, let's check for the bin file existing first
+					if ( (checkFileExists(terrainfilename)) || 
+						((checkFileExists(heightfilename))&&(checkFileExists(texturefilename))) )
 						mTerrainGrid[y*mGridSize+x] = addTerrainBlock(kLong,kLat);
-					else if (mUseDataSource)//okay, now we need to make a call to worldDataSource. We should be able to safely assume 
-					{	//we're ready for packets and have already sent our init requests.
-						mDataSource->addTerrainRequest(kLong,kLat);
+					else if (mUseDataSource)//okay, now we need to make a call to worldDataSource.
+					{//HERE: I need to request ONE AT A TIME. And keep coming back here until they're all done.
+						loadTerrainData *kData = &(loadTerrains[y*mGridSize+x]);
+						kData->startLongitude = kLong;
+						kData->startLatitude = kLat;
+						kData->tileDistance = tileDistance;
+						//mDataSource->addTerrainRequest(kLong,kLat);//have to wait, and only ask for one at a time now.
 						mLoadState = 3;//waiting for terrain.
 					}
 				}
@@ -807,11 +824,29 @@ void TerrainPager::loadTileGrid()
 		Con::printf("TerrainPager done loading tiles, entering checkTile loop.");
 		mLoadState=10;
 	} 
-	else if (mLoadState==3)//If we did set it to three, meaning we requested data, then make sure
-	{ // right now that we have a lockfile, so we don't think we're done already on the next tick.
-		if (mDataSource->checkTerrainLock()==false)
-			mDataSource->makeTerrainLock();
+	else if (mLoadState==3)//Finally, if we did set load state to three, that means we need more terrains from 
+	{			//our dataSource. Which menas the current job is picking the closest one that we still need.
+		float closestDist = FLT_MAX;
+		int closestIndex = -1;
+		loadTerrainData *kData;
+		for (int i=0;i<loadTerrains.size();i++)
+			for (int j=0;j<loadTerrains.size();j++)
+			{
+				kData = &(loadTerrains[j]);
+				if (kData->tileDistance < closestDist)
+				{
+					closestDist = kData->tileDistance;
+					closestIndex = j;
+				}
+			}
+		if (closestIndex>=0)
+		{
+			kData = &(loadTerrains[closestIndex]);
+			mDataSource->addTerrainRequest(kData->startLongitude,kData->startLatitude);
+			mTerrainRequestTick = mCurrentTick;
+		}
 	}
+	loadTerrains.clear();
 }
 
 void TerrainPager::checkTileGrid()
@@ -842,7 +877,6 @@ void TerrainPager::checkTileGrid()
 			if (mTerrainGrid[y*mGridSize+x]==NULL) loaded = false;
 			else loaded = true;
 
-
 			if ((tileDistance<mD.mTileLoadRadius)&&(loaded==false))
 			{
 				if (verbose) Con::printf("tile %d %d should be loaded, but isn't. dist %f, %f %f",x,y,tileDistance,kLong,kLat);
@@ -854,11 +888,6 @@ void TerrainPager::checkTileGrid()
 					mDataSource->addTerrainRequest(kLong,kLat);
 					mLoadState = 3;//waiting for terrain.
 				}
-				//loadTerrainData kData;
-				//kData.startLongitude = kLong;
-				//kData.startLatitude = kLat;
-				//kData.loadPriority = 1.0 / tileDistance;
-				//mLoadTiles.last() = kData;
 			} else if ((tileDistance>mD.mTileDropRadius)&&(loaded==true)) {
 				dropTerrainBlock(kLong,kLat);
 				if (verbose) Con::printf("tile %d %d should not be loaded, but is. dist %f, %f %f",x,y,tileDistance,kLong,kLat);
@@ -873,7 +902,7 @@ void TerrainPager::checkTileGrid()
 	if (verbose) Con::printf("///////////////////////////////////////////////////////////");
 }
 
-void TerrainPager::reloadSkybox()
+void TerrainPager::reloadSkyboxImages()
 {
 	Con::printf("Reloading skyboxes, skybox path: %s",mD.mSkyboxPath.c_str());
 
@@ -889,19 +918,19 @@ void TerrainPager::reloadSkybox()
 
 	FileName skyboxes[10];//first five for input, second five for output. skybox3_nn vs skybox_nn for first pass.
 	//Order is:  up, 00, 90, 180, 270
-	skyboxes[0] = mD.mSkyboxPath + String("skybox3_up.png");//mTerrainPath
-	//skyboxes[0] = mTerrainPath + "SouthernWillamette.jpg";
+	skyboxes[0] = mD.mSkyboxPath + String("skybox3_up.png");
 	skyboxes[1] = mD.mSkyboxPath + String("skybox3_00.png");
 	skyboxes[2] = mD.mSkyboxPath + String("skybox3_90.png");
 	skyboxes[3] = mD.mSkyboxPath + String("skybox3_180.png");
 	skyboxes[4] = mD.mSkyboxPath + String("skybox3_270.png");
+
 	skyboxes[5] = mD.mSkyboxPath + String("skybox_up.png");
 	skyboxes[6] = mD.mSkyboxPath + String("skybox_00.png");
 	skyboxes[7] = mD.mSkyboxPath + String("skybox_90.png");
 	skyboxes[8] = mD.mSkyboxPath + String("skybox_180.png");
 	skyboxes[9] = mD.mSkyboxPath + String("skybox_270.png");
 	FileStream fs;
-	U32 skyOffset = 20;//Amount we raise all side panels (to compensate for camera height?)
+	U32 skyOffset = 0;//20;//Amount we raise all side panels (to compensate for camera height?)
 	GBitmap *bitmap = new GBitmap;
 	GBitmap *bitmap2 = new GBitmap;
 	//We're going to do very different things per bitmap, so not bothering to loop this.
@@ -1330,7 +1359,7 @@ DefineConsoleMethod(TerrainPager, callUpdateSkybox, void, (), , "" )
 DefineConsoleMethod(TerrainPager, reloadSkybox, void, (), , "" )
 {
 	Con::printf("calling reload skybox");
-	object->reloadSkybox();
+	object->reloadSkyboxImages();
 }
 DefineConsoleMethod( TerrainPager, getTileWidth, F32, (), , "" )
 {
@@ -1628,9 +1657,9 @@ DefineConsoleMethod( TerrainPager, setGridSize, void, (U32 gridSize), , "" )
 	returnBuffer = new char[packetsize];
 	float *outArray;
 	outArray = new float[packetsize/sizeof(float)];
-	int numReturnControls = 1;
+	int numSendControls = 1;
 
-	outArray[0] = (float)numReturnControls;//May become relevant if we start returning more complex data.
+	outArray[0] = (float)numSendControls;//May become relevant if we start returning more complex data.
 	outArray[1] = 101.0;//CIGI code for StartOfFrame
 	outArray[2] = (float)igFrame++;//Mandatory IG frame argument.
 	returnBuffer = reinterpret_cast<char*>(outArray);

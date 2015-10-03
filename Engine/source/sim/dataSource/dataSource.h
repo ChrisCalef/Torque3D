@@ -12,6 +12,8 @@
 #include <iostream>
 #include "winsock2.h"
 
+#define OPCODE_BASE		1
+
 /// Base class for various kinds of data sources, first one being worldDataSource, for terrain, sky, weather and map information.
 class dataSource 
 {
@@ -24,7 +26,10 @@ class dataSource
 	   unsigned int mLastSendTimeMS;//Last time we sent a packet.
 	   unsigned int mTickInterval;
 	   unsigned int mTalkInterval;
-	   unsigned int mStartDelay;//startup delay time.
+	   unsigned int mStartDelay;
+	   unsigned int mPacketCount;
+	   unsigned int mMaxPackets;
+	   unsigned int mPacketSize;
 
 	   bool mReadyForRequests;//flag to user class (eg terrainPager) that we can start adding requests.
 
@@ -34,17 +39,20 @@ class dataSource
 	   fd_set mMasterFDS;
 	   fd_set mReadFDS;
 
-	   unsigned int mPacketSize;
 	   int mSocketTimeout;
-
-	   bool mListening;//Atually could be one variable, because this isn't really going to be  
-	   bool mSending;//about sending and receiving, but only about who initially connects to whom.
+	   
+	   bool mServer;
+	   bool mListening;
+	   bool mAlternating;
+	   bool mConnectionEstablished;
 
 	   char *mReturnBuffer;
+	   char *mSendBuffer;
 	   char *mStringBuffer;
 
-	   unsigned int mReturnControls;
-	   unsigned int mByteCounter;
+	   short mSendControls;
+	   short mReturnByteCounter;
+	   short mSendByteCounter;
 
 	   dataSource(bool listening=false);
 	   ~dataSource();
@@ -54,26 +62,34 @@ class dataSource
 	   void openListenSocket();
 	   void connectListenSocket();
 	   void listenForPacket();
+	   void readPacket();
+	   void clearReturnPacket();
 
 	   void connectSendSocket();
 	   void sendPacket();
-	   void clearPacket();
+	   void clearSendPacket();
 	   
-	   void disconnectSockets();	   
+	   void trySockets();
+	   void disconnectSockets();	  
 
 	   void writeShort(short);
 	   void writeInt(int);
 	   void writeFloat(float);
 	   void writeDouble(double);
 	   void writeString(char *);
+	   //void writePointer(void *);//Someday? Using boost?
 
 	   short readShort();
 	   int readInt();
 	   float readFloat();
 	   double readDouble();
 	   char *readString();
+	   //void *readPointer();
 	   
+	   void clearString();
+
 	   void addBaseRequest();
+	   void handleBaseRequest();
 };
 
 #endif // _DATASOURCE_H_

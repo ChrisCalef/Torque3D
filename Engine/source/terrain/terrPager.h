@@ -34,6 +34,7 @@ struct terrainPagerData
 	String mTerrainTreesBinFile;//and trees.
 	String skybox_files[5];//Filenames for the five skybox textures, because we 
 	//are going to have to flip and rotate them before they can be used in Torque.
+	//FIX: make this six, and include the bottom one in FG.
 	
 	float mMapCenterLongitude;
 	float mMapCenterLatitude;
@@ -67,7 +68,7 @@ struct loadTerrainData
 {
 	float startLongitude;
 	float startLatitude;
-	float loadPriority;
+	float tileDistance;
 };
 
 /// The TerrainPager organizes large numbers of stored terrain tiles and optionally skyboxes, as well
@@ -92,6 +93,7 @@ public:
 
 	bool mUseDataSource;
 	worldDataSource *mDataSource;
+	//dataSource *mDataSource;
 	bool mSentInitRequests;
 	bool mSentTerrainRequest;
 	bool mSentSkyboxRequest;
@@ -113,6 +115,9 @@ public:
 	U32 mLastSkyboxTick;
 	U32 mSkyboxTickInterval;
 	U32 mSkyboxLoadDelay;
+	
+	U32 mTerrainRequestTick;
+	U32 mSkyboxRequestTick;
 
 	U32 mLoadState;
 
@@ -161,7 +166,7 @@ public:
 
 	bool checkFileExists(const char*);
 
-	void reloadSkybox();
+	void reloadSkyboxImages();
 
 	void updateSkyboxConsole();
 

@@ -207,6 +207,8 @@ public:
    /// Check if the given point is valid within the (non-tiled) terrain file.
    bool isPointInTerrain( U32 x, U32 y ) const;
 
+   Torque::Path *getPath();
+
 };
 
 inline TerrainSquare* TerrainFile::findSquare( U32 level, U32 index ) const
@@ -298,6 +300,11 @@ inline bool TerrainFile::isPointInTerrain( U32 x, U32 y ) const
       return true;
 
    return false;
+}
+
+inline Torque::Path *TerrainFile::getPath()
+{
+	return &mFilePath;
 }
 
 #endif // _TERRFILE_H_ 

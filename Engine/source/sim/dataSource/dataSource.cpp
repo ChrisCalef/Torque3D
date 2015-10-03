@@ -6,34 +6,39 @@
 
 #include "console/consoleTypes.h"//Torque specific, should do #ifdef TORQUE or something
 
-
-dataSource::dataSource(bool listening)
+dataSource::dataSource(bool server)
 {
 	mPacketSize = 1024;
 	mSocketTimeout = 0;
 	mPort = 9934;
 	mCurrentTick = 0;
 	mLastSendTick = 0;
-	mTickInterval = 45;
+	mLastSendTimeMS = 0;
+	mTickInterval = 1;//45;
 	mTalkInterval = 20;
 	mStartDelay = 50;
-	mReturnControls = 0;
-	mByteCounter = 0;
+	mPacketCount = 0;
+	mMaxPackets = 20;
+	mSendControls = 0;
+	mReturnByteCounter = 0;
+	mSendByteCounter = 0;
 	sprintf(mSourceIP,"127.0.0.1");
 	mListenSockfd = INVALID_SOCKET;
 	mWorkSockfd = INVALID_SOCKET;
 	mReturnBuffer = NULL;
+	mSendBuffer = NULL;
+	mStringBuffer = NULL;
 	mReadyForRequests = false;
-	
-	if (listening)
+	mServer = false;
+	mListening = false;	
+	mAlternating = true;
+	mConnectionEstablished = false;
+	if (server)
 	{
+		mServer = true;
 		mListening = true;
-		mSending = false;
-	} else {
-		mListening = false;
-		mSending = true;
 	}
-	Con::printf("New data source object!!! Source IP: %s listening %d\n",mSourceIP,listening);
+	Con::printf("New data source object!!! Source IP: %s listening %d\n",mSourceIP,server);
 }
 
 dataSource::~dataSource()
@@ -41,40 +46,43 @@ dataSource::~dataSource()
 	disconnectSockets();
 }
 
-
-/////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void dataSource::tick()
 {	
+	Con::printf("datasource tick %d",mCurrentTick);
     if ((mCurrentTick++ % mTickInterval == 0)&&
 		(mCurrentTick > mStartDelay)) 
 	{ 
-		if (mListening)
+		if (mConnectionEstablished == false)
 		{
-			if (mListenSockfd == INVALID_SOCKET)
-				openListenSocket();
-			else if (mWorkSockfd == INVALID_SOCKET)
-				connectListenSocket();
-			else
+			trySockets();
+		} else {
+			if (mListening) {
 				listenForPacket();
-		} else if (mSending) {
-			if (mWorkSockfd == INVALID_SOCKET)
-				connectSendSocket();
-			else
+				if (mAlternating) {
+					mListening = false;
+					addBaseRequest();
+					if (mServer) tick();
+				}
+			} else {				
 				sendPacket();
+				if (mAlternating) {
+					mListening = true;
+					if (!mServer) tick();
+				} else 
+					addBaseRequest();
+			}
 		}
-	}// else if (mCurrentTick % mTalkInterval == 0) {
-	//	Con::printf("\ndataSource current tick: %d\n",mCurrentTick);
-	//}
+	}
 }
-
 
 /////////////////////////////////////////////////////////////////////////////////
 
 void dataSource::openListenSocket()
 {
 	struct sockaddr_in source_addr;
-	int n;
+	//int n;
 
 	Con::printf("connecting listen socket\n");
 	mListenSockfd = socket(AF_INET, SOCK_STREAM,IPPROTO_TCP);
@@ -127,66 +135,72 @@ void dataSource::connectListenSocket()
 	} else {
 		Con::printf("\nlisten accept succeeded!\n");
 		mReturnBuffer = new char[mPacketSize];
-		memset((void *)(mReturnBuffer),NULL,1024);	
+		memset((void *)(mReturnBuffer),NULL,mPacketSize);	
+		mReturnBuffer = new char[mPacketSize];
+		memset((void *)(mSendBuffer),NULL,mPacketSize);
 		mStringBuffer = new char[mPacketSize];
-		memset((void *)(mStringBuffer),NULL,1024);	
+		memset((void *)(mStringBuffer),NULL,mPacketSize);	
 	}
 }
 
 void dataSource::listenForPacket()
 {
-	struct sockaddr_in client_addr;
-	int n=0;
-	int i=0;
-	mByteCounter = 0;
-	char floatBytes[256];//sizeof(float)?
-	float OPCODE,hostFrame;
-	int num_args;
+	Con::printf("dataSource listenForPacket");
+	mPacketCount = 0;
 
-	n = recv(mWorkSockfd,mReturnBuffer,mPacketSize,0);
-	if (n>0) {
-		Con::printf("\nlisten socket received %d bytes!\n",n);
-	} else {
+	int n = recv(mWorkSockfd,mReturnBuffer,mPacketSize,0);
+	if (n<=0) {
 		Con::printf(".");
 		return;
 	}
 
-	char *bytes = &(mReturnBuffer[0]);
-	for (int i=0;i<sizeof(float);i++) floatBytes[i] = bytes[i];
-	mByteCounter += sizeof(float);
-
-	float *argArray = reinterpret_cast<float*>(floatBytes);
-	float controlCount = argArray[0];
-
-	//HERE: might pay to split these out into separate functions, for readability.
-	Con::printf("control count = %d\n",(int)controlCount);
-	for (int i=0;i<(int)controlCount;i++)
-	{
-		for (int i=0;i<sizeof(float);i++) floatBytes[i] = bytes[mByteCounter+i];
-		mByteCounter += sizeof(float);
-		argArray = reinterpret_cast<float*>(floatBytes);
-		OPCODE = argArray[0];
-		Con::printf("dealing with control type: %d\n",(int)OPCODE);
-		if (OPCODE==101.0) {//IG Control
-			num_args = 1;
-			for (int i=0;i<sizeof(float)*num_args;i++) floatBytes[i] = bytes[mByteCounter+i];
-			mByteCounter += sizeof(float)*num_args;
-			argArray = reinterpret_cast<float*>(floatBytes);
-
-			hostFrame = argArray[0];
-			Con::printf("Host frame: %d\n",(int)hostFrame);
-		} 
-	}
+	readPacket();
 }
+
+	//for (int j=0;j<mPacketCount;j++)
+	//{
+	//	n = recv(mWorkSockfd,mReturnBuffer,mPacketSize,0);
+	//	if (n<=0) j--;
+	//	else {
+	//		readPacket();
+	//	}
+	//}
+
+
+void dataSource::readPacket()
+{
+	short opcode,controlCount;//,packetCount;
+
+	controlCount = readShort();
+	for (short i=0;i<controlCount;i++)
+	{		
+		opcode = readShort();
+		if (opcode==1) {   ////  keep contact, but no request /////////////////////////
+			int tick = readInt();				
+			//if (mServer) Con::printf("dataSource clientTick = %d, my tick %d",tick,mCurrentTick);
+			//else Con::printf("dataSource serverTick = %d, my tick %d",tick,mCurrentTick);
+		}// else if (opcode==22) { // send us some number of packets after this one
+		//	packetCount = readShort();
+		//	if ((packetCount>0)&&(packetCount<=mMaxPackets))
+		//		mPacketCount = packetCount;
+		//}
+	}
+	
+	clearReturnPacket();
+}
+
 /////////////////////////////////////////////////////////////////////////////////
 
 void dataSource::connectSendSocket()
 {
 	struct sockaddr_in source_addr;
 	
-	mReturnBuffer = new char[mPacketSize];
-	
-	memset((void *)(mReturnBuffer),NULL,mPacketSize);	
+	mReturnBuffer = new char[mPacketSize];	
+	mSendBuffer = new char[mPacketSize];		
+	mStringBuffer = new char[mPacketSize];
+	memset((void *)(mReturnBuffer),NULL,mPacketSize);
+	memset((void *)(mSendBuffer),NULL,mPacketSize);
+	memset((void *)(mStringBuffer),NULL,mPacketSize);		
 
 	mReadyForRequests = true;
 
@@ -217,19 +231,55 @@ void dataSource::connectSendSocket()
 }
 
 void dataSource::sendPacket()
-{
-	send(mWorkSockfd,mReturnBuffer,mPacketSize,0);	
-	clearPacket();
+{ 
+	memset((void *)(mStringBuffer),NULL,mPacketSize);	
+	memcpy((void*)mStringBuffer,reinterpret_cast<void*>(&mSendControls),sizeof(short));
+	memcpy((void*)&mStringBuffer[sizeof(short)],(void*)mSendBuffer,mPacketSize-sizeof(short));
+	send(mWorkSockfd,mStringBuffer,mPacketSize,0);	
+	mLastSendTick = mCurrentTick;
+	
+	clearSendPacket();
 }
 
-void dataSource::clearPacket()
-{
-	memset((void *)(mReturnBuffer),NULL,1024);	
-	mReturnControls = 0;
-	mByteCounter = 0;	
+void dataSource::clearSendPacket()
+{	
+	memset((void *)(mSendBuffer),NULL,mPacketSize);
+	memset((void *)(mStringBuffer),NULL,mPacketSize);	
+
+	mSendControls = 0;
+	mSendByteCounter = 0;
 }
 
+void dataSource::clearReturnPacket()
+{
+	memset((void *)(mReturnBuffer),NULL,mPacketSize);	
+	memset((void *)(mStringBuffer),NULL,mPacketSize);	
+
+	mReturnByteCounter = 0;	
+}
 /////////////////////////////////////////////////////////////////////////////////
+
+void dataSource::trySockets()
+{
+	if (mServer)
+	{
+		if (mListenSockfd == INVALID_SOCKET) {
+			openListenSocket();
+		} else if (mWorkSockfd == INVALID_SOCKET) {
+			connectListenSocket();
+		} else {
+			listenForPacket();
+			mConnectionEstablished = true;
+		}
+	} else {
+		if (mWorkSockfd == INVALID_SOCKET) {
+			connectSendSocket();
+		} else {
+			sendPacket();
+			mConnectionEstablished = true;
+		}
+	}
+}
 
 void dataSource::disconnectSockets()
 {
@@ -241,43 +291,47 @@ void dataSource::disconnectSockets()
 
 void dataSource::writeShort(short value)
 {
-	memcpy((void*)&mReturnBuffer[mByteCounter],reinterpret_cast<void*>(&value),sizeof(short));
-	mByteCounter += sizeof(short);	
+	memcpy((void*)&mSendBuffer[mSendByteCounter],reinterpret_cast<void*>(&value),sizeof(short));
+	mSendByteCounter += sizeof(short);	
 }
 
 void dataSource::writeInt(int value)
 {
-	memcpy((void*)&mReturnBuffer[mByteCounter],reinterpret_cast<void*>(&value),sizeof(int));
-	mByteCounter += sizeof(int);	
+	memcpy((void*)&mSendBuffer[mSendByteCounter],reinterpret_cast<void*>(&value),sizeof(int));
+	mSendByteCounter += sizeof(int);	
 }
 
 void dataSource::writeFloat(float value)
 {
-	memcpy((void*)&mReturnBuffer[mByteCounter],reinterpret_cast<void*>(&value),sizeof(float));
-	mByteCounter += sizeof(float);	
+	memcpy((void*)&mSendBuffer[mSendByteCounter],reinterpret_cast<void*>(&value),sizeof(float));
+	mSendByteCounter += sizeof(float);	
 }
 
 void dataSource::writeDouble(double value)
 {
-	memcpy((void*)&mReturnBuffer[mByteCounter],reinterpret_cast<void*>(&value),sizeof(double));
-	mByteCounter += sizeof(double);	
+	memcpy((void*)&mSendBuffer[mSendByteCounter],reinterpret_cast<void*>(&value),sizeof(double));
+	mSendByteCounter += sizeof(double);	
 }
 
 void dataSource::writeString(char *content)
 {
 	int length = strlen(content);
 	writeInt(length);
-	strncpy(&mReturnBuffer[mByteCounter],content,length);
-	mByteCounter += length;
+	strncpy(&mSendBuffer[mSendByteCounter],content,length);
+	mSendByteCounter += length;
 }
+
+//void dataSource::writePointer(void *pointer) //Maybe, someday? using boost, shared pointer or shared memory? 
+//{  //Or can it be done in a more brute force way with global scale pointers? 
+//}
 
 //////////////////////////////////////////////
 
 short dataSource::readShort()
 {
 	char bytes[sizeof(short)];
-	for (int i=0;i<sizeof(short);i++) bytes[i] = mReturnBuffer[mByteCounter+i];
-	mByteCounter+=sizeof(short);
+	for (int i=0;i<sizeof(short);i++) bytes[i] = mReturnBuffer[mReturnByteCounter+i];
+	mReturnByteCounter+=sizeof(short);
 	short *ptr = reinterpret_cast<short*>(bytes);
 	return *ptr;	
 }
@@ -285,8 +339,8 @@ short dataSource::readShort()
 int dataSource::readInt()
 {
 	char bytes[sizeof(int)];
-	for (int i=0;i<sizeof(int);i++) bytes[i] = mReturnBuffer[mByteCounter+i];
-	mByteCounter+=sizeof(int);
+	for (int i=0;i<sizeof(int);i++) bytes[i] = mReturnBuffer[mReturnByteCounter+i];
+	mReturnByteCounter+=sizeof(int);
 	int *ptr = reinterpret_cast<int*>(bytes);
 	return *ptr;
 }
@@ -294,8 +348,8 @@ int dataSource::readInt()
 float dataSource::readFloat()
 {
 	char bytes[sizeof(float)];
-	for (int i=0;i<sizeof(float);i++) bytes[i] = mReturnBuffer[mByteCounter+i];
-	mByteCounter+=sizeof(float);
+	for (int i=0;i<sizeof(float);i++) bytes[i] = mReturnBuffer[mReturnByteCounter+i];
+	mReturnByteCounter+=sizeof(float);
 	float *ptr = reinterpret_cast<float*>(bytes);
 	return *ptr;
 }
@@ -303,8 +357,8 @@ float dataSource::readFloat()
 double dataSource::readDouble()
 {
 	char bytes[sizeof(double)];
-	for (int i=0;i<sizeof(double);i++) bytes[i] = mReturnBuffer[mByteCounter+i];
-	mByteCounter+=sizeof(double);
+	for (int i=0;i<sizeof(double);i++) bytes[i] = mReturnBuffer[mReturnByteCounter+i];
+	mReturnByteCounter+=sizeof(double);
 	double *ptr = reinterpret_cast<double*>(bytes);
 	return *ptr;
 }
@@ -312,18 +366,34 @@ double dataSource::readDouble()
 char *dataSource::readString()
 {
 	int length = readInt();
-	strncpy(mStringBuffer,&mReturnBuffer[mByteCounter],length);
-	mByteCounter += length;
+	strncpy(mStringBuffer,&mReturnBuffer[mReturnByteCounter],length);
+	mReturnByteCounter += length;
 	return mStringBuffer;
 }
+
+void dataSource::clearString()
+{
+	if (mStringBuffer!=NULL)	
+		memset((void *)(mStringBuffer),NULL,mPacketSize);
+}
+
+//void dataSource::readPointer()
+//{
+//}
 
 /////////////////////////////////////////////////////////////////////////////////
 
 void dataSource::addBaseRequest()
 {	
-	mReturnControls++;//Increment this every time you add a control.
-	writeShort(1);//base request opcode
+	short opcode = 1;//base request
+	mSendControls++;//Increment this every time you add a control.
+	writeShort(opcode);
 	writeInt(mCurrentTick);//For a baseRequest, do nothing but send a tick value to make sure there's a connection.
 }
 
-/////////////////////////////////////////////////////////////////////////////////
+void dataSource::handleBaseRequest()
+{	
+	int tick = readInt();				
+	//if (mServer) Con::printf("dataSource clientTick = %d, my tick %d",tick,mCurrentTick);
+	//else Con::printf("dataSource serverTick = %d, my tick %d",tick,mCurrentTick);
+}

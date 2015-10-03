@@ -8,6 +8,11 @@
 #include "sim/dataSource/dataSource.h"
 #include "terrain/terrPager.h"
 
+#define OPCODE_INIT_TERRAIN		2
+#define OPCODE_TERRAIN			3
+#define OPCODE_INIT_SKYBOX		4
+#define OPCODE_SKYBOX			5
+
 /// Base class for various kinds of data sources, first one being worldDataSource, for terrain, sky, weather and map information.
 class worldDataSource : public dataSource 
 {
@@ -15,6 +20,9 @@ class worldDataSource : public dataSource
 	   terrainPagerData mD;
 
 	   bool mFullRebuild;
+
+	   bool mTerrainDone;
+	   bool mSkyboxDone;
 
 	   unsigned int mSkyboxStage;
 
@@ -24,24 +32,13 @@ class worldDataSource : public dataSource
 	   void tick();
 
 	   void listenForPacket();
-	   void connectSendSocket();
-	   void sendPacket();
-	   void clearPacket();
+	   void readPacket();
 
 	   void addInitTerrainRequest(terrainPagerData *data,const char *path);
-	   //void addTerrainRequest(loadTerrainData *ltData);
 	   void addTerrainRequest(float playerLong,float playerLat);
 	   void addInitSkyboxRequest(unsigned int skyboxRes,int cacheMode,const char *path);
 	   void addSkyboxRequest(float tileLong,float tileLat,float playerLong,float playerLat,float playerAlt);
-	   void skyboxSocketDraw();//source side only, ie flightgear
-
-	   void makeTerrainLock();
-	   void removeTerrainLock();
-	   bool checkTerrainLock();
-
-	   void makeSkyboxLock();
-	   void removeSkyboxLock();
-	   bool checkSkyboxLock();
+	   //void skyboxSocketDraw();//source/server side only, ie flightgear
 
 };
 

@@ -502,13 +502,13 @@ void Px3Body::setDynamic( bool isDynam )
 	bool isKinematic = mBodyFlags & BF_KINEMATIC;
 	if (isDynam==isKinematic)
 	{ //ie we're switching states, we were kinematic and now we want to be dynamic, or vice versa.
-		physx::PxRigidDynamic *mTemp = static_cast<physx::PxRigidDynamic*>(mActor);
+		physx::PxRigidDynamic *kBody = static_cast<physx::PxRigidDynamic*>(mActor);
 		if (isDynam)
 		{
-			mTemp->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, false);
+			kBody->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, false);
 			mBodyFlags &= ~PhysicsBody::BF_KINEMATIC;
 		} else {
-			mTemp->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
+			kBody->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
 			mBodyFlags |= PhysicsBody::BF_KINEMATIC;
 		}
 	}  

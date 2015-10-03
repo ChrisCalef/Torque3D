@@ -30,22 +30,14 @@ vehicleDataSource::vehicleDataSource(bool listening)
 	mLastSendTick = 0;
 	mTickInterval = 30;
 	sprintf(mSourceIP,"127.0.0.1");
-
+	mListening = false;
 	if (listening)
-	{
 		mListening = true;
-		mSending = false;
-	} else {
-		mListening = false;
-		mSending = true;
-	}
 	
 	mTerrainPager = NULL;
 	TerrainPager* pager = dynamic_cast<TerrainPager*>(Sim::findObject("TheTP"));
 	if( pager )
-	{
 		mTerrainPager = pager;
-	}
 	
 	if (mTerrainPager)
 		Con::printf("New vehicle data source object!!! listening: %d terrain pager mClientPos %f %f %f\n",listening,
@@ -90,16 +82,11 @@ void vehicleDataSource::openListenSocket()
 
 void vehicleDataSource::listenForPacket()
 {
-	
 	if (!mTerrainPager)
 		return;
 
     struct sockaddr_in source_addr;
     int n=-1;
-    int i=0;
-    mByteCounter = 0;
-    float OPCODE,hostFrame;
-    int num_args,pathLength;
 
     ZeroMemory((char *) &source_addr, sizeof(source_addr));
     int addrSize = sizeof(source_addr);
@@ -117,8 +104,7 @@ void vehicleDataSource::listenForPacket()
 			//mFGPacket.longitude = buff.longitude;//double_swap(buff.longitude);
 			mFGPacket.latitude = buff.latitude;//float_swap(buff.latitude);
 			mFGPacket.longitude = buff.longitude;//float_swap(buff.longitude);
-			//mFGPacket.altitude = (int)((float)(ntohl(buff.altitude))*(12.0/39.37));//converting to meters...
-			mFGPacket.altitude = buff.altitude * (12.0/39.37);//converting to meters...
+			mFGPacket.altitude = buff.altitude * (12.0/39.37);//convert to meters
 			mFGPacket.airspeed = buff.airspeed;//ntohl(buff.airspeed);
 			mFGPacket.roll = buff.roll;//float_swap(buff.roll);
 			mFGPacket.pitch = buff.pitch;//float_swap(buff.pitch);
@@ -126,10 +112,6 @@ void vehicleDataSource::listenForPacket()
 			U32 latency =  Platform::getRealMilliseconds() - mLastSendTimeMS;      
 			mLastSendTimeMS = mLastSendTimeMS = Platform::getRealMilliseconds();
 			//Con::printf("lat %f long %f alt %f roll %f heading %f latency %d",mFGPacket.latitude,mFGPacket.longitude,mFGPacket.altitude,buff.roll,buff.heading,latency);
-
-
-			//mFGPacket.longitude = newPos.x;
-			//mFGPacket.latitude = newPos.y;	
 
 			MatrixF oriMat,pitchMat,rollMat,headMat;
 			QuatF oriQuat;
@@ -148,8 +130,6 @@ void vehicleDataSource::listenForPacket()
 			Point3F newPos = mTerrainPager->convertLatLongToXYZ(mFGPacket.longitude,mFGPacket.latitude,mFGPacket.altitude);
 
 			mFGTransform.setPosition(newPos);
-
-			//Con::printf("buffer size: %d  x %g y %g z %g  roll %f ",n,newPos.x,newPos.y,newPos.z,mFGPacket.roll);
 		}
 		n = recvfrom(SOCKET(mListenSockfd),(char *)(&buff),sizeof(buff),0,(struct sockaddr*)&source_addr,&addrSize);
 	}

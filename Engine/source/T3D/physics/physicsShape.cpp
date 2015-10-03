@@ -2334,9 +2334,8 @@ void PhysicsShape::setDynamic(bool isDynamic)
 		mIsDynamic = isDynamic;
 
 		if (isServerObject())
-		{        //SINGLE PLAYER HACK
+		{   //SINGLE PLAYER HACK - really we need to do it to all ghosts of this object.
 			PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-			//mPhysicsRep->setDynamic(isDynamic);
 			clientShape->setDynamic(isDynamic);
 			return;
 		}
