@@ -97,12 +97,11 @@ void ForestEditorCtrl::onSleep()
 
 bool ForestEditorCtrl::updateActiveForest( bool createNew )
 {
-   Con::executef( this, "onActiveForestUpdated", mForest ? mForest->getIdString() : "", createNew ? "1" : "0" );  
+	Con::executef( this, "onActiveForestUpdated", mForest ? mForest->getIdString() : "", createNew ? "1" : "0" );  
+	if ( mTool )
+		mTool->setActiveForest( mForest );
 
-   if ( mTool )
-      mTool->setActiveForest( mForest );
-
-   return mForest;
+	return mForest;
 }
 
 void ForestEditorCtrl::setActiveTool( ForestTool *tool )
