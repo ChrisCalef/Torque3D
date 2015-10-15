@@ -173,7 +173,7 @@ bool Forest::onAdd()
             NetConnection::setLastError( "You are missing a file needed to play this mission: %s", mDataFileName );
 
          return false;
-      }
+      } else Con::printf("forest loaded successfully! %s",mDataFileName);
    }
 
    updateCollision();
@@ -361,6 +361,59 @@ void Forest::saveDataFile( const char *path )
       mData->write( mDataFileName );
 }
 
+
+/*
+
+const ForestItem& ForestData::addItem( ForestItemData *data,
+                                       const Point3F &position,
+                                       F32 rotation,
+                                       F32 scale )
+
+
+
+const ForestItem& ForestData::addItem( ForestItemKey key,
+                                       ForestItemData *data,
+                                       const MatrixF &xfm,
+                                       F32 scale )
+
+*/
+
+bool Forest::addItem(S32 dataIndex,const Point3F &position,F32 rotation,F32 scale )
+{ 
+	
+   Vector<ForestItemData*> allDatablocks;
+   mData->getDatablocks( &allDatablocks );
+   U32 count = allDatablocks.size();
+	
+   if (( dataIndex < count) && (dataIndex >= 0))
+	{
+      mData->addItem(allDatablocks[dataIndex],position,rotation,scale );
+		return true;
+	} else 
+		return false;
+}
+
+bool Forest::addItem(ForestItemData *data,const Point3F &position,F32 rotation,F32 scale )
+{ 
+	if (data)
+	{
+      mData->addItem(data,position,rotation,scale );
+		return true;
+	} else
+		return false;
+}
+
+bool Forest::removeItem(U32 forestItemKey,const Point3F &position)
+{ 
+	
+   if (forestItemKey >= 0)
+	{
+      mData->removeItem(forestItemKey,position );
+		return true;
+	} else 
+		return false;
+}
+
 DefineConsoleMethod( Forest, saveDataFile, void, (const char * path), (""), "saveDataFile( [path] )" )
 {   
    if (strlen(path)>0)
@@ -382,4 +435,12 @@ DefineConsoleMethod(Forest, regenCells, void, (), , "()")
 DefineConsoleMethod(Forest, clear, void, (), , "()" )
 {
    object->clear();
+}
+
+
+DefineConsoleMethod(Forest, addItem, bool, (S32 dataIndex, Point3F position, F32 rotation, F32 scale ), , "()" )
+{
+
+   return object->addItem(dataIndex,position,rotation,scale);
+
 }

@@ -113,11 +113,13 @@ bool ForestData::read( Stream &stream )
    U32 count;
    stream.read( &count );
    allDatablocks.setSize( count );
+	Con::printf("Reading forest file, datablocks %d",count);
    for ( U32 i=0; i < count; i++ )
    {
       StringTableEntry name = stream.readSTString();
       ForestItemData* data = ForestItemData::find( name );
-      
+		Con::printf("Reading forest datablock    %s    %s",name,data->mShapeFile);
+
       // TODO: Change this to instead create a dummy forest data
       // for each so that the user can swap it with the right one.
       if ( data == NULL )
@@ -140,6 +142,7 @@ bool ForestData::read( Stream &stream )
 
    // Read in the items.
    stream.read( &count );
+	Con::printf("forest reading %d trees.",count);
    for ( U32 i=0; i < count; i++ )
    {
       stream.read( &dataIndex );

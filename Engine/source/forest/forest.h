@@ -209,6 +209,12 @@ public:
 
    /// Called to rebuild the collision state.
    void updateCollision();
+	
+	bool addItem(S32 dataIndex,const Point3F &position,F32 rotation,F32 scale );
+	bool addItem(ForestItemData *data,const Point3F &position,F32 rotation,F32 scale );
+	bool removeItem(U32 forestItemKey,const Point3F &position );
+
+
 };
 
 #endif // _H_FOREST_

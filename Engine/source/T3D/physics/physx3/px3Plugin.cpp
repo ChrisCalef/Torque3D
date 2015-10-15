@@ -61,7 +61,7 @@ Px3Plugin::Px3Plugin()
 	mSQL = new SQLiteObject();
 
 	char dbName[65];
-    dStrncpy( dbName, Con::getVariable( "pref::OpenSimEarthDB" ), 64 );
+    dStrncpy( dbName, Con::getVariable( "pref::OpenSimEarth::DB" ), 64 );
     dbName[64] = 0;
 
 	if (mSQL->OpenDatabase(dbName))

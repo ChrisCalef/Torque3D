@@ -14,9 +14,14 @@
 #ifndef _ITICKABLE_H_
 #include "core/iTickable.h"
 #endif
+#ifndef _H_FOREST_
+#include "forest/forest.h"
+#endif
 
 #include "console/SQLiteObject.h"
 #include "console/SimXMLDocument.h"
+
+#include <map>
 
 class worldDataSource;
 class dataSource;
@@ -84,12 +89,20 @@ public:
 	terrainPagerData mD;//This is a standalone data struct for easy portability.
 
 	SQLiteObject *mSQL;
+	String mDBName;
 
 	Vector <TerrainBlock *>mTerrains;//This is the short list of actually loaded terrains. 
 	Vector <TerrainBlock *>mTerrainGrid;//This is the sparse array in the shape of a grid centered on player.
 	Vector <loadTerrainData> mRequestTiles;//Ever changing list of tiles that need to be requested.
 	TerrainBlock *mTerrain;//This is the terrain the player or camera is currently occupying. 
 	Vector <String> terrain_materials;
+
+	std::map<std::string,float> mCellGrid;//String is my lat/long tag, eg "123d015W_43d965N", float is amount of area filled by anything.
+	
+	Forest *mForest;
+	Vector<ForestItemData *>mForestItemData;//Vector of pointers to forest item datablocks, so we can keep track of them. 
+
+   MRandom mRandom;
 
 	bool mUseDataSource;
 	worldDataSource *mDataSource;
@@ -98,7 +111,7 @@ public:
 	bool mSentTerrainRequest;
 	bool mSentSkyboxRequest;
 	bool mLoadedTileGrid;
-	
+	bool mForestStarted;
 
 	//Vector <String> mTileNames;//Still need this? Don't think so.	
 
@@ -118,6 +131,10 @@ public:
 	
 	U32 mTerrainRequestTick;
 	U32 mSkyboxRequestTick;
+	
+	U32 mLastForestTick;
+	U32 mForestTickInterval;
+	U32 mCellGridSize;
 
 	U32 mLoadState;
 
@@ -128,7 +145,12 @@ public:
 	F32 mMapCenterLatitude;
 	F32 mTileLoadRadius;//At a future time these could be weighted by axes, to get an eliptical area
 	F32 mTileDropRadius;//instead of a circle, but definitely not necessary for first pass.
+	F32 mForestRadius;
 	U32 mSkyboxRes;
+
+	F32 mCellWidth;
+	F32 mCellArea;
+	F32 mMinCellArea;//Amount of free are below which we don't bother trying to add more trees. Default=10%.
 	///////////////////////
 	
 	U32 mGridSize;//Now, this is no longer a solid 3x3 or 5x5 grid that we have loaded at all times,
@@ -149,13 +171,21 @@ public:
 	void interpolateTick(F32);
 	void advanceTime(F32);
 
-	const char* getTileName(F32 longitude, F32 latitude);
+	void getTileName(F32 longitude, F32 latitude,char *outStr);
+	void getCellName(F32 longitude, F32 latitude,char *outStr);
+	void getCellName(Point3F pos,char *outStr);
+	Point2F getCellCoords(Point3F pos);
+	Point2F getCellCoordsFromName(char *cellName);
 
 	void findClientPos();
 	void findClientTile();
+	Point2F findTileCoords(Point3F pos);
 	void loadTileNames();
 
 	TerrainBlock *addTerrainBlock(F32 startLong,F32 startLat);
+	TerrainBlock *getTerrainBlock(Point3F pos);//TEMP, not up yet
+
+	S32 TerrainPager::getClosestTextureIndex(Point3F pos);
 
 	void dropTerrainBlock(U32 index);
 	void dropTerrainBlock(F32 startLong,F32 startLat);
@@ -170,14 +200,25 @@ public:
 
 	void updateSkyboxConsole();
 
-	void loadOSM(const char*);
+	void loadOSM(const char*,const char*);
 	void makeStreets();
 
 	Point3F convertLatLongToXYZ(Point3F pos);
 	Point3F convertLatLongToXYZ(double longitude,double latitude, float altitude);
 	Point3F convertXYZToLatLong(Point3F pos);
 
+	bool ifGroundAt( const Point3F &worldPt );
+	bool getGroundAt( const Point3F &worldPt, F32 *zValueOut, VectorF *normalOut );
+	F32 getForestCellClosestDist(Point2F cellPosLatLong,Point3F pos);
+	F32 getForestCellFarthestDist(Point2F cellPosLatLong,Point3F pos);
 
+	//void fillForestCell(Point2F,ForestItemData *,F32);
+	void fillForestCell(Point2F);
+	void clearForestCell(Point2F);
+	
+	void checkForest();
+	void fillForest();
+	//void updateForest();
 };
 /*
 	////////////////////////////////////////////////////////////

@@ -304,7 +304,7 @@ bool ForestBrushTool::updateGuiInfo()
 
 void ForestBrushTool::setSize( F32 val )
 {
-   mSize = mClampF( val, 0.0f, 150.0f );
+   mSize = mClampF( val, 0.0f, 15000.0f );//150.0f
    Con::executef( this, "syncBrushToolbar" );
 }
 

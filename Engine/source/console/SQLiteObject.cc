@@ -193,11 +193,13 @@ bool SQLiteObject::OpenDatabase(const char* filename)
   }  
    else
    {
-	  //sqlite3_activate_cerod("!THIS$IS$NOT$YOUR$DATABASE!");
-	  //int res1=sqlite3_key(m_pDatabase,"ASD",1);
-	  //int res2=sqlite3_rekey(m_pDatabase,"ASD",1);
       // database was opened without error
       Con::executef(this, "1", "onOpened()");
+		
+		//Now, for OpenSimEarth, load spatialite dll, so we can have GIS functions.
+		int canLoadExt = sqlite3_load_extension(m_pDatabase,"mod_spatialite.dll",0,0);
+		Con::printf("opened spatialite extension: %d",canLoadExt);
+		//Sigh, no luck yet. Cannot find function GeomFromText().
    }
    return true;
 }
@@ -240,6 +242,7 @@ int SQLiteObject::ExecuteSQL(const char* sql)
    {
       // error occured
       Con::executef(this, "2", "onQueryFailed", m_szErrorString);
+		Con::errorf("SQLite failed to execute query, error %s",m_szErrorString);
       delete pResultSet;
       return 0;
    }

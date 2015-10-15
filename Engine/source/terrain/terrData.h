@@ -202,8 +202,10 @@ protected:
    /// True if the zoning needs to be recalculated for the terrain.
    bool mZoningDirty;
 
-   F32 mLongitude;//TerrainPager
-   F32 mLatitude;//TerrainPager
+	//TerrainPager
+   F32 mLongitude;
+   F32 mLatitude;
+	//TerrainPager
 
    String _getBaseTexCacheFileName() const;
 
