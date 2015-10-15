@@ -669,8 +669,8 @@ bool ForestBrushTool::getGroundAt( const Point3F &worldPt, F32 *zValueOut, Vecto
 
    if ( mForest )
       mForest->enableCollision();
-
-   if ( !hit )
+	
+   if ( !hit || strcmp(rinfo.object->getClassName(),"TerrainBlock"))
       return false;
 
    if (zValueOut)
