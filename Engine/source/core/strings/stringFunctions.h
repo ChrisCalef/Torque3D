@@ -147,6 +147,11 @@ inline S32 dAtoi(const char *str)
    return strtol(str, NULL, 10);
 }
 
+inline long dAtol(const char *str)
+{
+   return strtol(str, NULL, 10);
+}
+
 inline U32 dAtoui(const char *str, U32 base = 10)
 {
    return strtoul(str, NULL, base);
@@ -155,6 +160,11 @@ inline U32 dAtoui(const char *str, U32 base = 10)
 inline F32 dAtof(const char *str)
 {
    return strtof(str, NULL);
+}
+
+inline F32 dAtod(const char *str)
+{
+   return strtod(str, NULL);
 }
 
 
