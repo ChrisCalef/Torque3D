@@ -19,7 +19,6 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
-
 #include <vector>
 #include <string>
 
@@ -48,16 +47,20 @@ TerrainPager::TerrainPager()
 	mLastForestTick = 0;
 	mForestTickInterval = 10;
 	mCellGridSize = 64;
+	mTreeRadiusMult = 1.0;
+	mForestTries = 200;
 
 	mLoadState = 0;//For now just use numbers, make an enum when you know what the states are going to be.
 
 	mDataSource = NULL;
+	mSQL = NULL;
 	mSentInitRequests = false;
 	mLoadedTileGrid = false;
 	mSentTerrainRequest = false;
 	mSentSkyboxRequest = false;
 	mForest = NULL;
 	mForestStarted = false;
+	mDoForest = true;
 	mForestItemData = NULL;
 
 	mClientPos.zero();
@@ -105,8 +108,11 @@ TerrainPager::~TerrainPager()
 	if ((mUseDataSource)&&(mDataSource))
 		delete mDataSource;
 
-	//mSQL->CloseDatabase();
-	//delete mSQL;
+	if (mSQL) 
+	{
+		mSQL->CloseDatabase();
+		delete mSQL;
+	}
 }
 
 void TerrainPager::initPersistFields()
@@ -120,6 +126,8 @@ void TerrainPager::initPersistFields()
 	addField( "tileDropRadius", TypeF32, Offset( mTileDropRadius, TerrainPager ), "Radius at which to drop a tile." );
 		
 	addField( "forestRadius", TypeF32, Offset( mForestRadius, TerrainPager ), "Forest radius." );
+	addField( "forestTries", TypeS32, Offset( mForestTries, TerrainPager ), "How many tries we take to fill a forest cell (increases density, up to amount allowed by treeRadiusMult)." );
+	addField( "treeRadiusMult", TypeF32, Offset( mTreeRadiusMult, TerrainPager ), "Tree radius multiplier, lower number means denser forest." );
 	addField( "cellGridSize", TypeS32, Offset( mCellGridSize, TerrainPager ), "Cell grid size." );
 
 	addField( "skyboxRes", TypeS32, Offset( mSkyboxRes, TerrainPager ), "Skybox image resolution." );
@@ -127,7 +135,8 @@ void TerrainPager::initPersistFields()
 	addField( "forestTickInterval", TypeS32, Offset( mForestTickInterval, TerrainPager ), "Forest tick interval (30 = 1 second)." );
 	
 	addField( "useDataSource", TypeBool, Offset(mUseDataSource, TerrainPager ), "Use worldDataSource for terrain/skybox updates.");
-	
+	addField( "doForest",  TypeBool, Offset(mDoForest, TerrainPager ), "Set to false to turn off forest paging.");
+
 	Parent::initPersistFields();
 }
 
@@ -159,6 +168,9 @@ bool TerrainPager::onAdd()
 	mD.mSkyboxRes = mSkyboxRes;
 		
 	mSQL = new SQLiteObject();
+
+	if (!mSQL->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
+		Con::printf("TerrainPager: cannot open map db: %s",Con::getVariable("$pref::OpenSimEarth::OSMDB"));
 
 	/*
 	//OpenStreetMap Testing...
@@ -416,7 +428,7 @@ void TerrainPager::processTick()
 			mLoadState=5;
 		}
 
-		if ((mCurrentTick-mLastForestTick) > mForestTickInterval) 
+		if ( mDoForest && ((mCurrentTick-mLastForestTick) > mForestTickInterval) )
 			checkForest();
 	}	
 }
@@ -449,7 +461,10 @@ void TerrainPager::checkForest()
       //String osmFile( Con::getVariable( "$pref::OpenSimEarth::OSM" ) );
       //String mapDB( Con::getVariable( "$pref::OpenSimEarth::OSMDB" ) );
 		//loadOSM(osmFile.c_str(),mapDB.c_str());
-		//makeStreets();
+
+		findStreetNodes();
+		
+		makeStreets();
 
 		for (U32 i=0;i<items.size();i++)
 		{
@@ -480,13 +495,13 @@ void TerrainPager::checkForest()
 				*/
 		}
 
-		Con::printf("total cells size %d",mCellGrid.size());
+		Con::printf("Before filling forest, total occupied cells %d",mCellGrid.size());
 		j=0;
 		for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
 		{			
 			strcpy(cellName,it->first.c_str());
-			Con::printf("cellname %s cell %d  area filled %f  available %f ",
-				cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
+			//Con::printf("cellname %s cell %d  area filled %f  available %f ",
+			//	cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
 		}
     
 		fillForest();
@@ -500,7 +515,16 @@ void TerrainPager::checkForest()
 				cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
 
 		}
-		Con::printf("After after filling, total cells size %d",mCellGrid.size());
+		
+		//S32 totalNodes = 0;
+		//for (std::map<int,osmWay>::iterator it=mStreets.begin(); it!=mStreets.end(); ++it)
+		//{
+		//	totalNodes += mStreets[it->first].nodes.size();
+		//	Con::printf("way %d, type %s node %d long %f lat %f",it->first,mStreets[it->first].type.c_str(),
+		//		mStreets[it->first].nodes[0].osmId,mStreets[it->first].nodes[0].longitude,mStreets[it->first].nodes[0].latitude);
+		//}
+		//Con::printf("streets map: %d total nodes %d",mStreets.size(),totalNodes);
+
 		mForestStarted = true;
 		mLastForestTick = mCurrentTick;
 		return;
@@ -525,6 +549,9 @@ void TerrainPager::checkForest()
 			//Con::printf("cellname %s cell %d  area filled %f  available %f ",
 			//	cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
 		}
+
+		pruneStreets();
+
 		//mForest->updateCollision();
 		//Con::printf("After delete pass, cell size %d",mCellGrid.size());
 		//j=0;
@@ -554,6 +581,9 @@ void TerrainPager::checkForest()
 	 
 	//Con::printf("lastForestTick: %d",mLastForestTick);
 
+	findStreetNodes();
+	makeStreets();
+
 	fillForest();
 	//updateForest();
 	
@@ -569,6 +599,181 @@ void TerrainPager::checkForest()
 	mLastForestTick = mCurrentTick;
 }
 
+void TerrainPager::findStreetNodes()
+{
+	//Okay, this is really lazy but I'm going to use the same circling out from the middle strategy here
+	//as the forest uses, although both cases could probably just be a simple loop by row and column.
+	Point2F baseCellCoords = getCellCoords(mClientPos);
+	Point3F baseCell = convertLatLongToXYZ(Point3F(baseCellCoords.x,baseCellCoords.y,0.0));
+	Point3F startCell = baseCell;//This will be moving with every loop. 
+	S32 loops = 0;
+	char cellName[20];
+	Vector<std::string> activeCells;
+
+	getCellName(baseCellCoords.x,baseCellCoords.y,cellName);
+	activeCells.push_back(cellName);//NOW, we are just going to make a list of cellnames, and submit them all in one query.
+	//findStreetNodesCell(baseCellCoords);//Then we should be able to get just the list of ways, with name/type/id.
+	loops++;	
+
+	//NOW, to loop around in ever expanding squares until we are entirely clear of forestRadius.
+	F32 x,y;
+	Point3F iterCell;
+
+	//Note: this is *not* the same as taking a proper vector length from baseCell to startCell - by design, because we need the whole
+	//column and row to be outside of forest radius 
+	while ( ((baseCell.x-startCell.x)<=mForestRadius) || ((baseCell.y-startCell.y)<=mForestRadius) )
+	{
+		startCell.x -= mCellWidth;
+		startCell.y -= mCellWidth;
+		iterCell = startCell;
+
+		Point3F cellPosLatLong;
+		F32 closestDist;
+
+		for (U32 i=0;i<(loops*2)+1;i++) // Left side, bottom to top.
+		{
+			if (i>0) iterCell.y += mCellWidth;
+			cellPosLatLong = convertXYZToLatLong(iterCell);
+			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
+			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
+			if  (closestDist<mForestRadius)
+			{
+				activeCells.push_back(cellName);
+				//findStreetNodesCell(Point2F(cellPosLatLong.x,cellPosLatLong.y));
+			}
+		}
+		for (U32 i=1;i<(loops*2)+1;i++) // Top, left to right.
+		{
+			if (i>0) iterCell.x += mCellWidth;
+			cellPosLatLong = convertXYZToLatLong(iterCell);
+			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
+			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
+			if  (closestDist<mForestRadius)
+			{				
+				activeCells.push_back(cellName);
+				//findStreetNodesCell(Point2F(cellPosLatLong.x,cellPosLatLong.y));
+			}
+		}
+		
+		for (U32 i=1;i<(loops*2)+1;i++) // Right, top to bottom.
+		{
+			if (i>0) iterCell.y -= mCellWidth;
+			cellPosLatLong = convertXYZToLatLong(iterCell);
+			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
+			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
+			if  (closestDist<mForestRadius)
+			{
+				activeCells.push_back(cellName);
+				//findStreetNodesCell(Point2F(cellPosLatLong.x,cellPosLatLong.y));
+			}
+		}
+		
+		for (U32 i=1;i<(loops*2);i++) // Bottom, right to left.
+		{
+			if (i>0) iterCell.x -= mCellWidth;
+			cellPosLatLong = convertXYZToLatLong(iterCell);
+			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
+			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
+			if  (closestDist<mForestRadius)
+			{
+				activeCells.push_back(cellName);
+				//findStreetNodesCell(Point2F(cellPosLatLong.x,cellPosLatLong.y));
+			}
+		}
+		loops++;
+	}	
+
+
+	//NOW, we have a list of cellnames, let's use them:
+
+	// SELECT DISTINCT w.osmId, w.name, w.type FROM osmWay w JOIN osmNode n ...JOIN osmWayNode wn ... WHERE n.cell_name IN {=' << activeCell[i]
+	
+	if (mSQL)//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
+	{
+		long nodeId,wayId;
+		int result,total_query_len=0;
+		double nodeLong,nodeLat;
+		std::string wayName,wayType;
+		std::ostringstream selectQuery,wayQuery;
+		sqlite_resultset *resultSet;
+		
+		selectQuery << 
+			"SELECT DISTINCT w.osmId, w.name, w.type " << 
+			"FROM osmWay w " << 
+			"JOIN osmWayNode wn ON wn.wayId = w.osmId " <<
+			"JOIN osmNode n ON n.osmId = wn.nodeId " <<
+			"WHERE n.cell_name IN  ( ";
+
+		for (U32 i=0;i<activeCells.size();i++)
+		{
+			if (i<(activeCells.size()-1))
+				selectQuery << "'" << activeCells[i].c_str() << "', ";
+			else
+				selectQuery << "'" << activeCells[i].c_str() << "' ";
+
+		}
+		selectQuery << " );";
+
+		//Con::printf("%s",selectQuery.str().c_str());
+		result = mSQL->ExecuteSQL(selectQuery.str().c_str());
+		resultSet = mSQL->GetResultSet(result);
+		if (resultSet->iNumRows > 0)
+		{
+
+			Con::printf("found %d osmWays ",resultSet->iNumRows);
+			for (U32 i=0;i<resultSet->iNumRows;i++)
+			{
+				int c=0;
+				wayId = dAtol(resultSet->vRows[i]->vColumnValues[c++]);
+				wayName = resultSet->vRows[i]->vColumnValues[c++];
+				wayType = resultSet->vRows[i]->vColumnValues[c++];
+
+				Con::printf("Way  %d  type %s  name %s",wayId,wayType.c_str(),wayName.c_str());
+				
+				osmWay kWay;
+				kWay.name = wayName;
+				kWay.type = wayType;
+
+				if (mStreets.find(wayId) == mStreets.end())
+				{
+					mStreets[wayId].name = wayName;
+					mStreets[wayId].type = wayType;
+					//mStreets[wayId].nodes.push_back(kNode);
+					mStreets[wayId].road = NULL;
+				}// else {//Okay, this may or may not be useful in the long run. For now we're going to load the whole way
+					//mStreets[wayId].nodes.push_back(kNode);//over in makeStreets, so these nodes are irrelevant. Someday, maybe.
+				//}			
+
+			}
+		}
+	}	
+}
+	
+
+
+
+		//selectQuery << 
+		//	"SELECT n.osmId, n.longitude, n.latitude, w.osmId, w.type, w.name, wn.id " << 
+		//	"FROM osmNode n " << 
+		//	"JOIN osmWayNode wn ON n.osmId = wn.nodeId " <<
+		//	"JOIN osmWay w ON wn.wayId = w.osmId " <<
+		//	"WHERE cell_name LIKE '" << cellName << "';";
+
+
+
+
+void TerrainPager::findStreetNodesCell(Point2F cellPosLatLong)
+{
+	
+	float x,y,z,startX,startY;
+	Point3F cellPosLatLong3D = Point3F(cellPosLatLong.x,cellPosLatLong.y,0.0);//(I don't actually care about elevation right now)
+	Point3F cellPosXYZ = convertLatLongToXYZ(cellPosLatLong3D);
+	
+	char cellName[20];
+	getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
+	
+
+}
 
 void TerrainPager::fillForest()
 {
@@ -662,13 +867,17 @@ void TerrainPager::fillForest()
 		}
 		loops++;
 	}		
-	//mForest->updateCollision();
+	F32 groundZ;
+	Point3F normalVec;
+	getGroundAt(mClientPos,&groundZ,&normalVec);
+	if (mClientPos.z-groundZ<8)//only update forest collision if we're not flying around, more than 8 meters above ground.
+		mForest->updateCollision();
 }
 
 void TerrainPager::fillForestCell(Point2F cellPosLatLong)
 {
 	float x,y,z,startX,startY;
-	float radiusMultiple = 3.0;
+	float radiusMultiple = mTreeRadiusMult;
 	Point3F cellPosLatLong3D = Point3F(cellPosLatLong.x,cellPosLatLong.y,0.0);//(I don't actually care about elevation right now)
 	Point3F cellPosXYZ = convertLatLongToXYZ(cellPosLatLong3D);
 	
@@ -680,27 +889,75 @@ void TerrainPager::fillForestCell(Point2F cellPosLatLong)
 	char cellName[20];
 	getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
 	
+	//NOW - TESTING. We need to query our nodes and ways from the map db, based on cellname.
+	if (mSQL->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
+	{
+		S32 nodeId,wayId,result,total_query_len=0;
+		F32 nodeLong,nodeLat;
+		std::string wayName,wayType;
+		std::ostringstream selectQuery,wayQuery;
+		sqlite_resultset *resultSet;
+
+		//Hmm, I know there is a clever way using subqueries by which I could extract everything I need in
+		//one query... but for now we're gonna just go ahead and hit it twice.
+		// SELECT * FROM COMPANY WHERE ID IN (SELECT ID FROM COMPANY WHERE SALARY > 45000); 
+
+		selectQuery << 
+			"SELECT n.osmId, n.longitude, n.latitude, w.osmId, w.type, w.name " << 
+			"FROM osmNode n " << 
+			"JOIN osmWayNode wn ON n.osmId = wn.nodeId " <<
+			"JOIN osmWay w ON wn.wayId = w.osmId " <<
+			"WHERE cell_name LIKE '" << cellName << "';";
+
+		result = mSQL->ExecuteSQL(selectQuery.str().c_str());
+		resultSet = mSQL->GetResultSet(result);
+		if (resultSet->iNumRows > 0)
+		{
+			Con::printf("found %d osmNodes from cell %s",resultSet->iNumRows,cellName);
+			for (U32 i=0;i<resultSet->iNumRows;i++)
+			{
+				int c=0;
+				nodeId = dAtoi(resultSet->vRows[i]->vColumnValues[c++]);
+				nodeLong = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				nodeLat = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				wayId = dAtoi(resultSet->vRows[i]->vColumnValues[c++]);
+				wayType = resultSet->vRows[i]->vColumnValues[c++];
+				wayName = resultSet->vRows[i]->vColumnValues[c++];
+
+				Con::printf("Node  %d   longitude: %f  latitude: %f  way id %d type %s  name %s",
+					nodeId,nodeLong,nodeLat,wayId,wayType.c_str(),wayName.c_str());
+
+				osmNode kNode;
+				kNode.longitude = nodeLong;
+				kNode.latitude = nodeLat;
+
+				osmWay kWay;
+				kWay.name = wayName;
+				kWay.type = wayType;
+
+				if (mStreets.find(wayId) == mStreets.end())
+				{
+					mStreets[wayId].name = wayName;
+					mStreets[wayId].type = wayType;
+					mStreets[wayId].nodes.push_back(kNode);
+				} else {
+					mStreets[wayId].nodes.push_back(kNode);
+				}			
+			}
+		}
+	}
+
 	ForestItemData *data = mForestItemData[0];
 	F32 scale = 1.0;	
 	
 	Point3F hitNormal;
 	F32 hitHeight;
 	StringTableEntry matName;
-	//if (mTerrain) {
-	//	mTerrain->getNormalHeightMaterial(Point2F(cellPosXYZ.x,cellPosXYZ.y),&hitNormal,&hitHeight,matName);
-	//	Con::printf("mTerrain seems okay, name = %s material %s, hitHeight %f",mTerrain->getName(),matName,hitHeight);
-	//}
-	//Con::printf("Hit material %s, height %f, normal %f %f %f",matName,hitHeight,hitNormal.x,hitNormal.y,hitNormal.z);
 
-	//U32 layerIndex1 = (U32)mFile->getLayerIndex(row,column);
-
-
-	//Con::printf("filling forest cell %s, coords %f %f filled area %f",cellName,cellPosLatLong.x,cellPosLatLong.y,mCellGrid[cellName]);
-	// We need to make a loop over some finite number of tries (make it a variable number)
 	S32 lastTree = 0;
-	S32 cellTries = 400;
+	S32 cellTries = mForestTries;
 	for (U32 i=0;i<cellTries;i++)
-	{//Hmm, 0.05, 0.9 - trying to prevent float error (?) from putting trees slightly outside the cell.
+	{
 		x = cellPosXYZ.x  + mRandom.randF(0.0,mCellWidth);
 		y = cellPosXYZ.y + mRandom.randF(0.0,mCellWidth);
 
@@ -709,14 +966,7 @@ void TerrainPager::fillForestCell(Point2F cellPosLatLong)
 		if (!getGroundAt(randPos,&worldCoordZ,&normalVector))
 			continue;
 
-		//if (!ifGroundAt(randPos))//HERE: the deceptively simple way to filter for static objects (roads and buildings) and water bodies.
-		//	continue;
-		//NOW, we need to figure out what terrain texture is dominant, ie we need to find the closest cell from the layerMap.
-		//But first, we need our terrain block.
-		//Point2F tileStart = findTileCoords(randPos);
-
 		S32 texIndex = getClosestTextureIndex(randPos);
-		//Con::printf("got a texture index %d for position %f %f %f",texIndex,randPos.x,randPos.y,randPos.z);
 		switch (texIndex)
 		{
 			case 1: 
@@ -732,19 +982,15 @@ void TerrainPager::fillForestCell(Point2F cellPosLatLong)
 		if ( mForest->getData()->getItems( randPos, data->mRadius * radiusMultiple, NULL ) > 0 )//radius / 2.0 because we want overlap.
             continue;
 		
-		//Con::printf("adding item! %f %f %f",randPos.x,randPos.y,randPos.z);
 		float kScale = 1.0;
 		if (scale > 0.0)
 			kScale = scale;
-
-		//std::string cellName;
 
 		if (data)
 		{
 			mForest->addItem(data,randPos,0.0,mRandom.randF(kScale*0.7,kScale*1.3));
 			
-			float radius = (data->mRadius * radiusMultiple ) * kScale;//TEMP! Need to either fix radius in the datablock, or find a working 
-			//Con::printf("cell %s area %f",cellName,mCellGrid[cellName]);//multiple here, because we're getting low numbers.
+			float radius = (data->mRadius * radiusMultiple ) * kScale;
 			if (mCellGrid[cellName]>0.0)
 				mCellGrid[cellName] += M_PI * pow(radius,2);
 			else
@@ -763,7 +1009,6 @@ void TerrainPager::clearForestCell(Point2F cellPosLatLong)
 	S32 cellGridSize = mCellGrid.size();
 	char cellName[20];
 	getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
-	//getCellName(cellPos,cellName);//Uh oh, rounding errors again..
 	F32 edgeTrim = mCellWidth * 0.2;//Extra amount to go over the border on all sides, for some reason we're getting an outside
 	for (U32 i=0;i<items.size();i++)//fringe of trees hanging on after delete.
 	{
@@ -774,14 +1019,11 @@ void TerrainPager::clearForestCell(Point2F cellPosLatLong)
 			mForest->removeItem(key,items[i].getPosition());
 		}
 	}
-	//mCellGrid[cellName] = 0.0;
+
 	if (mCellGrid.find(cellName) != mCellGrid.end())
 	{
 		mCellGrid.erase(cellName);
-		//Con::printf("cellgrid erased %s previous size %d, current size %d",cellName,cellGridSize,mCellGrid.size());
 	}
-	//else
-	//	Con::printf("cellgrid could not find %s previous size %d, current size %d",cellName,cellGridSize,mCellGrid.size());
 }
 
 F32 TerrainPager::getForestCellClosestDist(Point2F cellPosLatLong,Point3F pos)
@@ -832,30 +1074,6 @@ F32 TerrainPager::getForestCellFarthestDist(Point2F cellPosLatLong,Point3F pos)
 	return farthestDist;
 }
 
-bool TerrainPager::ifGroundAt( const Point3F &worldPt )
-{
-	 const U32 mask = StaticObjectType | WaterObjectType;
-
-   Point3F start( worldPt.x, worldPt.y, worldPt.z + 10000.0 );
-   Point3F end( worldPt.x, worldPt.y, worldPt.z - 10000.0 );
-
-   if ( mForest )
-      mForest->disableCollision();
-
-   RayInfo rinfo;   
-   bool hit = gServerContainer.castRay( start, end, mask, &rinfo );
-	
-	//Con::printf("hit object classname: %s",rinfo.object->getClassName());
-
-   if ( mForest )
-      mForest->enableCollision();
-
-   if ( !strcmp(rinfo.object->getClassName(),"TerrainBlock") )
-      return true;
-	else
-		return false;
-}
-
 bool TerrainPager::getGroundAt( const Point3F &worldPt, F32 *zValueOut, VectorF *normalOut )
 {
    const U32 mask = TerrainObjectType | StaticObjectType;
@@ -884,55 +1102,33 @@ bool TerrainPager::getGroundAt( const Point3F &worldPt, F32 *zValueOut, VectorF 
    return true;
 }
 
+bool TerrainPager::getGroundAtInclusive( const Point3F &worldPt, F32 *zValueOut, VectorF *normalOut )
+{
+   const U32 mask = TerrainObjectType ;
 
-	//if (mUseDataSource)
-	//{
-	//	mDataSource->tick();
-	//}
-	
-	//if ((mCurrentTick % 60 == 0)&&(mUseDataSource))
-	//{
-	//	Con::executef(this,"UpdateSkybox");//hell with it, this takes almost no time, do it every couple of seconds for now.
-	//}
-	/*
-	//Now, do this in the second tick, or whenever we're ready.
-	if (mUseDataSource && !mLoadedTileGrid && mDataSource->mReadyForRequests)
-		loadTileGrid();
+   Point3F start( worldPt.x, worldPt.y, worldPt.z + 10000.0 );
+   Point3F end( worldPt.x, worldPt.y, worldPt.z - 10000.0 );
 
-	//Now, if we're past the first couple of ticks, find out if we've changed tiles.	
-	if (mLastTileStartLong != mTileStartLongitude) newTile = true;
-	if (mLastTileStartLat  != mTileStartLatitude) newTile = true;
-	if (newTile) 
-	{
-		Con::printf("new tile: last pos %f %f current pos %f %f",mLastTileStartLong,mTileStartLatitude,
-								mTileStartLongitude,mTileStartLatitude);
+   if ( mForest )
+      mForest->disableCollision();
 
-		loadTileGrid();
-	} else {
-		checkTileGrid();
-	}
-	mLastTileStartLong = mTileStartLongitude;
-	mLastTileStartLat = mTileStartLatitude;
-	
-	//Con::printf("found %d terrains that need to be loaded!",mLoadTiles.size());
-	Con::executef(this, "onTick", getIdString());
+   RayInfo rinfo;   
+   bool hit = gServerContainer.castRay( start, end, mask, &rinfo );
 
-	if (mUseDataSource)
-	{  //First time we can, let's send init requests to set up data source for terrains and skyboxes.
-		if (!mSentInitRequests && mDataSource->mReadyForRequests)
-		{
-			Con::printf("trying to send init requests!");
-			mDataSource->addInitTerrainRequest(&mD,mD.mTerrainPath.c_str());
-			mDataSource->addInitSkyboxRequest(mD.mSkyboxRes,0,mD.mSkyboxPath.c_str());
-			mSentInitRequests = true;
-			return;
-		} else { //Otherwise just give it a regular tick.
-			mDataSource->tick();
-		}
-	}
-	*/
+   if ( mForest )
+      mForest->enableCollision();
 
+   if ( !hit )
+      return false;
 
+   if (zValueOut)
+      *zValueOut = rinfo.point.z;
+
+   if (normalOut)
+      *normalOut = rinfo.normal;
+
+   return true;
+}
 
 void TerrainPager::interpolateTick(F32 f)
 {
@@ -972,14 +1168,6 @@ TerrainBlock *TerrainPager::addTerrainBlock(F32 startLong,F32 startLat)
 	//these files exist and are not calling worldDataSource for them from here.
 	if (checkFileExists(terrFileName.c_str())==false)
 	{
-		//Vector<String> materials;
-		//materials.push_back( "city1" );
-		//materials.push_back( "forest1a" );
-		//materials.push_back( "drycrop2" );
-		//materials.push_back( "grass_green_hires" );
-		//materials.push_back( "sand_hires" );
-		//materials.push_back( "water" );
-		//materials.push_back( "asphalt" );
 		Con::printf("trying to make terrain file: %s heightmapres %d ",terrFileName.c_str(),mD.mHeightmapRes );	
 		TerrainFile::createByName( &terrFileName, mD.mHeightmapRes, terrain_materials );
 	} else 
@@ -992,17 +1180,14 @@ TerrainBlock *TerrainPager::addTerrainBlock(F32 startLong,F32 startLat)
 		Con::errorf( "TerrainBlock::createNew - error creating '%s'", terrFileName.c_str() );
 		return 0;
 	}
-	
 
 	block->mSquareSize = mD.mSquareSize;
 	block->mBaseTexSize = mD.mTextureRes;
 	block->mLightMapSize = mD.mLightmapRes;
 	block->mLongitude = startLong;
 	block->mLatitude = startLat;
-	//Con::printf("added a terrainblock, long %f lat %f start %f %f",block->mLongitude,block->mLatitude,startLong,startLat);
 	Point3F blockPos = Point3F(((startLong-mD.mMapCenterLongitude)*mD.mMetersPerDegreeLongitude),
 						(startLat-mD.mMapCenterLatitude)*mD.mMetersPerDegreeLatitude,0.0);//FIX! need maxHeight/minHeight
-	//Con::printf("Setting new block position: %f %f %f, long/lat %f %f",blockPos.x,blockPos.y,blockPos.z,startLong,startLat);
 	block->setPosition(blockPos );
 
 	mTerrains.increment();
@@ -1011,8 +1196,6 @@ TerrainBlock *TerrainPager::addTerrainBlock(F32 startLong,F32 startLat)
 	block->registerObject( terrainName );
 	block->addToScene();
 
-	//Con::printf("added a terrainblock, %f %f %f, long/lat %f %f mTerrains %d",
-	//	blockPos.x,blockPos.y,blockPos.z,startLong,startLat,mTerrains.size());
 	if (terrExists==false)
 	{
 		if (block->loadTerrainData(heightfilename,texturefilename,mD.mTextureRes,terrain_materials.size(),"treefile.txt"))
@@ -1045,15 +1228,12 @@ S32 TerrainPager::getClosestTextureIndex(Point3F pos)
 		localPos *= scale;//Scale our local pos down to a 0.0-1.0 range
 
 		Point3F texturePos = localPos * (F32)block->getBlockSize();
-		//Wait, why does the literature say I should have a round(float) function in C++, but Visual Studio says I don't??
-	
+
+		//Wait, why does the literature say I should have a round(float) function in C++, but Visual Studio says I don't?
 		S32 x = ((texturePos.x-floor(texturePos.x)<0.5) ? floor(texturePos.x) : ceil(texturePos.x));
 		S32 y = ((texturePos.y-floor(texturePos.y)<0.5) ? floor(texturePos.y) : ceil(texturePos.y));
 		
 		index = block->getFile()->getLayerIndex(x,y);
-		
-		//Con::printf("getClosestTextureIndex found texturePos %d %d tex index %d blockSize %d squareSize %f worldBlockSize %f",
-		//								x,y,index,block->getBlockSize(),block->getSquareSize(),block->getWorldBlockSize());//block->getFile()->getMaterialName(x,y)
 	}
 
 	return index;
@@ -1085,8 +1265,12 @@ void TerrainPager::dropTerrainBlock(U32 index)
 				mTerrainGrid[y*mGridSize+x]=NULL;
 		}
 	}
-	//mTerrains[index]->safeDeleteObject();
-	mTerrains.erase(index);
+	//Wait, try this: 
+	//mTerrains[index]->unregisterObject();
+
+	//These didn't work
+	////mTerrains[index]->safeDeleteObject();
+	////mTerrains.erase(index);
 	*/
 }
 
@@ -1094,7 +1278,7 @@ void TerrainPager::dropAllTerrains()
 {//pretty much just for testing...
 	//for (int c=mTerrains.size()-1;c>=0;c--)
 	//{
-		//mTerrains[c]->safeDeleteObject();
+		//mTerrains[c]->safeDeleteObject();//unregisterObject();?
 	//}
 	//mTerrains.clear();
 }
@@ -1134,15 +1318,11 @@ void TerrainPager::dropTerrainBlock(F32 startLong,F32 startLat)
 
 void TerrainPager::getTileName(F32 tileStartPointLong,F32 tileStartPointLat,char *outStr)
 {
-	//String returnStr;
-	
 	char temp[20];
 	
 	double tileStartPointLongR,tileStartPointLatR;
 	tileStartPointLongR = (float)((int)(tileStartPointLong * 1000.0))/1000.0;//(10 ^ decimalPlaces)
 	tileStartPointLatR = (float)((int)(tileStartPointLat * 1000.0))/1000.0;//Maybe?
-	//Debug.Log("Pre rounding longitude: " + tileStartPointLong + ", post rounding: " + tileStartPointLongR + 
-	//			", pre latitude " + tileStartPointLat + " post " + tileStartPointLatR);
 	char longC,latC;
 	if (tileStartPointLong<0.0) longC = 'W';
 	else longC = 'E';
@@ -1150,19 +1330,13 @@ void TerrainPager::getTileName(F32 tileStartPointLong,F32 tileStartPointLat,char
 	else latC = 'N';
 	//NOW, just have to separate out the decimal part from the whole numbers part, and make sure to get
 	//preceding zeroes for the decimal part, so it's always three characters.
-	//NOTE: there is a Convert class in  C#, with various ToString functions, but this would all be C# specific,
-	//might as well do it myself the hard way and it will at least be easy to convert it over to C++ as well.
-	//string testString = Convert.ToString(tileStartPointLongR,??);
-	//string longitudeName = 
 	int majorLong,minorLong,majorLat,minorLat;//"major" for left of decimal, "minor" for right of decimal.
 	std::string majorLongStr,minorLongStr,majorLatStr,minorLatStr;
 
 	majorLong = (int)tileStartPointLongR;
 	majorLat = (int)tileStartPointLatR;
 	
-	//minorLong = Math.Abs((int)((tileStartPointLongR - (float)majorLong) * 1000.0f));//NOPE!  float errors creeping in...
-	minorLong = abs( (int)(tileStartPointLongR * 1000.0) - (majorLong * 1000)  );//Turns out doubles fixed it.
-	//minorLat = Math.Abs((int)((tileStartPointLatR - (float)majorLat) * 1000.0));
+	minorLong = abs( (int)(tileStartPointLongR * 1000.0) - (majorLong * 1000)  );
 	minorLat = abs( (int)(tileStartPointLatR * 1000.0) - (majorLat * 1000)  );
 
 	majorLong = abs(majorLong);
@@ -1188,14 +1362,12 @@ void TerrainPager::getTileName(F32 tileStartPointLong,F32 tileStartPointLat,char
 	else sprintf(temp,"%d",minorLat);
 	minorLatStr = temp;
 
-	//returnStr = majorLongStr + "d" + minorLongStr + longC + "_" + majorLatStr + "d" + minorLatStr + latC;
 	sprintf(outStr,"%sd%s%c_%sd%s%c",majorLongStr.c_str(),minorLongStr.c_str(),longC,majorLatStr.c_str(),minorLatStr.c_str(),latC);
-	//returnStr = temp;
 	
-	return;// temp;// returnStr.c_str();
+	return;
 }
 
-//FIX: no time for niceties at the moment, but this is just an exact copy of getTileName except using four decimal
+//FIX: no time for niceties at the moment, this is just an exact copy of getTileName except using four decimal
 //places instead of three. 
 void TerrainPager::getCellName(F32 tileStartPointLong,F32 tileStartPointLat,char *outStr)//,int decimalPlaces
 {
@@ -1204,19 +1376,12 @@ void TerrainPager::getCellName(F32 tileStartPointLong,F32 tileStartPointLat,char
 	double tileStartPointLongR,tileStartPointLatR;
 	tileStartPointLongR = (float)((int)(tileStartPointLong * 10000.0))/10000.0;//(10 ^ decimalPlaces)
 	tileStartPointLatR = (float)((int)(tileStartPointLat * 10000.0))/10000.0;
-	//Debug.Log("Pre rounding longitude: " + tileStartPointLong + ", post rounding: " + tileStartPointLongR + 
-	//			", pre latitude " + tileStartPointLat + " post " + tileStartPointLatR);
 	char longC,latC;
 	if (tileStartPointLong<0.0) longC = 'W';
 	else longC = 'E';
 	if (tileStartPointLat<0.0) latC = 'S';
 	else latC = 'N';
-	//NOW, just have to separate out the decimal part from the whole numbers part, and make sure to get
-	//preceding zeroes for the decimal part, so it's always three characters.
-	//NOTE: there is a Convert class in  C#, with various ToString functions, but this would all be C# specific,
-	//might as well do it myself the hard way and it will at least be easy to convert it over to C++ as well.
-	//string testString = Convert.ToString(tileStartPointLongR,??);
-	//string longitudeName = 
+
 	int majorLong,minorLong,majorLat,minorLat;//"major" for left of decimal, "minor" for right of decimal.
 	std::string majorLongStr,minorLongStr,majorLatStr,minorLatStr;
 
@@ -1251,19 +1416,13 @@ void TerrainPager::getCellName(F32 tileStartPointLong,F32 tileStartPointLat,char
 	else sprintf(temp,"%d",minorLat);
 	minorLatStr = temp;
 
-	//returnStr = majorLongStr + "d" + minorLongStr + longC + "_" + majorLatStr + "d" + minorLatStr + latC;
 	sprintf(outStr,"%sd%s%c_%sd%s%c",majorLongStr.c_str(),minorLongStr.c_str(),longC,majorLatStr.c_str(),minorLatStr.c_str(),latC);
-	//returnStr = temp;
 	
-	return;// returnStr.c_str();
+	return;
 }
 
 void TerrainPager::getCellName(Point3F position,char *outStr)
 {
-	//SO, this is the function that converts from an arbitrary world position into a nearest cell start long/lat.
-	//Since (I think) we don't need anything but the label, not the actual coords of the cell as floats, we are
-	//going to just figure out the coords and then use them to call the first getCellName function.
-	
 	float posLongitude = mD.mMapCenterLongitude + (position.x * mD.mDegreesPerMeterLongitude);
 	float posLatitude = mD.mMapCenterLatitude + (position.y * mD.mDegreesPerMeterLatitude);
 
@@ -1330,9 +1489,6 @@ Point2F TerrainPager::getCellCoordsFromName(char *cellName)
 		latMod = -1.0;
 	tileStartPointLat *= latMod;
 	
-	//Con::printf("cell coords from name: %s   %s  %s  %s  %s  %s  %s final %f %f",cellName,tempLongMajor,tempLongMinor,eastWest,
-	//	tempLatMajor,tempLatMinor,northSouth,tileStartPointLong,tileStartPointLat);
-
 	return Point2F(tileStartPointLong+(longMod*0.000005),tileStartPointLat+(latMod*0.000005));//I really hate these float rounding problems.
 }
 
@@ -1389,14 +1545,11 @@ void TerrainPager::findClientTile()
 	mLastTileStartLat  = mTileStartLatitude;
 	mTileStartLongitude = (mFloor((clientPos.x-mapCenter.x)/mD.mTileWidthLongitude)*mD.mTileWidthLongitude)+mapCenter.x;
 	mTileStartLatitude = (mFloor((clientPos.y-mapCenter.y)/mD.mTileWidthLatitude)*mD.mTileWidthLatitude)+mapCenter.y;
-	//Con::printf("Finding tile start: clientPos.y %f mapCenter.y %f  tileWidthlat %f tileStartLat %f",
-	//	clientPos.y,mapCenter.y,mD.mTileWidthLatitude,mTileStartLatitude);
 }
 
 Point2F TerrainPager::findTileCoords(Point3F pos)
 {	
 	Point3F latLongPos = convertXYZToLatLong(pos);
-	//Point2F  = Point2F(mD.mClientPosLongitude,mD.mClientPosLatitude);
 	//FIX: The following is off by one half tile width because of my (perhaps questionable) decision to put 
 	//map center in the center of a tile rather than at the lower left corner of that tile. Subject to review.
 	Point2F mapCenter = Point2F(mD.mMapCenterLongitude-(mD.mTileWidthLongitude/2.0f),
@@ -1463,7 +1616,6 @@ void TerrainPager::loadTileGrid()
 
 			if ((tileDistance<mD.mTileLoadRadius)&&(loaded==false))
 			{
-				//HERE: okay, the difference is that first, you need to check your mTerrains.
 				for (int c=0;c<mTerrains.size();c++)
 				{//Could have based this off tilename comparison, but would rather do it with numbers.
 					if ((fabs(mTerrains[c]->mLongitude-kLong)<0.0001)&&(fabs(mTerrains[c]->mLatitude-kLat)<0.0001))
@@ -1488,13 +1640,6 @@ void TerrainPager::loadTileGrid()
 						mLoadState = 3;//waiting for terrain.
 					}
 				}
-				
-				//loadTerrainData kData;
-				//kData.startLongitude = kLong;
-				//kData.startLatitude = kLat;
-				//kData.loadPriority = 1.0 / tileDistance;
-				//mLoadTiles.last() = kData;
-
 			} else if ((tileDistance>mD.mTileDropRadius)&&(loaded==true)) {
 				dropTerrainBlock(kLong,kLat);
 				if (verbose) Con::printf("drop this terrain block: %d %d",x,y);
@@ -1504,7 +1649,6 @@ void TerrainPager::loadTileGrid()
 				mTerrain = mTerrainGrid[y*mGridSize+x];
 		}
 	}
-	//HERE: 
 	for (int c=0;c<mTerrains.size();c++)
 	{
 		if ((mTerrains[c]->mLongitude<startLong)||
@@ -1512,11 +1656,9 @@ void TerrainPager::loadTileGrid()
 			(mTerrains[c]->mLatitude<startLat)||
 			(mTerrains[c]->mLatitude>=(startLat+(mGridSize*mD.mTileWidthLatitude))))
 		{
-			//Con::printf("REMOVING A TERRAIN! %f %f",mTerrains[c]->mLongitude,mTerrains[c]->mLatitude);
 			dropTerrainBlock(c);
 		}
 	}
-	//mLoadedTileGrid = true;
 	if (mLoadState==2)//Meaning we didn't set it to 3, ie waiting for data.
 	{
 		Con::printf("TerrainPager done loading tiles, entering checkTile loop.");
@@ -1728,10 +1870,6 @@ void TerrainPager::reloadSkyboxImages()
 			fs.close();
 		}
 	}
-	//Con::executef(this,"UpdateSkybox");//Hmm, it appears there is a delay, it takes the system longer
-	//to write the actual files than it does to get out of this function. Might have to schedule the
-	//update for some ticks in the future.
-	//WS_SkyboxCubemap.updateFaces();
 }
 
 void TerrainPager::updateSkyboxConsole()
@@ -1747,7 +1885,6 @@ Point3F TerrainPager::convertLatLongToXYZ(Point3F pos)
 	newPos.x = (pos.x - mD.mMapCenterLongitude) * mD.mMetersPerDegreeLongitude;
 	newPos.y = (pos.y - mD.mMapCenterLatitude) * mD.mMetersPerDegreeLatitude;
 	newPos.z = pos.z;
-	//Con::printf("pos.x %f  mapCenterLong %f metersPerDegreeLong %f",pos.x, mD.mMapCenterLongitude,mD.mMetersPerDegreeLongitude);
 	return newPos;
 }
 
@@ -1758,7 +1895,6 @@ Point3F TerrainPager::convertLatLongToXYZ(double longitude,double latitude,float
 	newPos.x = (float)((longitude - (double)mD.mMapCenterLongitude) * (double)mD.mMetersPerDegreeLongitude);
 	newPos.y = (float)((latitude - (double)mD.mMapCenterLatitude) * (double)mD.mMetersPerDegreeLatitude);
 	newPos.z = altitude;
-	//Con::printf("pos.x %f  mapCenterLong %f metersPerDegreeLong %f",pos.x, mD.mMapCenterLongitude,mD.mMetersPerDegreeLongitude);
 	return Point3F(newPos);
 }
 
@@ -1806,8 +1942,6 @@ void TerrainPager::loadOSM(const char *xml_file, const char *map_db)
 	S32 loaded = doc->loadFile(xml_file);
 	if (loaded) 
 	{
-		
-		//Con::errorf("loaded xml file!!!!!");
 		bool osmLoad = false;
 		bool osmBounds = false;
 
@@ -1831,21 +1965,16 @@ void TerrainPager::loadOSM(const char *xml_file, const char *map_db)
 		sprintf(insert_query,"BEGIN;\n");
 		result = mSQL->ExecuteSQL(insert_query);
 		Con::printf("result %d: %s",result,insert_query);
-		//total_query_len = strlen(total_queries);
 
 		while(doc->nextSiblingElement("node"))
 		{
 			nodeId = atof(doc->attribute("id"));
 			nodeLat = atof(doc->attribute("lat"));
 			nodeLon = atof(doc->attribute("lon"));
-			//Con::printf("node %d lat %f lon %f",nodeId,nodeLat,nodeLon);
 			Point3F nodePos = convertLatLongToXYZ(nodeLon,nodeLat,0.0); 
-			//getCellName(nodeLon,nodeLat,cellName);//WRONG, FIX FIX FIX. Need to convert nodeLon and nodeLat into XYZ coords and then find cellCoords.
 			getCellName(nodePos,cellName);
 			sprintf(insert_query,"INSERT INTO osmNode (osmId,latitude,longitude,cell_name) VALUES (%d,%f,%f,'%s');\n",
 				nodeId,nodeLat,nodeLon,cellName);
-			//strcpy(total_queries+total_query_len,insert_query);
-			//total_query_len += strlen(insert_query);
 			result = mSQL->ExecuteSQL(insert_query);			
 			Con::printf("result %d: %s",result,insert_query);
 			foundTag = false;
@@ -1856,20 +1985,14 @@ void TerrainPager::loadOSM(const char *xml_file, const char *map_db)
 				if (!strcmp(doc->attribute("k"),"name"))
 				{
 					sprintf(insert_query,"UPDATE osmNode SET name='%s' WHERE osmId=%d;\n",doc->attribute("v"),nodeId);
-					//strcpy(total_queries+total_query_len,insert_query);
-					//total_query_len += strlen(insert_query);
 					result = mSQL->ExecuteSQL(insert_query);
 
 				} else if (!strcmp(doc->attribute("k"),"highway")) {
 					sprintf(insert_query,"UPDATE osmNode SET type='%s' WHERE osmId=%d;\n",doc->attribute("v"),nodeId);
-					//strcpy(total_queries+total_query_len,insert_query);
-					//total_query_len += strlen(insert_query);
 					result = mSQL->ExecuteSQL(insert_query);
 
 				} else if (!strcmp(doc->attribute("k"),"building") && !strcmp(doc->attribute("v"),"yes")) {
 					sprintf(insert_query,"UPDATE osmNode SET type='building' WHERE osmId=%d;\n",nodeId);
-					//strcpy(total_queries+total_query_len,insert_query);
-					//total_query_len += strlen(insert_query);
 					result = mSQL->ExecuteSQL(insert_query);
 				}
 				findingTag = doc->nextSiblingElement("tag");
@@ -1884,21 +2007,15 @@ void TerrainPager::loadOSM(const char *xml_file, const char *map_db)
 		{
 			wayId = atof(doc->attribute("id"));
 			sprintf(insert_query,"INSERT INTO osmWay (osmId) VALUES (%d);\n",wayId);
-			//strcpy(total_queries+total_query_len,insert_query);
-			//total_query_len += strlen(insert_query);
 			Con::printf("result %d: %s",result,insert_query);
 			result = mSQL->ExecuteSQL(insert_query);
-			//Con::printf("way %d",wayId);
 
 			bool findingNd = doc->pushFirstChildElement("nd");
 			while(findingNd)
 			{
 				S32 nodeId = dAtoi(doc->attribute("ref"));
-				//Con::printf("wayNode %d",nodeId);
 
 				sprintf(insert_query,"INSERT INTO osmWayNode (wayId,nodeId) VALUES (%d,%d);\n",wayId,nodeId);
-				//strcpy(total_queries+total_query_len,insert_query);
-				//total_query_len += strlen(insert_query);
 				Con::printf("result %d: %s",result,insert_query);
 				result = mSQL->ExecuteSQL(insert_query);
 
@@ -1915,20 +2032,14 @@ void TerrainPager::loadOSM(const char *xml_file, const char *map_db)
 				if (!strcmp(doc->attribute("k"),"name"))
 				{
 					sprintf(insert_query,"UPDATE osmWay SET name='%s' WHERE osmId=%d;\n",doc->attribute("v"),wayId);
-					//strcpy(total_queries+total_query_len,insert_query);
-					//total_query_len += strlen(insert_query);
 					result = mSQL->ExecuteSQL(insert_query);
 
 				} else if (!strcmp(doc->attribute("k"),"highway")) {
 					sprintf(insert_query,"UPDATE osmWay SET type='%s' WHERE osmId=%d;\n",doc->attribute("v"),wayId);
-					//strcpy(total_queries+total_query_len,insert_query);
-					//total_query_len += strlen(insert_query);
 					result = mSQL->ExecuteSQL(insert_query);
 
 				} else if (!strcmp(doc->attribute("k"),"building") && !strcmp(doc->attribute("v"),"yes")) {
 					sprintf(insert_query,"UPDATE osmWay SET type='building' WHERE osmId=%d;\n",wayId);
-					//strcpy(total_queries+total_query_len,insert_query);
-					//total_query_len += strlen(insert_query);
 					result = mSQL->ExecuteSQL(insert_query);
 				}
 
@@ -1936,7 +2047,6 @@ void TerrainPager::loadOSM(const char *xml_file, const char *map_db)
 			}				
 			if (foundTag) doc->popElement();
 			findingMyWay = doc->nextSiblingElement("way");
-			
 		}
 
 		sprintf(insert_query,"COMMIT;\n");
@@ -1957,64 +2067,167 @@ DefineConsoleMethod(TerrainPager, loadOSM, void, (const char *xml_file,const cha
 	object->loadOSM(xml_file,map_db);
 }
 
-
-
-
-
-//Here, try this:
-/*
-
-	DecalRoad *newRoad = new DecalRoad;		
-
-	newRoad->mMaterialName = mMaterialName;
-
-    newRoad->registerObject();
-
-    // Add to MissionGroup                              
-    SimGroup *missionGroup;
-    if ( !Sim::findObject( "MissionGroup", missionGroup ) )               
-       Con::errorf( "GuiDecalRoadEditorCtrl - could not find MissionGroup to add new DecalRoad" );
-    else
-       missionGroup->addObject( newRoad );               
-
-    newRoad->insertNode( tPos, mDefaultWidth, 0 );
-    U32 newNode = newRoad->insertNode( tPos, mDefaultWidth, 1 );
-
-*/
-
-
-//TESTING - Actually we're going to do this in script, easier to instantiate game objects there. (This is a bad reason.)
 void TerrainPager::makeStreets()
 {
-	if (!mSQL->OpenDatabase(mDBName))
-		return;
-	
-	char select_query[512];
-	int id,result;
-	
-	sqlite_resultset *resultSet;
-
-	
-	sprintf(select_query,"SELECT * FROM osmWay;");
-	result = mSQL->ExecuteSQL(select_query);
-	if (result==0)
+	if (mStreets.size()<=0)
 		return;
 
-	resultSet = mSQL->GetResultSet(result);
-	Con::printf("OPENED MAP DATABASE: results: %d",resultSet->iNumRows);
-	for (U32 i=0;i<resultSet->iNumRows;i++)
+	SimGroup *missionGroup;
+	if ( !Sim::findObject( "MissionGroup", missionGroup ) )               
+		Con::errorf( "TerrainPager - could not find MissionGroup to add new MeshRoad" );
+	
+	F32 worldZ;
+	Point3F normalVec;
+	F32 width = 10.0;
+	F32 depth = 3.0;
+	
+	long nodeId,wayId,wayNodeId;
+	double nodeLong,nodeLat;
+
+	for (std::map<int,osmWay>::iterator it=mStreets.begin(); it!=mStreets.end(); ++it)
 	{
-		id = dAtoi(resultSet->vRows[i]->vColumnValues[0]);
-		Con::printf("Way  %d  type: %s  name: %s",id,resultSet->vRows[i]->vColumnValues[1],resultSet->vRows[i]->vColumnValues[2]);
+		int wayId = it->first;
+		osmWay way = it->second;
+		
+		char wayIdChar[30];
+		sprintf(wayIdChar,"%d",wayId);
+
+		if (mActiveStreets.find(wayId)!=mActiveStreets.end())
+			continue;
+
+		//FIX: take some real world measurements here, at least from air photos. No idea what these widths really are.
+		const char *wayType = way.type.c_str();
+		if ( !strcmp(wayType,"residential") || !strcmp(wayType,"service") )
+			width = 10.0;
+		else if ( !strcmp(wayType,"tertiary") || !strcmp(wayType,"trunk_link") )
+			width = 20.0;
+		else if ( !strcmp(wayType,"trunk") || !strcmp(wayType,"motorway_link") || !strcmp(wayType,"secondary") )
+			width = 26.0;
+		else if ( !strcmp(wayType,"motorway")  )
+			width = 32.0;
+		else if ( !strcmp(wayType,"footway") )
+			width = 2.5;
+		else if ( !strcmp(wayType,"path") )
+			width = 5.0;
+		//else if (strlen(wayType)==0) 
+		//	width = 2.0;
+		//else if (!strcmp(wayType,"NULL"))
+		//	width = 3.5;
+		else
+		{
+			//Con::printf("Street rejected for unknown/unsupported type: %s",wayType);
+			continue;
+		}
+
+		std::ostringstream selectQuery;
+		selectQuery << 
+			"SELECT wn.id , n.osmId, n.longitude, n.latitude " <<
+			"FROM osmWayNode wn " <<
+			"LEFT JOIN osmNode n  ON n.osmId = wn.nodeId " <<
+			"WHERE wn.wayId = " << wayId << " ORDER BY wn.id;";
+		
+		int result;
+		sqlite_resultset *resultSet;
+
+		result = mSQL->ExecuteSQL(selectQuery.str().c_str());
+		resultSet = mSQL->GetResultSet(result);
+		
+		Con::printf("querying for nodes, way %d numRows %d  name %s type %s",wayId,resultSet->iNumRows,way.name.c_str(),way.type.c_str());
+		if (resultSet->iNumRows > 1)
+		{			
+			MeshRoad *newRoad = new MeshRoad;
+			newRoad->mMaterialName[0] = "DefaultRoadMaterialTop";
+			newRoad->mMaterialName[1] = "DefaultRoadMaterialBottom";
+			newRoad->mMaterialName[2] = "DefaultRoadMaterialSide";
+
+			newRoad->setInternalName(wayIdChar);
+
+			newRoad->registerObject();
+
+			way.road = newRoad;
+
+			if (missionGroup)
+				missionGroup->addObject( newRoad );
+			
+			for (int i=0;i<resultSet->iNumRows;i++)
+			{
+				S32 c=0;
+				
+				wayNodeId = dAtol(resultSet->vRows[i]->vColumnValues[c++]);
+				nodeId = dAtol(resultSet->vRows[i]->vColumnValues[c++]);
+				nodeLong = dAtod(resultSet->vRows[i]->vColumnValues[c++]);
+				nodeLat = dAtod(resultSet->vRows[i]->vColumnValues[c++]);
+
+				Point3F posLatLong(nodeLong,nodeLat,0.0);
+				Point3F posXYZ = convertLatLongToXYZ(posLatLong);
+
+				if (!getGroundAtInclusive(posXYZ,&worldZ,&normalVec))//Whoops! Fixed getGroundAt to avoid roads, for the forest, but now I can't 
+					continue;//put down road nodes where there are other road nodes, which is a bit of a problem.
+				
+				posXYZ.z = worldZ + (depth * 0.3);//Need enough distance to prevent Z fighting, especially far from the origin.
+
+				newRoad->insertNode( posXYZ, width, depth, Point3F(0,0,1), 0 );	
+				
+				osmNode n;
+				n.osmId = nodeId;
+				n.longitude = nodeLong;
+				n.latitude = nodeLat;
+				way.nodes.push_back(n);
+			}
+			mActiveStreets[wayId] = way;
+		}
 	}
 
+	return;
+}
+
+//Now, if a whole way's nodes are all out of our search area, delete the road.
+void TerrainPager::pruneStreets()
+{
+	SimGroup *missionGroup;
+	if ( !Sim::findObject( "MissionGroup", missionGroup ) )               
+		Con::errorf( "TerrainPager - could not find MissionGroup in pruneStreets()" );
+	Vector <int> removedWays;
+
+	for (std::map<int,osmWay>::iterator it=mActiveStreets.begin(); it!=mActiveStreets.end(); ++it)
+	{
+		int wayId = it->first;
+		osmWay way = it->second;
+		
+		Point3F southWestXYZ,northEastXYZ;//bounding box corners
+		Point3F southWestLatLong,northEastLatLong;//bounding box corners
+		southWestXYZ = mClientPos + Point3F(-mForestRadius*1.5,-mForestRadius*1.5,0.0);
+		northEastXYZ = mClientPos + Point3F( mForestRadius*1.5, mForestRadius*1.5,0.0);
+		southWestLatLong = convertXYZToLatLong(southWestXYZ);
+		northEastLatLong = convertXYZToLatLong(northEastXYZ);
+		
+		bool allOutside = true; 
+		for (U32 i=0;i<way.nodes.size();i++)
+		{
+			osmNode n = way.nodes[i];
+			if ( (n.longitude>=southWestLatLong.x)&&(n.longitude<=northEastLatLong.x)&&
+					   (n.latitude>=southWestLatLong.y)&&(n.latitude<=northEastLatLong.y) )
+				allOutside = false;
+		}
+		if (allOutside)
+		{
+			if (missionGroup) 
+				missionGroup->removeObject(way.road);
+			way.road->unregisterObject();
+			removedWays.push_back(wayId);
+		}
+	}
+	for (U32 i=0;i<removedWays.size();i++)
+	{//Now, remove them from mActiveStreets, now that we're not iterating through it.
+		mActiveStreets.erase(removedWays[i]);
+		mStreets.erase(removedWays[i]);
+	}
 }
 
 DefineConsoleMethod(TerrainPager, makeStreets, void, (), , "" )
 {
 	object->makeStreets();
 }
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DefineConsoleMethod(TerrainPager, callUpdateSkybox, void, (), , "" )
 {

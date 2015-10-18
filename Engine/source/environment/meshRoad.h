@@ -414,6 +414,7 @@ private:
    friend class GuiMeshRoadEditorCtrl;
    friend class GuiMeshRoadEditorUndoAction;
    friend class MeshRoadConvex;
+	friend class TerrainPager;
 
    typedef SceneObject		Parent;
 

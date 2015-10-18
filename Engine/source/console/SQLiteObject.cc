@@ -197,8 +197,8 @@ bool SQLiteObject::OpenDatabase(const char* filename)
       Con::executef(this, "1", "onOpened()");
 		
 		//Now, for OpenSimEarth, load spatialite dll, so we can have GIS functions.
-		int canLoadExt = sqlite3_load_extension(m_pDatabase,"mod_spatialite.dll",0,0);
-		Con::printf("opened spatialite extension: %d",canLoadExt);
+		//int canLoadExt = sqlite3_load_extension(m_pDatabase,"mod_spatialite.dll",0,0);
+		//Con::printf("opened spatialite extension: %d",canLoadExt);
 		//Sigh, no luck yet. Cannot find function GeomFromText().
    }
    return true;

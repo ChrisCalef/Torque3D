@@ -17,6 +17,9 @@
 #ifndef _H_FOREST_
 #include "forest/forest.h"
 #endif
+#ifndef _MESHROAD_H_
+#include "environment/meshRoad.h"
+#endif
 
 #include "console/SQLiteObject.h"
 #include "console/SimXMLDocument.h"
@@ -76,6 +79,21 @@ struct loadTerrainData
 	float tileDistance;
 };
 
+struct osmNode
+{
+	int osmId;
+	float longitude;
+	float latitude;
+};
+
+struct osmWay
+{
+	std::string type;
+	std::string name;
+	Vector <osmNode> nodes;
+	MeshRoad *road;
+};
+
 /// The TerrainPager organizes large numbers of stored terrain tiles and optionally skyboxes, as well
 /// the capability to maintain a WorldDataSource connection to an external process for realtime data updates.
 class TerrainPager : public SimObject, public virtual ITickable
@@ -98,9 +116,15 @@ public:
 	Vector <String> terrain_materials;
 
 	std::map<std::string,float> mCellGrid;//String is my lat/long tag, eg "123d015W_43d965N", float is amount of area filled by anything.
-	
+	//std::map<int,Vector<osmNode>> mOsmWays;//REthinking: I think we need an osmWay class or struct that contains a vector of nodes, 
+	//in addition to strings for type and name.
+
 	Forest *mForest;
 	Vector<ForestItemData *>mForestItemData;//Vector of pointers to forest item datablocks, so we can keep track of them. 
+	F32 mTreeRadiusMult;
+
+	std::map <int,osmWay> mStreets;
+	std::map <int,osmWay> mActiveStreets;
 
    MRandom mRandom;
 
@@ -112,7 +136,7 @@ public:
 	bool mSentSkyboxRequest;
 	bool mLoadedTileGrid;
 	bool mForestStarted;
-
+	bool mDoForest;
 	//Vector <String> mTileNames;//Still need this? Don't think so.	
 
 	Point3F mClientPos;
@@ -146,6 +170,7 @@ public:
 	F32 mTileLoadRadius;//At a future time these could be weighted by axes, to get an eliptical area
 	F32 mTileDropRadius;//instead of a circle, but definitely not necessary for first pass.
 	F32 mForestRadius;
+	S32 mForestTries;
 	U32 mSkyboxRes;
 
 	F32 mCellWidth;
@@ -201,14 +226,17 @@ public:
 	void updateSkyboxConsole();
 
 	void loadOSM(const char*,const char*);
+	void findStreetNodes();
+	void findStreetNodesCell(Point2F);
 	void makeStreets();
+	void pruneStreets();
 
 	Point3F convertLatLongToXYZ(Point3F pos);
 	Point3F convertLatLongToXYZ(double longitude,double latitude, float altitude);
 	Point3F convertXYZToLatLong(Point3F pos);
 
-	bool ifGroundAt( const Point3F &worldPt );
 	bool getGroundAt( const Point3F &worldPt, F32 *zValueOut, VectorF *normalOut );
+	bool getGroundAtInclusive( const Point3F &worldPt, F32 *zValueOut, VectorF *normalOut );
 	F32 getForestCellClosestDist(Point2F cellPosLatLong,Point3F pos);
 	F32 getForestCellFarthestDist(Point2F cellPosLatLong,Point3F pos);
 
