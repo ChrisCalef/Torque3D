@@ -162,7 +162,7 @@ inline F32 dAtof(const char *str)
    return strtof(str, NULL);
 }
 
-inline F32 dAtod(const char *str)
+inline double dAtod(const char *str)
 {
    return strtod(str, NULL);
 }
