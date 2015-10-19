@@ -137,6 +137,7 @@ public:
 	bool mLoadedTileGrid;
 	bool mForestStarted;
 	bool mDoForest;
+	bool mDoStreets;
 	//Vector <String> mTileNames;//Still need this? Don't think so.	
 
 	Point3F mClientPos;

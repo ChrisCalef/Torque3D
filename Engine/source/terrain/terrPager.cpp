@@ -61,6 +61,7 @@ TerrainPager::TerrainPager()
 	mForest = NULL;
 	mForestStarted = false;
 	mDoForest = true;
+	mDoStreets = true;
 	mForestItemData = NULL;
 
 	mClientPos.zero();
@@ -136,6 +137,7 @@ void TerrainPager::initPersistFields()
 	
 	addField( "useDataSource", TypeBool, Offset(mUseDataSource, TerrainPager ), "Use worldDataSource for terrain/skybox updates.");
 	addField( "doForest",  TypeBool, Offset(mDoForest, TerrainPager ), "Set to false to turn off forest paging.");
+	addField( "doStreets",  TypeBool, Offset(mDoStreets, TerrainPager ), "Set to false to turn off street paging.");
 
 	Parent::initPersistFields();
 }
@@ -428,7 +430,7 @@ void TerrainPager::processTick()
 			mLoadState=5;
 		}
 
-		if ( mDoForest && ((mCurrentTick-mLastForestTick) > mForestTickInterval) )
+		if ( ((mCurrentTick-mLastForestTick) > mForestTickInterval) )//mDoForest && - now checking doForest later, so we can do streets w/o forest
 			checkForest();
 	}	
 }
@@ -443,7 +445,7 @@ void TerrainPager::checkForest()
 	//or mForestRadius, and then the hard part, add trees to areas inside our mForestRadius that are not already forested.
 	//Need to work it by cells for this part.
 	//First, let's just remove anything larger than mForestRadius.
-	if (!mForest)
+	if ( mDoForest && !mForest )
 		return;
 	
 	Vector<ForestItem> items;
@@ -461,69 +463,55 @@ void TerrainPager::checkForest()
       //String osmFile( Con::getVariable( "$pref::OpenSimEarth::OSM" ) );
       //String mapDB( Con::getVariable( "$pref::OpenSimEarth::OSMDB" ) );
 		//loadOSM(osmFile.c_str(),mapDB.c_str());
-
-		findStreetNodes();
-		
-		makeStreets();
-
-		for (U32 i=0;i<items.size();i++)
+		if (mDoStreets)
 		{
-			//strcpy(cellName,getCellName(items[i].getPosition()))
-			getCellName(items[i].getPosition(),cellName);
-			//Point3F longLatPos = convertXYZToLatLong(items[i].getPosition());
-			//getCellName(longLatPos.x,longLatPos.y,cellName);
-			//std::string celName;//wtf is happening. 
-			//celName = getCellName(items[i].getPosition());
-			float area = M_PI * pow((items[i].getRadius() * items[i].getScale()),2);//pi times radius squared, with scale.
-			area *= 0.5; //Overlap percentage of 0.5, might want to expose this as a script variable.
-			
-			if (mCellGrid[cellName]>0.0)
-				mCellGrid[cellName] += area;
-			else 
-				mCellGrid[cellName] = area;
-
-			Con::printf("cell %s area: %f, total %f radius %f  scale %f",
-				cellName,area,mCellGrid[cellName],items[i].getRadius(),items[i].getScale());
-			/*
-			if (mCellGrid[cellName]>0.0)
-				mCellGrid[cellName] += area;
-			else 
-				mCellGrid[cellName] = area;
-
-			Con::printf("cell %s area: %f, total %f radius %f  scale %f",
-				cellName,area,mCellGrid[cellName],items[i].getRadius(),items[i].getScale());
-				*/
+			findStreetNodes();
+			makeStreets();
 		}
 
-		Con::printf("Before filling forest, total occupied cells %d",mCellGrid.size());
-		j=0;
-		for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
-		{			
-			strcpy(cellName,it->first.c_str());
-			//Con::printf("cellname %s cell %d  area filled %f  available %f ",
-			//	cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
-		}
-    
-		fillForest();
-		
-		Con::printf("After filling, total cells size %d",mCellGrid.size());
-		j=0;
-		for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
-		{			
-			strcpy(cellName,it->first.c_str());
-			Con::printf("cellname %s cell %d  area filled %f  available %f ",
-				cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
+		if (mDoForest)
+		{
+			for (U32 i=0;i<items.size();i++)
+			{
+				//strcpy(cellName,getCellName(items[i].getPosition()))
+				getCellName(items[i].getPosition(),cellName);
+				//Point3F longLatPos = convertXYZToLatLong(items[i].getPosition());
+				//getCellName(longLatPos.x,longLatPos.y,cellName);
+				//std::string celName;//wtf is happening. 
+				//celName = getCellName(items[i].getPosition());
+				float area = M_PI * pow((items[i].getRadius() * items[i].getScale()),2);//pi times radius squared, with scale.
+				area *= 0.5; //Overlap percentage of 0.5, might want to expose this as a script variable.
 
+				if (mCellGrid[cellName]>0.0)
+					mCellGrid[cellName] += area;
+				else 
+					mCellGrid[cellName] = area;
+
+				Con::printf("cell %s area: %f, total %f radius %f  scale %f",
+					cellName,area,mCellGrid[cellName],items[i].getRadius(),items[i].getScale());
+			}
+
+			Con::printf("Before filling forest, total occupied cells %d",mCellGrid.size());
+			j=0;
+			for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
+			{			
+				strcpy(cellName,it->first.c_str());
+				//Con::printf("cellname %s cell %d  area filled %f  available %f ",
+				//	cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
+			}
+
+			fillForest();
+
+			Con::printf("After filling, total cells size %d",mCellGrid.size());
+			j=0;
+			for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
+			{			
+				strcpy(cellName,it->first.c_str());
+				Con::printf("cellname %s cell %d  area filled %f  available %f ",
+					cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
+
+			}
 		}
-		
-		//S32 totalNodes = 0;
-		//for (std::map<int,osmWay>::iterator it=mStreets.begin(); it!=mStreets.end(); ++it)
-		//{
-		//	totalNodes += mStreets[it->first].nodes.size();
-		//	Con::printf("way %d, type %s node %d long %f lat %f",it->first,mStreets[it->first].type.c_str(),
-		//		mStreets[it->first].nodes[0].osmId,mStreets[it->first].nodes[0].longitude,mStreets[it->first].nodes[0].latitude);
-		//}
-		//Con::printf("streets map: %d total nodes %d",mStreets.size(),totalNodes);
 
 		mForestStarted = true;
 		mLastForestTick = mCurrentTick;
@@ -532,62 +520,42 @@ void TerrainPager::checkForest()
 	
 	//DELETION PASS
 	if (1)//if (allow_delete)
-	{//FIX: Next refactor: delete whole cells at a time, and reset mCellGrid[this cell] to 0.0 afterward.
-		//Test to make sure your closest corner is more than mForestRadius + mCellWidth away, to give it a cell buffer.
-		//Con::printf("Delete pass, cell size %d",mCellGrid.size());
-		for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
-		{			
-			strcpy(cellName,it->first.c_str());
-			Point2F cellPosLatLong = getCellCoordsFromName(cellName);
-			//Con::printf("checking cellname %s %f %f",cellName);
-			F32 closestDist = getForestCellClosestDist(cellPosLatLong,mClientPos);
-			if (closestDist > (mForestRadius + mCellWidth))
-			{
-				//Con::printf("CLEARING cellname %s %f %f",cellName,cellPosLatLong.x,cellPosLatLong.y);
-				clearForestCell(cellPosLatLong);
+	{		
+		if (mDoForest)
+		{
+			for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
+			{			
+				strcpy(cellName,it->first.c_str());
+				Point2F cellPosLatLong = getCellCoordsFromName(cellName);
+				//Con::printf("checking cellname %s %f %f",cellName);
+				F32 closestDist = getForestCellClosestDist(cellPosLatLong,mClientPos);
+				if (closestDist > (mForestRadius + mCellWidth))
+				{
+					//Con::printf("CLEARING cellname %s %f %f",cellName,cellPosLatLong.x,cellPosLatLong.y);
+					clearForestCell(cellPosLatLong);
+				}
+				//Con::printf("cellname %s cell %d  area filled %f  available %f ",
+				//	cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
 			}
-			//Con::printf("cellname %s cell %d  area filled %f  available %f ",
-			//	cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
 		}
 
-		pruneStreets();
+		if (mDoStreets)
+			pruneStreets();
 
-		//mForest->updateCollision();
-		//Con::printf("After delete pass, cell size %d",mCellGrid.size());
-		//j=0;
-		//for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
-		//{			
-		//	strcpy(cellName,it->first.c_str());
-		//	Con::printf("cellname %s cell %d  area filled %f  available %f ",
-		//		cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
-		//}
-
-		//Old way, taking out trees one at a time based on simple radius check
-		//for (U32 i=0;i<items.size();i++)
-		//{
-		//	Point3F diff = (items[i].getPosition() - mClientPos);
-		//	F32 dist = diff.len();
-		//	ForestItemKey key = items[i].getKey();
-		//	if (dist>mForestRadius) 
-		//	{
-		//		mForest->removeItem(key,items[i].getPosition());
-		//	}
-		//}
+		//mForest->updateCollision();//Costly, only doing this on addition pass, why do it twice.
 	}
+
 	//ADDITION PASS
-	//string cellName = getCellName(item->position)
-	//float newItemArea = item->radius squared...
-	//mCellGrid[cellName] += newItemArea;
-	 
-	//Con::printf("lastForestTick: %d",mLastForestTick);
+	if (mDoStreets)
+	{
+		findStreetNodes();
+		makeStreets();
+	}
 
-	findStreetNodes();
-	makeStreets();
-
-	fillForest();
-	//updateForest();
+	if (mDoForest)
+		fillForest();
 	
-	mForest->getData()->getItems(&items);
+	//mForest->getData()->getItems(&items);
 	//Con::printf("After filling, total cells size %d, tree count %d",mCellGrid.size(),items.size());
 	//j=0;
 	//for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
@@ -867,10 +835,12 @@ void TerrainPager::fillForest()
 		}
 		loops++;
 	}		
-	F32 groundZ;
-	Point3F normalVec;
+
+	//Now, updateCollision on the forest, but keeping in mind that this is not free, let's not do it
+	F32 groundZ;//if we're in free camera mode flying around above the forest. (Really, any time we're in
+	Point3F normalVec;//free cam mode, but this could be useful with flying vehicles as well.)
 	getGroundAt(mClientPos,&groundZ,&normalVec);
-	if (mClientPos.z-groundZ<8)//only update forest collision if we're not flying around, more than 8 meters above ground.
+	if (mClientPos.z-groundZ<8)
 		mForest->updateCollision();
 }
 
@@ -881,7 +851,6 @@ void TerrainPager::fillForestCell(Point2F cellPosLatLong)
 	Point3F cellPosLatLong3D = Point3F(cellPosLatLong.x,cellPosLatLong.y,0.0);//(I don't actually care about elevation right now)
 	Point3F cellPosXYZ = convertLatLongToXYZ(cellPosLatLong3D);
 	
-
 	//float cellWidth = mD.mTileWidth / mCellGridSize;
 	
 	F32 worldCoordZ;
@@ -966,17 +935,85 @@ void TerrainPager::fillForestCell(Point2F cellPosLatLong)
 		if (!getGroundAt(randPos,&worldCoordZ,&normalVector))
 			continue;
 
+		//HERE: what's the best way to organize this? I want a group of trees per texture/landcover type, with each
+		//tree weighted for probability versus the others in the set.
+		//Vector of vectors? A vector of landcover types, each with a distribution vector containing all possible item datas?
+		F32 weightSum = 0.0;
+		F32 weights[10];
+		S32 treeIndex;
+		S32 numWeights = 0;
+		S32 dataIndex;
 		S32 texIndex = getClosestTextureIndex(randPos);
+		F32 randWeight = 0.0;
 		switch (texIndex)
-		{
-			case 1: 
-				data = mForestItemData[2]; break;
-			case 2: 
-				data = mForestItemData[0]; break;
-			case 6: 
-				data = mForestItemData[1]; break;
-		}
+		{//FIX!!! This all needs to use structures set up from the script side somehow.
+			case 0:
+				weights[numWeights++] = 20.0;
+				weights[numWeights++] = 1.0;
+				weights[numWeights++] = 1.0;
 
+				for (U32 j=0;j<numWeights;j++) 
+					weightSum += weights[j];
+				randWeight = mRandom.randF(0.0,weightSum);
+				if (randWeight < weights[0])
+					dataIndex = 0;
+				else if (randWeight < (weights[0] + weights[1]))
+					dataIndex = 5;
+				else if (randWeight < (weights[0] + weights[1] + weights[2]))
+					dataIndex = 7;
+
+				data = mForestItemData[dataIndex]; 
+				break;
+			case 1: 
+				weights[numWeights++] = 2.0;
+				weights[numWeights++] = 1.0;
+				weights[numWeights++] = 0.5;
+
+				for (U32 j=0;j<numWeights;j++) 
+					weightSum += weights[j];
+				randWeight = mRandom.randF(0.0,weightSum);
+				if (randWeight < weights[0])
+					dataIndex = 2;
+				else if (randWeight < (weights[0] + weights[1]))
+					dataIndex = 3;
+				else if (randWeight < (weights[0] + weights[1] + weights[2]))
+					dataIndex = 1;
+
+				data = mForestItemData[dataIndex]; 
+				break;
+			case 2: 
+				data = mForestItemData[5]; 
+				break;
+			case 3: 
+				data = mForestItemData[0]; 
+				break;
+			case 4: 
+				data = mForestItemData[0]; 
+				break;
+			case 5: 
+				data = mForestItemData[0]; 
+				break;
+			case 6: 
+				data = mForestItemData[1]; 
+				break;
+			case 7: 
+				data = mForestItemData[0]; 
+				break;
+			case 8: 
+				data = mForestItemData[0]; 
+				break;
+		}
+		
+		//current list:
+		// 0  ExampleForestMesh  
+		// 1  SequiaForestMesh  
+		// 2  ScrubPineForestMesh  
+		// 3  ShortPineForestMesh  
+		// 4  Sequia02ForestMesh   
+		// 5  Acacia01ForestMesh  
+		// 6  Acacia02ForestMesh   
+		// 7  AfricanMahoganyForestMesh 
+		
 		randPos.z = worldCoordZ;
 
 		if ( mForest->getData()->getItems( randPos, data->mRadius * radiusMultiple, NULL ) > 0 )//radius / 2.0 because we want overlap.
@@ -988,7 +1025,7 @@ void TerrainPager::fillForestCell(Point2F cellPosLatLong)
 
 		if (data)
 		{
-			mForest->addItem(data,randPos,0.0,mRandom.randF(kScale*0.7,kScale*1.3));
+			mForest->addItem(data,randPos,mRandom.randF(0.0,360.0),mRandom.randF(kScale*0.7,kScale*1.3));
 			
 			float radius = (data->mRadius * radiusMultiple ) * kScale;
 			if (mCellGrid[cellName]>0.0)
@@ -2098,17 +2135,17 @@ void TerrainPager::makeStreets()
 		//FIX: take some real world measurements here, at least from air photos. No idea what these widths really are.
 		const char *wayType = way.type.c_str();
 		if ( !strcmp(wayType,"residential") || !strcmp(wayType,"service") )
-			width = 10.0;
+			width = 8.0;
 		else if ( !strcmp(wayType,"tertiary") || !strcmp(wayType,"trunk_link") )
-			width = 20.0;
+			width = 12.0;
 		else if ( !strcmp(wayType,"trunk") || !strcmp(wayType,"motorway_link") || !strcmp(wayType,"secondary") )
-			width = 26.0;
+			width = 18.0;
 		else if ( !strcmp(wayType,"motorway")  )
-			width = 32.0;
+			width = 24.0;
 		else if ( !strcmp(wayType,"footway") )
 			width = 2.5;
 		else if ( !strcmp(wayType,"path") )
-			width = 5.0;
+			width = 4.5;
 		//else if (strlen(wayType)==0) 
 		//	width = 2.0;
 		//else if (!strcmp(wayType,"NULL"))
@@ -2136,10 +2173,18 @@ void TerrainPager::makeStreets()
 		if (resultSet->iNumRows > 1)
 		{			
 			MeshRoad *newRoad = new MeshRoad;
-			newRoad->mMaterialName[0] = "DefaultRoadMaterialTop";
-			newRoad->mMaterialName[1] = "DefaultRoadMaterialBottom";
-			newRoad->mMaterialName[2] = "DefaultRoadMaterialSide";
 
+			//HERE: hook these to a script object
+			if ( !strcmp(wayType,"footway") ||  !strcmp(wayType,"path") )
+			{
+				newRoad->mMaterialName[0] = "DefaultRoadMaterialPath";
+				newRoad->mMaterialName[1] = "DefaultRoadMaterialPath";
+				newRoad->mMaterialName[2] = "DefaultRoadMaterialPath";
+			} else {
+				newRoad->mMaterialName[0] = "DefaultRoadMaterialTop";
+				newRoad->mMaterialName[1] = "DefaultRoadMaterialOther";
+				newRoad->mMaterialName[2] = "DefaultRoadMaterialOther";
+			}
 			newRoad->setInternalName(wayIdChar);
 
 			newRoad->registerObject();
