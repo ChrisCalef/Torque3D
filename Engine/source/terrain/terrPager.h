@@ -20,7 +20,9 @@
 #ifndef _MESHROAD_H_
 #include "environment/meshRoad.h"
 #endif
-
+#ifndef _CONCRETEPOLYLIST_H_
+#include "collision/concretePolyList.h"
+#endif
 #include "console/SQLiteObject.h"
 #include "console/SimXMLDocument.h"
 
@@ -94,8 +96,8 @@ struct osmWay
 	MeshRoad *road;
 };
 
-/// The TerrainPager organizes large numbers of stored terrain tiles and optionally skyboxes, as well
-/// the capability to maintain a WorldDataSource connection to an external process for realtime data updates.
+// The TerrainPager organizes large numbers of stored terrain tiles and skyboxes, as well as the ability 
+// to maintain a WorldDataSource connection to an external process for realtime updates.
 class TerrainPager : public SimObject, public virtual ITickable
 {
 	typedef SimObject Parent;
@@ -121,7 +123,7 @@ public:
 
 	Forest *mForest;
 	Vector<ForestItemData *>mForestItemData;//Vector of pointers to forest item datablocks, so we can keep track of them. 
-	F32 mTreeRadiusMult;
+	F32 mTreeRadiusMult;//Modifies the amount of space trees take up, to create sparser or denser forests.
 
 	std::map <int,osmWay> mStreets;
 	std::map <int,osmWay> mActiveStreets;
@@ -171,6 +173,7 @@ public:
 	F32 mTileLoadRadius;//At a future time these could be weighted by axes, to get an eliptical area
 	F32 mTileDropRadius;//instead of a circle, but definitely not necessary for first pass.
 	F32 mForestRadius;
+	F32 mStreetRadius;
 	S32 mForestTries;
 	U32 mSkyboxRes;
 
@@ -248,6 +251,8 @@ public:
 	void checkForest();
 	void fillForest();
 	//void updateForest();
+
+	//bool pointWithinPoly(const ConcretePolyList::Poly &poly, const Point3F &point);//Courtesy of Kevin Ryan of Top Meadow Inc.
 };
 /*
 	////////////////////////////////////////////////////////////

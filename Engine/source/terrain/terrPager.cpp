@@ -49,6 +49,8 @@ TerrainPager::TerrainPager()
 	mCellGridSize = 64;
 	mTreeRadiusMult = 1.0;
 	mForestTries = 200;
+	mForestRadius = 180;
+	mStreetRadius = 320;
 
 	mLoadState = 0;//For now just use numbers, make an enum when you know what the states are going to be.
 
@@ -127,6 +129,7 @@ void TerrainPager::initPersistFields()
 	addField( "tileDropRadius", TypeF32, Offset( mTileDropRadius, TerrainPager ), "Radius at which to drop a tile." );
 		
 	addField( "forestRadius", TypeF32, Offset( mForestRadius, TerrainPager ), "Forest radius." );
+	addField( "streetRadius", TypeF32, Offset( mStreetRadius, TerrainPager ), "Street radius." );
 	addField( "forestTries", TypeS32, Offset( mForestTries, TerrainPager ), "How many tries we take to fill a forest cell (increases density, up to amount allowed by treeRadiusMult)." );
 	addField( "treeRadiusMult", TypeF32, Offset( mTreeRadiusMult, TerrainPager ), "Tree radius multiplier, lower number means denser forest." );
 	addField( "cellGridSize", TypeS32, Offset( mCellGridSize, TerrainPager ), "Cell grid size." );
@@ -583,13 +586,13 @@ void TerrainPager::findStreetNodes()
 	//findStreetNodesCell(baseCellCoords);//Then we should be able to get just the list of ways, with name/type/id.
 	loops++;	
 
-	//NOW, to loop around in ever expanding squares until we are entirely clear of forestRadius.
+	//NOW, to loop around in ever expanding squares until we are entirely clear of streetRadius.
 	F32 x,y;
 	Point3F iterCell;
 
 	//Note: this is *not* the same as taking a proper vector length from baseCell to startCell - by design, because we need the whole
 	//column and row to be outside of forest radius 
-	while ( ((baseCell.x-startCell.x)<=mForestRadius) || ((baseCell.y-startCell.y)<=mForestRadius) )
+	while ( ((baseCell.x-startCell.x)<=mStreetRadius) || ((baseCell.y-startCell.y)<=mStreetRadius) )
 	{
 		startCell.x -= mCellWidth;
 		startCell.y -= mCellWidth;
@@ -604,7 +607,7 @@ void TerrainPager::findStreetNodes()
 			cellPosLatLong = convertXYZToLatLong(iterCell);
 			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
 			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
-			if  (closestDist<mForestRadius)
+			if  (closestDist<mStreetRadius)
 			{
 				activeCells.push_back(cellName);
 				//findStreetNodesCell(Point2F(cellPosLatLong.x,cellPosLatLong.y));
@@ -616,7 +619,7 @@ void TerrainPager::findStreetNodes()
 			cellPosLatLong = convertXYZToLatLong(iterCell);
 			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
 			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
-			if  (closestDist<mForestRadius)
+			if  (closestDist<mStreetRadius)
 			{				
 				activeCells.push_back(cellName);
 				//findStreetNodesCell(Point2F(cellPosLatLong.x,cellPosLatLong.y));
@@ -629,7 +632,7 @@ void TerrainPager::findStreetNodes()
 			cellPosLatLong = convertXYZToLatLong(iterCell);
 			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
 			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
-			if  (closestDist<mForestRadius)
+			if  (closestDist<mStreetRadius)
 			{
 				activeCells.push_back(cellName);
 				//findStreetNodesCell(Point2F(cellPosLatLong.x,cellPosLatLong.y));
@@ -642,7 +645,7 @@ void TerrainPager::findStreetNodes()
 			cellPosLatLong = convertXYZToLatLong(iterCell);
 			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
 			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
-			if  (closestDist<mForestRadius)
+			if  (closestDist<mStreetRadius)
 			{
 				activeCells.push_back(cellName);
 				//findStreetNodesCell(Point2F(cellPosLatLong.x,cellPosLatLong.y));
@@ -2241,8 +2244,8 @@ void TerrainPager::pruneStreets()
 		
 		Point3F southWestXYZ,northEastXYZ;//bounding box corners
 		Point3F southWestLatLong,northEastLatLong;//bounding box corners
-		southWestXYZ = mClientPos + Point3F(-mForestRadius*1.5,-mForestRadius*1.5,0.0);
-		northEastXYZ = mClientPos + Point3F( mForestRadius*1.5, mForestRadius*1.5,0.0);
+		southWestXYZ = mClientPos + Point3F(-mStreetRadius*1.25,-mStreetRadius*1.25,0.0);
+		northEastXYZ = mClientPos + Point3F( mStreetRadius*1.25, mStreetRadius*1.25,0.0);
 		southWestLatLong = convertXYZToLatLong(southWestXYZ);
 		northEastLatLong = convertXYZToLatLong(northEastXYZ);
 		
@@ -2268,6 +2271,35 @@ void TerrainPager::pruneStreets()
 		mStreets.erase(removedWays[i]);
 	}
 }
+
+// pointWithinPoly function courtesy of Kevin Ryan of Top Meadow Inc.
+// What this does is goes along each side of the polygon and for each edge it creates  
+// a new polygon that is perpendicular to the original polygon.  Then we do a check  
+// with the point to see which side of the polygon it is on.  If the point is on the  
+// wrong side of any of the polys then it is not within the polygon.  
+
+/*
+bool TerrainPager::pointWithinPoly(const ConcretePolyList::Poly &poly, const Point3F &point)  
+{  //whoops, polyList hasn't been defined...
+
+	Point3F v2 = polyList.mVertexList[polyList.mIndexList[poly.vertexStart + poly.vertexCount - 1]];  
+
+	for (U32 i = 0; i < poly.vertexCount; i++)  
+	{  
+		Point3F v1 = polyList.mVertexList[polyList.mIndexList[i + poly.vertexStart]];  
+
+		// build a plane normal for this polygon edge  
+		PlaneF p(v1 + poly.plane, v1, v2);  
+		v2 = v1;  
+		F32 dist = p.distToPlane(point);  
+		if (dist < 0)  
+			return(false);  
+	}  
+	
+	return(true);  
+} */ 
+
+
 
 DefineConsoleMethod(TerrainPager, makeStreets, void, (), , "" )
 {
