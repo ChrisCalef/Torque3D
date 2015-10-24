@@ -63,7 +63,9 @@ TerrainPager::TerrainPager()
 	mForest = NULL;
 	mForestStarted = false;
 	mDoForest = true;
+	mDoForestUpdates = true;
 	mDoStreets = true;
+	mDoStreetUpdates = true;
 	mForestItemData = NULL;
 
 	mClientPos.zero();
@@ -139,8 +141,10 @@ void TerrainPager::initPersistFields()
 	addField( "forestTickInterval", TypeS32, Offset( mForestTickInterval, TerrainPager ), "Forest tick interval (30 = 1 second)." );
 	
 	addField( "useDataSource", TypeBool, Offset(mUseDataSource, TerrainPager ), "Use worldDataSource for terrain/skybox updates.");
-	addField( "doForest",  TypeBool, Offset(mDoForest, TerrainPager ), "Set to false to turn off forest paging.");
-	addField( "doStreets",  TypeBool, Offset(mDoStreets, TerrainPager ), "Set to false to turn off street paging.");
+	addField( "doForest",  TypeBool, Offset(mDoForest, TerrainPager ), "Set to false to turn off all random forest.");
+	addField( "doForestUpdates",  TypeBool, Offset(mDoForestUpdates, TerrainPager ), "Set to false to turn off random forest paging.");
+	addField( "doStreets",  TypeBool, Offset(mDoStreets, TerrainPager ), "Set to false to turn off all osm streets.");
+	addField( "doStreetUpdates",  TypeBool, Offset(mDoStreetUpdates, TerrainPager ), "Set to false to turn off osm street paging.");
 
 	Parent::initPersistFields();
 }
@@ -524,7 +528,7 @@ void TerrainPager::checkForest()
 	//DELETION PASS
 	if (1)//if (allow_delete)
 	{		
-		if (mDoForest)
+		if ((mDoForest)&&(mDoForestUpdates))
 		{
 			for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
 			{			
@@ -542,20 +546,20 @@ void TerrainPager::checkForest()
 			}
 		}
 
-		if (mDoStreets)
+		if ((mDoStreets)&&(mDoStreetUpdates))
 			pruneStreets();
 
 		//mForest->updateCollision();//Costly, only doing this on addition pass, why do it twice.
 	}
 
 	//ADDITION PASS
-	if (mDoStreets)
+	if ((mDoStreets)&&(mDoStreetUpdates))
 	{
 		findStreetNodes();
 		makeStreets();
 	}
 
-	if (mDoForest)
+	if ((mDoForest)&&(mDoForestUpdates))
 		fillForest();
 	
 	//mForest->getData()->getItems(&items);
