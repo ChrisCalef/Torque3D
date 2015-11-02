@@ -27,7 +27,7 @@
 
 IMPLEMENT_CONOBJECT(SQLiteObject);
 
-bool gSqlVerbose = false;
+bool gSqlVerbose = false;//FIX, expose to prefs
 
 SQLiteObject::SQLiteObject()
 {
@@ -406,6 +406,14 @@ int SQLiteObject::numResultSets()
 {
 	return m_vResultSets.size();
 }
+
+void SQLiteObject::escapeSingleQuotes(const char* source, char *dest)
+{
+	//To Do: This function needs to step through the source string and insert another single quote  
+	//immediately after every single quote it finds.
+
+}
+
 //-----------------------------------------------------------------------
 // These functions are the code that actually tie our object into the scripting
 // language.  As you can see each one of these is called by scrpit and in turn
@@ -431,7 +439,7 @@ ConsoleMethod(SQLiteObject, query, S32, 4, 0, "(const char* sql, int mode) Perfo
    else if (argc > 4)
    {
       // Support for printf type querys, as per Ben Garney's suggestion
-      // Basically what this does is allow the user to insert questino marks into thier query that will
+      // Basically what this does is allow the user to insert question marks into their query that will
       // be replaced with actual data.  For example:
       // "SELECT * FROM data WHERE id=? AND age<7 AND name LIKE ?"
 
@@ -780,4 +788,9 @@ ConsoleMethod(SQLiteObject, escapeString, const char *, 3, 3, "(string) Escapes 
 ConsoleMethod(SQLiteObject, numResultSets, S32, 2, 2, "numResultSets()")
 {
    return object->numResultSets();
+}
+
+ConsoleMethod(SQLiteObject, getLastRowId, S32, 2, 2, "getLastRowId()")
+{
+   return object->getLastRowId();
 }

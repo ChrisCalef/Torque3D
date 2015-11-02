@@ -63,7 +63,7 @@ ConsoleDocClass( TSStatic,
    "@brief A static object derived from a 3D model file and placed within the game world.\n\n"
 
    "TSStatic is the most basic 3D shape in Torque.  Unlike StaticShape it doesn't make use of "
-   "a datablock.  It derrives directly from SceneObject.  This makes TSStatic extremely light "
+   "a datablock.  It derives directly from SceneObject.  This makes TSStatic extremely light "
    "weight, which is why the Tools use this class when you want to drop in a DTS or DAE object.\n\n"
 
    "While a TSStatic doesn't provide any motion -- it stays were you initally put it -- it does allow for "
@@ -131,6 +131,9 @@ TSStatic::TSStatic()
    // andrewmac : Physics Options
    mEnablePhysicsRep = true;
    mPhysicsRep = NULL;
+
+	mOseId = 0;//openSimEarth
+	mIsDirty = false;
 }
 
 TSStatic::~TSStatic()
@@ -235,6 +238,11 @@ void TSStatic::initPersistFields()
          "Forces rendering to a particular detail level." );
 
    endGroup("Debug");
+	
+   addGroup("openSimEarth");
+		addField( "oseId", TypeS32, Offset( mOseId, TSStatic ),"Shape ID in openSimEarth database." );
+		addField( "isDirty",   TypeBool,   Offset(mIsDirty, TSStatic), "Flag object as having changed." );  
+   endGroup("openSimEarth");
 
    Parent::initPersistFields();
 }
@@ -263,6 +271,9 @@ void TSStatic::inspectPostApply()
       setMaskBits(AdvancedStaticOptionsMask);
       prepCollision();
    }
+
+	//openSimEarth
+	mIsDirty = true;
 
    _updateShouldTick();
 }
@@ -1170,6 +1181,16 @@ void TSStaticPolysoupConvex::getFeatures(const MatrixF& mat,const VectorF& n, Co
 //These functions are duplicated in tsStatic and shapeBase.
 //They each function a little differently; but achieve the same purpose of gathering
 //target names/counts without polluting simObject.
+
+DefineEngineMethod( TSStatic, getShapeName, const char*, (  ),(0),
+   "Get the name of the dts shape associated with this TSStatic.\n")
+{
+	TSStatic *obj = dynamic_cast< TSStatic* > ( object );
+	if(obj)
+		return obj->mShapeName;
+	else
+		return "";
+}
 
 DefineEngineMethod( TSStatic, getTargetName, const char*, ( S32 index ),(0),
    "Get the name of the indexed shape material.\n"

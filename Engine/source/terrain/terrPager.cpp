@@ -21,6 +21,7 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include "time.h"
 
 using std::vector;
 using std::string;
@@ -66,6 +67,8 @@ TerrainPager::TerrainPager()
 	mDoForestUpdates = true;
 	mDoStreets = true;
 	mDoStreetUpdates = true;
+	mDoStaticShapes = true;
+	mDoStaticShapeUpdates = true;
 	mForestItemData = NULL;
 
 	mClientPos.zero();
@@ -145,6 +148,8 @@ void TerrainPager::initPersistFields()
 	addField( "doForestUpdates",  TypeBool, Offset(mDoForestUpdates, TerrainPager ), "Set to false to turn off random forest paging.");
 	addField( "doStreets",  TypeBool, Offset(mDoStreets, TerrainPager ), "Set to false to turn off all osm streets.");
 	addField( "doStreetUpdates",  TypeBool, Offset(mDoStreetUpdates, TerrainPager ), "Set to false to turn off osm street paging.");
+	addField( "doStaticShapes",  TypeBool, Offset(mDoStaticShapes, TerrainPager ), "Set to false to turn off all saved static shapes.");
+	addField( "doStaticShapeUpdates",  TypeBool, Offset(mDoStaticShapeUpdates, TerrainPager ), "Set to false to turn off osm static shape paging.");
 
 	Parent::initPersistFields();
 }
@@ -470,6 +475,11 @@ void TerrainPager::checkForest()
       //String osmFile( Con::getVariable( "$pref::OpenSimEarth::OSM" ) );
       //String mapDB( Con::getVariable( "$pref::OpenSimEarth::OSMDB" ) );
 		//loadOSM(osmFile.c_str(),mapDB.c_str());
+		if (mDoStaticShapes)
+		{
+			makeStaticShapes();
+		}
+
 		if (mDoStreets)
 		{
 			findStreetNodes();
@@ -574,6 +584,348 @@ void TerrainPager::checkForest()
 	mLastForestTick = mCurrentTick;
 }
 
+void TerrainPager::makeStaticShapes()
+{
+	Point2F baseCellCoords = getCellCoords(mClientPos);
+	Point3F baseCell = convertLatLongToXYZ(Point3F(baseCellCoords.x,baseCellCoords.y,0.0));
+	Point3F startCell = baseCell;//This will be moving with every loop.
+	S32 loops = 0;
+	char cellName[20];
+	Vector<std::string> activeCells;
+
+	unsigned long startTime =  clock();
+
+	getCellName(baseCellCoords.x,baseCellCoords.y,cellName);
+	activeCells.push_back(cellName);//NOW, we are just going to make a list of cellnames, and submit them all in one query.
+	//findStreetNodesCell(baseCellCoords);//Then we should be able to get just the list of ways, with name/type/id.
+	loops++;
+
+	//NOW, to loop around in ever expanding squares until we are entirely clear of streetRadius.
+	Point3F iterCell;
+
+	//Note: this is *not* the same as taking a proper vector length from baseCell to startCell - by design, because we need the whole
+	//column and row to be outside of forest radius
+	while ( ((baseCell.x-startCell.x)<=mForestRadius) || ((baseCell.y-startCell.y)<=mForestRadius) )
+	{
+		startCell.x -= mCellWidth;
+		startCell.y -= mCellWidth;
+		iterCell = startCell;
+
+		Point3F cellPosLatLong;
+		F32 closestDist;
+
+		for (U32 i=0;i<(loops*2)+1;i++) // Left side, bottom to top.
+		{
+			if (i>0) iterCell.y += mCellWidth;
+			cellPosLatLong = convertXYZToLatLong(iterCell);
+			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
+			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
+			if  (closestDist<mForestRadius)
+			{
+				activeCells.push_back(cellName);
+			}
+		}
+		for (U32 i=1;i<(loops*2)+1;i++) // Top, left to right.
+		{
+			if (i>0) iterCell.x += mCellWidth;
+			cellPosLatLong = convertXYZToLatLong(iterCell);
+			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
+			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
+			if  (closestDist<mForestRadius)
+			{
+				activeCells.push_back(cellName);
+			}
+		}
+		for (U32 i=1;i<(loops*2)+1;i++) // Right, top to bottom.
+		{
+			if (i>0) iterCell.y -= mCellWidth;
+			cellPosLatLong = convertXYZToLatLong(iterCell);
+			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
+			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
+			if  (closestDist<mForestRadius)
+			{
+				activeCells.push_back(cellName);
+			}
+		}
+		for (U32 i=1;i<(loops*2);i++) // Bottom, right to left.
+		{
+			if (i>0) iterCell.x -= mCellWidth;
+			cellPosLatLong = convertXYZToLatLong(iterCell);
+			getCellName(cellPosLatLong.x,cellPosLatLong.y,cellName);
+			closestDist = getForestCellClosestDist(Point2F(cellPosLatLong.x,cellPosLatLong.y),mClientPos);
+			if  (closestDist<mForestRadius)
+			{
+				activeCells.push_back(cellName);
+			}
+		}
+		loops++;
+	}
+
+	//NOW, we have a list of cellnames, let's use them:
+	if (mSQL)//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
+	{
+		long nodeId,fileId,posId,rotId,scaleId,shapeId;
+		int result,total_query_len=0;
+		double nodeLong,nodeLat;
+		std::string shapeFile,name;
+		std::ostringstream selectQuery;
+		sqlite_resultset *resultSet;
+		//"WHERE n.type LIKE 'TSSTatic' AND " <<
+			//"n.cellName IN  ( ";
+		selectQuery <<
+			"SELECT n.id,s.id,n.name,f.path,p.x,p.y,p.z,r.x,r.y,r.z,r.w,sc.x,sc.y,sc.z " <<
+			"FROM osmNode n " <<
+			"JOIN shape s ON n.id = s.nodeId " <<
+			"JOIN shapeFile f ON f.id = s.fileId " <<
+			"JOIN vector3 p ON p.id = s.posId " <<
+			"JOIN rotation r ON r.id = s.rotId " <<
+			"JOIN vector3 sc ON sc.id = s.scaleId " <<
+			"WHERE n.type LIKE 'TSSTatic' AND " <<
+			"n.cellName IN  ( ";
+
+		for (U32 i=0;i<activeCells.size();i++)
+		{
+			if (i<(activeCells.size()-1))
+				selectQuery << "'" << activeCells[i].c_str() << "', ";
+			else
+				selectQuery << "'" << activeCells[i].c_str() << "' ";
+
+		}
+		selectQuery << " );";
+
+		//U32 queryTime = clock();
+		result = mSQL->ExecuteSQL(selectQuery.str().c_str());
+		resultSet = mSQL->GetResultSet(result);
+		selectQuery.clear();
+		selectQuery.str("");
+		if (resultSet->iNumRows > 0)
+		{
+			//Con::printf("found %d staticShapes, query took %d milliseconds",resultSet->iNumRows,clock()-queryTime);
+			SimSet* missionGroup = NULL;
+			missionGroup = dynamic_cast<SimSet*>(Sim::findObject("MissionGroup"));
+
+			for (U32 i=0;i<resultSet->iNumRows;i++)
+			{
+				int c=0;
+				float x,y,z,w;
+				Point3F pos,scale;
+				QuatF rot;
+
+				nodeId = dAtol(resultSet->vRows[i]->vColumnValues[c++]);//This has to be long, because it's coming from OSM and might be huge.
+				shapeId = dAtoi(resultSet->vRows[i]->vColumnValues[c++]);//This is simply an autoincrement from our own table, unlikely to exceed int limits.
+				name =  resultSet->vRows[i]->vColumnValues[c++];
+				shapeFile = resultSet->vRows[i]->vColumnValues[c++];
+				x = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				y = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				z = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				pos = Point3F(x,y,z);
+
+				x = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				y = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				z = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				w = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				rot = QuatF(x,y,z,w);
+
+				x = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				y = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				z = dAtof(resultSet->vRows[i]->vColumnValues[c++]);
+				scale = Point3F(x,y,z);
+
+				if (mStaticShapes.find(shapeId) == mStaticShapes.end())
+				{
+					TSStatic *shape = new TSStatic();
+					MatrixF transform;
+					rot.setMatrix(&transform);
+					transform.setPosition(pos);
+					shape->setTransform(transform);
+					shape->setScale(scale);
+					shape->mShapeName = StringTable->insert(shapeFile.c_str());
+					shape->mOseId = shapeId;
+
+					shape->registerObject( name.c_str() );
+
+					missionGroup->addObject(shape);
+					mStaticShapes[shapeId] = shape;
+
+				}
+			}
+		} else Con::printf("Static shape query found no results.");
+	}
+
+	unsigned int latency = clock() - startTime;
+	Con::printf("makeStaticShapes() took %d milliseconds",latency);
+}
+
+void TerrainPager::saveStaticShapes()
+{//Okay, round two! Did this on the script side first, but for float precision reasons as well as performance,
+	//it's time to move back into the engine instead.
+	Con::printf("TerrainPager::saveStaticShapes");
+	SimSet* missionGroup = NULL;
+	missionGroup = dynamic_cast<SimSet*>(Sim::findObject("MissionGroup"));
+
+	unsigned long startTime =  clock();
+
+	if (missionGroup == NULL)
+		Con::printf("No mission group found.");
+
+	if (!mSQL)
+		Con::printf("mSQL is not valid");
+
+	if ((mSQL)&&(missionGroup))//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
+	{
+		int nodeId,shapeId,fileId,posId,rotId,scaleId;
+		int result,total_query_len=0;
+		double nodeLong,nodeLat;
+		std::string shapeName;
+		std::ostringstream insert_query,update_query,file_id_query;
+		sqlite_resultset *resultSet;
+		Point3F pos,latLongPos,scale;
+		Point2F cellPos;
+		char cellName[20];
+
+		//for(SimSet::iterator itr=missionGroup->begin(); itr!=missionGroup->end(); ++itr)
+		for(SimSetIterator itr(missionGroup); *itr; ++itr)
+      {
+         TSStatic* object = dynamic_cast< TSStatic* >( *itr );
+			if (object)
+			{
+				pos = object->getPosition();
+				latLongPos = convertXYZToLatLong(pos);
+				cellPos = getCellCoords(pos);
+				getCellName(cellPos.x,cellPos.y,cellName);
+				Con::printf("TerrainPager::saveStaticShapes found a static. %s %f %f %f ",object->mShapeName,pos.x,pos.y,pos.z); 
+
+				//FIRST: find out if this static is already in the database! I guess this means adding oseId to TSStatic.
+				//So, now we have an mOseId in TSStatic, and we can set that here and check if it has a value.
+				if (object->mOseId > 0)
+				{
+					if (object->mIsDirty)
+					{
+						U32 updateStart = clock();
+						//SO, now that we have added mIsDirty to TSStatic, and set it in TSStatic::inspectPostApply, we know that
+						//we need to update the object in the db. As it turns out, nothing should need to be added, you only need
+						//to update existing pos & scale vectors and rot transform, and the osmNode. Except for the (1,1,1) scale.
+						update_query << "UPDATE vector3 SET x=" << pos.x << ",y=" << pos.y << ",z=" << pos.z << 
+							" WHERE id=(SELECT posId FROM shape WHERE id=" << object->mOseId << ");";
+						result = mSQL->ExecuteSQL(update_query.str().c_str());
+						update_query.clear();
+						update_query.str("");
+
+						QuatF rot(object->getTransform());
+						update_query << "UPDATE rotation SET x=" << rot.x << ",y=" << rot.y << ",z=" << rot.z << ",w=" << rot.w << 
+							" WHERE id=(SELECT rotId FROM shape WHERE id=" << object->mOseId << ");";
+						result = mSQL->ExecuteSQL(update_query.str().c_str());
+						update_query.clear();
+						update_query.str("");
+
+						Point3F scale = object->getScale();
+						//This should be optimizable by making sure we don't change it if it is still (1,1,1), but we'd have to make
+						//sure we weren't changing it back to (1,1,1) from something else, which would be just as much time as doing this.
+						update_query << "UPDATE vector3 SET x=" << scale.x << ",y=" << scale.y << ",z=" << scale.z << 
+							" WHERE id=(SELECT scaleId FROM shape WHERE id=" << object->mOseId << ");";
+						result = mSQL->ExecuteSQL(update_query.str().c_str());
+						update_query.clear();
+						update_query.str("");
+
+						//Now, osmNode, gets a little more complicated:
+						update_query << "UPDATE osmNode SET latitude=" << latLongPos.y << ",longitude=" << latLongPos.x <<
+							",name='" << object->getName() << "',cellName='" << cellName << "' " <<
+							"WHERE id=(SELECT nodeId FROM shape WHERE id=" << object->mOseId << ");";
+						result = mSQL->ExecuteSQL(update_query.str().c_str());
+						update_query.clear();
+						update_query.str("");
+
+						Con::printf("Updated a static shape in %d milliseconds!!!!!!!!!!!!!!!!!!!!!!",clock()-updateStart);
+					}
+					continue;
+				}
+
+				//Otherwise, we're inserting a new object. First check to see if we have the shapefile already.
+				fileId = 0;
+				file_id_query << "SELECT id FROM shapeFile WHERE path LIKE '" << object->mShapeName << "';";
+				result = mSQL->ExecuteSQL(file_id_query.str().c_str());
+				resultSet = mSQL->GetResultSet(result);
+				file_id_query.clear();
+				file_id_query.str("");
+				if (resultSet->iNumRows == 1) 
+					fileId = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+				else if (resultSet->iNumRows > 1) 
+					Con::printf("shape has been entered in the database more than once! %s",object->mShapeName);
+
+				if (fileId == 0)
+				{
+					insert_query << "INSERT INTO shapeFile ( path ) VALUES ('" << object->mShapeName << "');";
+					result = mSQL->ExecuteSQL(insert_query.str().c_str());
+					fileId = mSQL->getLastRowId();
+					insert_query.clear();
+					insert_query.str("");
+				}
+
+				if (fileId==0)
+					continue;//something broke, forget this shape, move on.
+
+				//WHOOPS! if object name is null, CRASH. Fix this.
+				insert_query << "INSERT INTO osmNode (longitude,latitude,type,name,cellName) " <<
+					"VALUES (" << latLongPos.x << "," << latLongPos.y << ",'TSStatic','" << object->getName() << "','" << 
+					cellName << "')";
+				result = mSQL->ExecuteSQL(insert_query.str().c_str());
+				nodeId = mSQL->getLastRowId();
+				insert_query.clear();
+				insert_query.str("");
+
+				insert_query << "INSERT INTO vector3 (x,y,z) VALUES (" << pos.x << "," << pos.y << "," << pos.z << ");";
+				result = mSQL->ExecuteSQL(insert_query.str().c_str());
+				posId = mSQL->getLastRowId();
+				insert_query.clear();
+				insert_query.str("");
+
+				QuatF rot(object->getTransform());
+				insert_query << "INSERT INTO rotation (x,y,z,w) VALUES (" << rot.x << "," << rot.y << "," << rot.z <<  "," << rot.w << ");";
+				result = mSQL->ExecuteSQL(insert_query.str().c_str());
+				rotId = mSQL->getLastRowId();
+				insert_query.clear();
+				insert_query.str("");
+
+				Point3F scale = object->getScale();
+				if ((scale - Point3F(1,1,1)).len() < 0.00001)
+				{//SPECIAL RULE: I am a very bad person for doing this, but if I make an arbitrary rule that my number one entry 
+					scaleId = 1;//in vector3 table is always (1,1,1), then I can reuse this id for 99% of all scale ids, and avoid
+					// wasting three extra real numbers and an id for the scale of every single (1,1,1) object in the world. 
+				} else {
+					insert_query << "INSERT INTO vector3 (x,y,z) VALUES (" << scale.x << "," << scale.y << "," << scale.z << ");";
+					result = mSQL->ExecuteSQL(insert_query.str().c_str());
+					scaleId = mSQL->getLastRowId();
+					insert_query.clear();
+					insert_query.str("");
+				}
+
+				Con::printf("Trying to insert tsstatic, node %d, file %d, pos %d",nodeId,fileId,posId);
+
+				if ((nodeId>0)&&(fileId>0)&&(posId>0)&&(rotId>0)&&(scaleId>0))
+				{
+					insert_query << "INSERT INTO shape (nodeId, fileId, posId, rotId, scaleId ) VALUES (" <<
+						nodeId << "," << fileId << "," << posId << "," << rotId << "," << scaleId << ");";
+					result = mSQL->ExecuteSQL(insert_query.str().c_str());
+					shapeId = mSQL->getLastRowId();
+					insert_query.clear();
+					insert_query.str("");
+					if (shapeId>0)
+						object->mOseId = shapeId;
+				}
+			}
+		}
+	}
+
+	unsigned int latency = clock() - startTime;
+	Con::printf("saveStaticShapes() took %d milliseconds",latency);
+}
+
+DefineConsoleMethod( TerrainPager, saveStaticShapes, void, (), , "" )
+{
+	object->saveStaticShapes();
+	return;
+}
+
 void TerrainPager::findStreetNodes()
 {
 	//Okay, this is really lazy but I'm going to use the same circling out from the middle strategy here
@@ -584,6 +936,8 @@ void TerrainPager::findStreetNodes()
 	S32 loops = 0;
 	char cellName[20];
 	Vector<std::string> activeCells;
+
+	unsigned long startTime =  clock();
 
 	getCellName(baseCellCoords.x,baseCellCoords.y,cellName);
 	activeCells.push_back(cellName);//NOW, we are just going to make a list of cellnames, and submit them all in one query.
@@ -661,7 +1015,7 @@ void TerrainPager::findStreetNodes()
 
 	//NOW, we have a list of cellnames, let's use them:
 
-	// SELECT DISTINCT w.osmId, w.name, w.type FROM osmWay w JOIN osmNode n ...JOIN osmWayNode wn ... WHERE n.cell_name IN {=' << activeCell[i]
+	// SELECT DISTINCT w.osmId, w.name, w.type FROM osmWay w JOIN osmNode n ...JOIN osmWayNode wn ... WHERE n.cellName IN {=' << activeCell[i]
 	
 	if (mSQL)//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
 	{
@@ -671,14 +1025,13 @@ void TerrainPager::findStreetNodes()
 		std::string wayName,wayType;
 		std::ostringstream selectQuery,wayQuery;
 		sqlite_resultset *resultSet;
-		
+
 		selectQuery << 
 			"SELECT DISTINCT w.osmId, w.name, w.type " << 
 			"FROM osmWay w " << 
 			"JOIN osmWayNode wn ON wn.wayId = w.osmId " <<
 			"JOIN osmNode n ON n.osmId = wn.nodeId " <<
-			"WHERE n.cell_name IN  ( ";
-
+			"WHERE n.cellName IN  ( ";
 		for (U32 i=0;i<activeCells.size();i++)
 		{
 			if (i<(activeCells.size()-1))
@@ -689,13 +1042,14 @@ void TerrainPager::findStreetNodes()
 		}
 		selectQuery << " );";
 
-		//Con::printf("%s",selectQuery.str().c_str());
+		U32 queryTime = clock();
 		result = mSQL->ExecuteSQL(selectQuery.str().c_str());
 		resultSet = mSQL->GetResultSet(result);
+		selectQuery.clear();
+		selectQuery.str("");
 		if (resultSet->iNumRows > 0)
 		{
-
-			Con::printf("found %d osmWays ",resultSet->iNumRows);
+			Con::printf("findStreetNodes found %d osmWays, query took %d milliseconds",resultSet->iNumRows,clock()-queryTime);
 			for (U32 i=0;i<resultSet->iNumRows;i++)
 			{
 				int c=0;
@@ -703,8 +1057,6 @@ void TerrainPager::findStreetNodes()
 				wayName = resultSet->vRows[i]->vColumnValues[c++];
 				wayType = resultSet->vRows[i]->vColumnValues[c++];
 
-				Con::printf("Way  %d  type %s  name %s",wayId,wayType.c_str(),wayName.c_str());
-				
 				osmWay kWay;
 				kWay.name = wayName;
 				kWay.type = wayType;
@@ -722,6 +1074,10 @@ void TerrainPager::findStreetNodes()
 			}
 		}
 	}	
+	
+	unsigned int latency = clock() - startTime;
+	Con::printf("findStreetNodes() took %d milliseconds",latency);
+
 }
 	
 
@@ -732,7 +1088,7 @@ void TerrainPager::findStreetNodes()
 		//	"FROM osmNode n " << 
 		//	"JOIN osmWayNode wn ON n.osmId = wn.nodeId " <<
 		//	"JOIN osmWay w ON wn.wayId = w.osmId " <<
-		//	"WHERE cell_name LIKE '" << cellName << "';";
+		//	"WHERE cellName LIKE '" << cellName << "';";
 
 
 
@@ -758,6 +1114,8 @@ void TerrainPager::fillForest()
 	S32 loops = 0;
 	char cellName[20];
 	int treeType = 2;
+	
+	unsigned int startTime = clock();
 
 	getCellName(baseCellCoords.x,baseCellCoords.y,cellName);
 
@@ -849,6 +1207,12 @@ void TerrainPager::fillForest()
 	getGroundAt(mClientPos,&groundZ,&normalVec);
 	if (mClientPos.z-groundZ<8)
 		mForest->updateCollision();
+
+	
+	//big logic and queries ...
+	unsigned int latency = clock() - startTime;
+	Con::printf("fillForest() took %d milliseconds",latency);
+
 }
 
 void TerrainPager::fillForestCell(Point2F cellPosLatLong)
@@ -883,13 +1247,14 @@ void TerrainPager::fillForestCell(Point2F cellPosLatLong)
 			"FROM osmNode n " << 
 			"JOIN osmWayNode wn ON n.osmId = wn.nodeId " <<
 			"JOIN osmWay w ON wn.wayId = w.osmId " <<
-			"WHERE cell_name LIKE '" << cellName << "';";
+			"WHERE cellName IN ('" << cellName << "');";
 
+		U32 queryTime = clock();
 		result = mSQL->ExecuteSQL(selectQuery.str().c_str());
 		resultSet = mSQL->GetResultSet(result);
 		if (resultSet->iNumRows > 0)
 		{
-			Con::printf("found %d osmNodes from cell %s",resultSet->iNumRows,cellName);
+			Con::printf("found %d osmNodes from cell %s, query took %d milliseconds",resultSet->iNumRows,cellName,clock()-queryTime);
 			for (U32 i=0;i<resultSet->iNumRows;i++)
 			{
 				int c=0;
@@ -900,8 +1265,8 @@ void TerrainPager::fillForestCell(Point2F cellPosLatLong)
 				wayType = resultSet->vRows[i]->vColumnValues[c++];
 				wayName = resultSet->vRows[i]->vColumnValues[c++];
 
-				Con::printf("Node  %d   longitude: %f  latitude: %f  way id %d type %s  name %s",
-					nodeId,nodeLong,nodeLat,wayId,wayType.c_str(),wayName.c_str());
+				//Con::printf("Node  %d   longitude: %f  latitude: %f  way id %d type %s  name %s",
+				//	nodeId,nodeLong,nodeLat,wayId,wayType.c_str(),wayName.c_str());
 
 				osmNode kNode;
 				kNode.longitude = nodeLong;
@@ -1175,13 +1540,11 @@ bool TerrainPager::getGroundAtInclusive( const Point3F &worldPt, F32 *zValueOut,
 }
 
 void TerrainPager::interpolateTick(F32 f)
-{
-	//Need this because abstract in parent class.
+{	//Need this because abstract in parent class.
 }
 
 void TerrainPager::advanceTime(F32 f)
-{
-	//Need this because abstract in parent class.
+{	//Need this because abstract in parent class.
 }
 
 bool TerrainPager::checkFileExists(const char *filename)//Actually, this should be up in utils or something.
@@ -1364,6 +1727,10 @@ void TerrainPager::getTileName(F32 tileStartPointLong,F32 tileStartPointLat,char
 {
 	char temp[20];
 	
+	if ((tileStartPointLong<-180.0)||(tileStartPointLong>180.0)|| //First check  for reasonable
+					(tileStartPointLat<-90.0)||(tileStartPointLat>90.0))  // coordinate bounds.
+		return;
+
 	double tileStartPointLongR,tileStartPointLatR;
 	tileStartPointLongR = (float)((int)(tileStartPointLong * 1000.0))/1000.0;//(10 ^ decimalPlaces)
 	tileStartPointLatR = (float)((int)(tileStartPointLat * 1000.0))/1000.0;//Maybe?
@@ -1372,6 +1739,7 @@ void TerrainPager::getTileName(F32 tileStartPointLong,F32 tileStartPointLat,char
 	else longC = 'E';
 	if (tileStartPointLat<0.0) latC = 'S';
 	else latC = 'N';
+
 	//NOW, just have to separate out the decimal part from the whole numbers part, and make sure to get
 	//preceding zeroes for the decimal part, so it's always three characters.
 	int majorLong,minorLong,majorLat,minorLat;//"major" for left of decimal, "minor" for right of decimal.
@@ -1417,6 +1785,10 @@ void TerrainPager::getCellName(F32 tileStartPointLong,F32 tileStartPointLat,char
 {
 	char temp[20];
 	
+	if ((tileStartPointLong<-180.0)||(tileStartPointLong>180.0)|| //First check  for reasonable
+					(tileStartPointLat<-90.0)||(tileStartPointLat>90.0))  // coordinate bounds.
+		return;
+
 	double tileStartPointLongR,tileStartPointLatR;
 	tileStartPointLongR = (float)((int)(tileStartPointLong * 10000.0))/10000.0;//(10 ^ decimalPlaces)
 	tileStartPointLatR = (float)((int)(tileStartPointLat * 10000.0))/10000.0;
@@ -1482,10 +1854,8 @@ void TerrainPager::getCellName(Point3F position,char *outStr)
 	return getCellName(cellStartLongitude,cellStartLatitude,outStr);
 }
 
-
 Point2F TerrainPager::getCellCoords(Point3F position)
 {
-	
 	float posLongitude = mD.mMapCenterLongitude + (position.x * mD.mDegreesPerMeterLongitude);
 	float posLatitude = mD.mMapCenterLatitude + (position.y * mD.mDegreesPerMeterLatitude);
 
@@ -1942,11 +2312,11 @@ Point3F TerrainPager::convertLatLongToXYZ(double longitude,double latitude,float
 	return Point3F(newPos);
 }
 
-DefineConsoleMethod( TerrainPager, convertLatLongToXYZ, Point3F, (Point3F pos), , "" )
-{
-	Point3F newPos = object->convertLatLongToXYZ(pos);
-	return newPos;
-}
+//DefineConsoleMethod( TerrainPager, convertLatLongToXYZ, Point3F, (Point3F pos), , "" )
+//{
+//	Point3F newPos = object->convertLatLongToXYZ(pos);
+//	return newPos;
+//}
 
 Point3F TerrainPager::convertXYZToLatLong(Point3F pos)
 {
@@ -1958,11 +2328,11 @@ Point3F TerrainPager::convertXYZToLatLong(Point3F pos)
 	return newPos;
 }
 
-DefineConsoleMethod( TerrainPager, convertXYZToLatLong, Point3F, (Point3F pos), , "" )
-{
-	Point3F newPos = object->convertXYZToLatLong(pos);
-	return newPos;
-}
+//DefineConsoleMethod( TerrainPager, convertXYZToLatLong, Point3F, (Point3F pos), , "" )
+//{
+//	Point3F newPos = object->convertXYZToLatLong(pos);
+//	return newPos;
+//}
 
 void TerrainPager::loadOSM(const char *xml_file, const char *map_db)
 {
@@ -2017,7 +2387,7 @@ void TerrainPager::loadOSM(const char *xml_file, const char *map_db)
 			nodeLon = atof(doc->attribute("lon"));
 			Point3F nodePos = convertLatLongToXYZ(nodeLon,nodeLat,0.0); 
 			getCellName(nodePos,cellName);
-			sprintf(insert_query,"INSERT INTO osmNode (osmId,latitude,longitude,cell_name) VALUES (%d,%f,%f,'%s');\n",
+			sprintf(insert_query,"INSERT INTO osmNode (osmId,latitude,longitude,cellName) VALUES (%d,%f,%f,'%s');\n",
 				nodeId,nodeLat,nodeLon,cellName);
 			result = mSQL->ExecuteSQL(insert_query);			
 			Con::printf("result %d: %s",result,insert_query);
@@ -2127,6 +2497,7 @@ void TerrainPager::makeStreets()
 	
 	long nodeId,wayId,wayNodeId;
 	double nodeLong,nodeLat;
+	unsigned long startTime =  clock();
 
 	for (std::map<int,osmWay>::iterator it=mStreets.begin(); it!=mStreets.end(); ++it)
 	{
@@ -2163,8 +2534,8 @@ void TerrainPager::makeStreets()
 			continue;
 		}
 
-		std::ostringstream selectQuery;
-		selectQuery << 
+		std::ostringstream select_query;
+		select_query << 
 			"SELECT wn.id , n.osmId, n.longitude, n.latitude " <<
 			"FROM osmWayNode wn " <<
 			"LEFT JOIN osmNode n  ON n.osmId = wn.nodeId " <<
@@ -2172,11 +2543,14 @@ void TerrainPager::makeStreets()
 		
 		int result;
 		sqlite_resultset *resultSet;
-
-		result = mSQL->ExecuteSQL(selectQuery.str().c_str());
-		resultSet = mSQL->GetResultSet(result);
 		
-		Con::printf("querying for nodes, way %d numRows %d  name %s type %s",wayId,resultSet->iNumRows,way.name.c_str(),way.type.c_str());
+		U32 queryTime = clock();
+		result = mSQL->ExecuteSQL(select_query.str().c_str());
+		resultSet = mSQL->GetResultSet(result);
+		select_query.clear();
+		select_query.str("");
+		Con::printf("makeStreets: way %d nodes %d  name %s type %s query time %d ms",
+			wayId,resultSet->iNumRows,way.name.c_str(),way.type.c_str(),clock()-queryTime);
 		if (resultSet->iNumRows > 1)
 		{			
 			MeshRoad *newRoad = new MeshRoad;
@@ -2229,6 +2603,9 @@ void TerrainPager::makeStreets()
 			mActiveStreets[wayId] = way;
 		}
 	}
+	
+	unsigned int latency = clock() - startTime;
+	Con::printf("makeStreets() took %d milliseconds",latency);
 
 	return;
 }
@@ -2236,6 +2613,8 @@ void TerrainPager::makeStreets()
 //Now, if a whole way's nodes are all out of our search area, delete the road.
 void TerrainPager::pruneStreets()
 {
+	unsigned long startTime =  clock();
+
 	SimGroup *missionGroup;
 	if ( !Sim::findObject( "MissionGroup", missionGroup ) )               
 		Con::errorf( "TerrainPager - could not find MissionGroup in pruneStreets()" );
@@ -2274,7 +2653,18 @@ void TerrainPager::pruneStreets()
 		mActiveStreets.erase(removedWays[i]);
 		mStreets.erase(removedWays[i]);
 	}
+
+	unsigned int latency = clock() - startTime;
+	Con::printf("pruneStreets() took %d milliseconds",latency);
 }
+
+	/*
+	unsigned long startTime =  clock();
+	//big logic and queries ...
+	unsigned int latency = clock() - startTime;
+	Con::printf("() took %d milliseconds",latency);
+	*/
+
 
 // pointWithinPoly function courtesy of Kevin Ryan of Top Meadow Inc.
 // What this does is goes along each side of the polygon and for each edge it creates  
@@ -2423,6 +2813,7 @@ DefineConsoleMethod( TerrainPager, getTileLoadRadius, F32, (), , "" )
 {
 	return object->mD.mTileLoadRadius;
 }
+
 DefineConsoleMethod( TerrainPager, getTileDropRadius, F32, (), , "" )
 {
 	return object->mD.mTileDropRadius;
@@ -2434,6 +2825,7 @@ DefineConsoleMethod( TerrainPager, openListenSocket, void, (), , "" )
 		object->mDataSource->openListenSocket();
 	return;
 }
+
 DefineConsoleMethod( TerrainPager, connectListenSocket, void, (), , "" )
 {
 	if (object->mUseDataSource)
@@ -2468,11 +2860,45 @@ DefineConsoleMethod( TerrainPager, dropAll, void, (), , "" )
 	return;
 }
 
-
-DefineConsoleMethod( TerrainPager, setDBName, void, (const char *name), , "" )
+DefineConsoleMethod( TerrainPager, setDBName, void , (const char* name), , "" )
 {
 	object->mDBName = name;
 	return;
+}
+
+DefineConsoleMethod( TerrainPager, convertLatLongToXYZ, Point3F, (Point3F pos), , "" )
+{
+	Point3F xyzPos = object->convertLatLongToXYZ(pos);
+	return xyzPos;
+}
+
+DefineConsoleMethod( TerrainPager, convertXYZToLatLong, Point3F, (Point3F pos), , "" )
+{
+	Point3F latLongPos = object->convertXYZToLatLong(pos);
+	return latLongPos;
+}
+
+DefineConsoleMethod( TerrainPager, getTileName, const char*, (Point3F pos), , "" )
+{
+	char tileName[20];
+	object->getTileName(pos.x,pos.y,tileName);
+	return tileName;//Is this safe, because it's a console method? Returning local char array?
+}
+
+DefineConsoleMethod( TerrainPager, getCellName, const char*, (Point3F pos), , "" )
+{
+	char cellName[20];
+
+	object->getCellName(pos,cellName);
+
+	return cellName;//?
+}
+
+DefineConsoleMethod( TerrainPager, getCellCoords, Point2F, (Point3F pos), , "" )
+{
+	Point2F coords = object->getCellCoords(pos);
+	Con::printf("Found cell coords: %f %f",coords.x,coords.y);
+	return coords;
 }
 
 ///////////////  Disregard obsolete code from here down except as reference ///////////

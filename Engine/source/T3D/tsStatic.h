@@ -114,6 +114,8 @@ public:
       CollisionMesh = 2,   ///< Specifically designated collision meshes
       VisibleMesh = 3      ///< Rendered mesh polygons
    };
+
+	StringTableEntry  mShapeName;
    
 protected:
    bool mUseAlphaFade;
@@ -151,8 +153,8 @@ protected:
 protected:
 
    Convex *mConvexList;
-
-   StringTableEntry  mShapeName;
+	
+   //StringTableEntry  mShapeName;//moved to public above
    U32               mShapeHash;
    Resource<TSShape> mShape;
    Vector<S32> mCollisionDetails;
@@ -232,6 +234,9 @@ public:
 
    const Vector<S32>& getLOSDetails() const { return mLOSDetails; }
 
+	///// openSimEarth /////
+	U32 mOseId;
+	bool mIsDirty;
 };
 
 typedef TSStatic::MeshType TSMeshType;

@@ -17,6 +17,9 @@
 #ifndef _H_FOREST_
 #include "forest/forest.h"
 #endif
+#ifndef _TSSTATIC_H_
+#include "T3D/tsStatic.h"
+#endif
 #ifndef _MESHROAD_H_
 #include "environment/meshRoad.h"
 #endif
@@ -127,6 +130,7 @@ public:
 
 	std::map <int,osmWay> mStreets;
 	std::map <int,osmWay> mActiveStreets;
+	std::map <int,TSStatic*> mStaticShapes;//All we need right now is oseId, to know whether we've loaded this shape, but let's keep a pointer.
 
    MRandom mRandom;
 
@@ -142,6 +146,8 @@ public:
 	bool mDoForestUpdates;
 	bool mDoStreets;
 	bool mDoStreetUpdates;
+	bool mDoStaticShapes;
+	bool mDoStaticShapeUpdates;
 	//Vector <String> mTileNames;//Still need this? Don't think so.	
 
 	Point3F mClientPos;
@@ -232,6 +238,8 @@ public:
 	void updateSkyboxConsole();
 
 	void loadOSM(const char*,const char*);
+	void makeStaticShapes();
+	void saveStaticShapes();
 	void findStreetNodes();
 	void findStreetNodesCell(Point2F);
 	void makeStreets();
