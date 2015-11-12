@@ -66,6 +66,7 @@ struct RoadNode
 
    /// Alpha of the road at this node.
    //F32 alpha;
+	char osmId[18];
 };
 typedef Vector<RoadNode> RoadNodeVector;
 
@@ -186,7 +187,7 @@ public:
 
    /// Insert a node anywhere in the road.
    /// Pass idx zero to add to the front and idx U32_MAX to add to the end
-   U32 insertNode( const Point3F &pos, const F32 &width, const U32 &idx );
+   U32 insertNode( const Point3F &pos, const F32 &width, const U32 &idx, const char *osmId  );
 
    U32 addNode( const Point3F &pos, F32 width = 10.0f );   
    void deleteNode( U32 idx );
@@ -208,6 +209,10 @@ public:
    static bool addNodeFromField( void *object, const char *index, const char *data );  
 
    static SimSet* getServerSet();
+
+   String mMaterialName;//moved from protected below
+
+	S32 getNodeCount();
   
 protected:
          
@@ -216,7 +221,7 @@ protected:
    void _initMaterial();   
    void _debugRender( ObjectRenderInst *ri, SceneRenderState *state, BaseMatInstance *matInst );
 
-   U32 _insertNode( const Point3F &pos, const F32 &width, const U32 &idx );
+   U32 _insertNode( const Point3F &pos, const F32 &width, const U32 &idx, const char *osmId );
    U32 _addNode( const Point3F &pos, F32 width );
    void _generateEdges();
    void _captureVerts();
@@ -237,7 +242,7 @@ protected:
    F32 mBreakAngle;
    U32 mSegmentsPerBatch;
    F32 mTextureLength;
-   String mMaterialName;
+   //String mMaterialName;//moved to public above
    U32 mRenderPriority;
 
    // Static ConsoleVars for editor

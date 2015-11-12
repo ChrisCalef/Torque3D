@@ -27,8 +27,6 @@
 
 IMPLEMENT_CONOBJECT(SQLiteObject);
 
-bool gSqlVerbose = false;//FIX, expose to prefs
-
 SQLiteObject::SQLiteObject()
 {
    m_pDatabase = NULL;
@@ -209,8 +207,8 @@ int SQLiteObject::ExecuteSQL(const char* sql)
    int iResult;
    sqlite_resultset* pResultSet;
 
-   if (gSqlVerbose)//add a script global that can turn this on.
-		Con::printf("SQLite QUERY: %s",sql);//Ecstasy Motion, debug.
+   if (dAtob(Con::getVariable("$pref::OpenSimEarth::SQLVerbose")))
+		Con::printf("SQLite QUERY: %s",sql);
 
    // create a new resultset
    pResultSet = new sqlite_resultset;

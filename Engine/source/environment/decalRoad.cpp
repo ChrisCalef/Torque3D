@@ -852,7 +852,7 @@ bool DecalRoad::getClosestNode( const Point3F &pos, U32 &idx )
 bool DecalRoad::containsPoint( const Point3F &worldPos, U32 *nodeIdx ) const
 {
    // This is just for making selections in the editor, we use the 
-   // client-side road because it has the proper edge's.
+   // client-side road because it has the proper edges.
    if ( isServerObject() && getClientObject() )
       return ((DecalRoad*)getClientObject())->containsPoint( worldPos, nodeIdx );
 
@@ -869,7 +869,7 @@ bool DecalRoad::containsPoint( const Point3F &worldPos, U32 *nodeIdx ) const
    Point2F poly[4];
 
    // Look through all edges, does the polygon
-   // formed from adjacent edge's contain the worldPos?
+   // formed from adjacent edges contain the worldPos?
    for ( U32 i = 0; i < mEdges.size() - 1; i++ )
    {
       const RoadEdge &edge0 = mEdges[i];
@@ -887,7 +887,6 @@ bool DecalRoad::containsPoint( const Point3F &worldPos, U32 *nodeIdx ) const
 
          return true;
       }
-
    }
 
    return false;
@@ -928,9 +927,9 @@ U32 DecalRoad::addNode( const Point3F &pos, F32 width )
    return idx;
 }
 
-U32 DecalRoad::insertNode(const Point3F &pos, const F32 &width, const U32 &idx)
+U32 DecalRoad::insertNode(const Point3F &pos, const F32 &width, const U32 &idx,  const char *osmId )
 {
-   U32 ret = _insertNode( pos, width, idx );
+   U32 ret = _insertNode( pos, width, idx, osmId );
 
    _generateEdges();
    scheduleUpdate( GenEdgesMask | ReClipMask | NodeMask );
@@ -1601,7 +1600,7 @@ U32 DecalRoad::_addNode( const Point3F &pos, F32 width )
    return mNodes.size() - 1;
 }
 
-U32 DecalRoad::_insertNode( const Point3F &pos, const F32 &width, const U32 &idx )
+U32 DecalRoad::_insertNode( const Point3F &pos, const F32 &width, const U32 &idx,  const char *osmId  )
 {
    U32 ret;
    RoadNode *node;
@@ -1622,7 +1621,9 @@ U32 DecalRoad::_insertNode( const Point3F &pos, const F32 &width, const U32 &idx
    node->point = pos;
    //node->t = -1.0f;
    //node->rot.identity();   
-   node->width = width;     
+   node->width = width;   
+	if (strlen(osmId)>0) 
+		sprintf(node->osmId,"%s",osmId);
 
    return ret;
 }
@@ -1707,6 +1708,10 @@ bool DecalRoad::ptSetTextureLength( void *object, const char *index, const char 
    return false;
 }
 
+S32 DecalRoad::getNodeCount( )
+{
+   return mNodes.size();
+}
 
 // ConsoleMethods
 
@@ -1726,4 +1731,14 @@ DefineEngineMethod( DecalRoad, postApply, void, (),,
                   )
 {
    object->inspectPostApply();
+}
+
+DefineEngineMethod( DecalRoad, containsPoint, bool, (Point3F pos),,
+                   "Check whether road contains a point, if index is not specified it checks the whole road."
+                  )
+{
+	U32 nodeIndex;
+	bool result =  object->containsPoint(pos,&nodeIndex);	
+	Con::printf("Object testing point %f %f result %d  nodeIndex %d",pos.x,pos.y,result,nodeIndex);
+	return result;	
 }

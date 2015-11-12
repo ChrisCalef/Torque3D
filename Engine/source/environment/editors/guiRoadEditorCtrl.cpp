@@ -380,7 +380,7 @@ void GuiRoadEditorCtrl::on3DMouseDown(const Gui3DMouseEvent & event)
 
 				mAddNodeIdx = clickedNodeIdx;
             mMode = mAddNodeMode;
-            mSelNode = mSelRoad->insertNode( tPos, mDefaultWidth, mAddNodeIdx );
+            mSelNode = mSelRoad->insertNode( tPos, mDefaultWidth, mAddNodeIdx, "" );
             mIsDirty = true;
 
 				return;
@@ -414,8 +414,8 @@ void GuiRoadEditorCtrl::on3DMouseDown(const Gui3DMouseEvent & event)
       else
          missionGroup->addObject( newRoad );               
 
-      newRoad->insertNode( tPos, mDefaultWidth, 0 );
-      U32 newNode = newRoad->insertNode( tPos, mDefaultWidth, 1 );
+      newRoad->insertNode( tPos, mDefaultWidth, 0, "" );
+      U32 newNode = newRoad->insertNode( tPos, mDefaultWidth, 1, "" );
 
       // Always add to the end of the road, the first node is the start.
       mAddNodeIdx = U32_MAX;
@@ -462,7 +462,7 @@ void GuiRoadEditorCtrl::on3DMouseDown(const Gui3DMouseEvent & event)
 				submitUndo( "Add Node" );
 				mAddNodeIdx = clickedNodeIdx;
             mMode = mAddNodeMode;
-            mSelNode = mSelRoad->insertNode( tPos, mDefaultWidth, mAddNodeIdx );
+            mSelNode = mSelRoad->insertNode( tPos, mDefaultWidth, mAddNodeIdx, "" );
             mIsDirty = true;
 				setSelectedNode( mSelNode );
 
@@ -488,7 +488,7 @@ void GuiRoadEditorCtrl::on3DMouseDown(const Gui3DMouseEvent & event)
 					// AddNode mode means insert / add a node.
 					//submitUndo( "Add Node" );
 					//F32 width = mSelRoad->getNodeWidth( mSelNode );
-					U32 newNode = mSelRoad->insertNode( tPos, mDefaultWidth, mAddNodeIdx);
+					U32 newNode = mSelRoad->insertNode( tPos, mDefaultWidth, mAddNodeIdx, "");
                mIsDirty = true;
 					setSelectedNode( newNode );
 
@@ -506,7 +506,7 @@ void GuiRoadEditorCtrl::on3DMouseDown(const Gui3DMouseEvent & event)
          F32 width = ( w0 + w1 ) * 0.5f;
 
          submitUndo( "Insert Node" );
-         U32 newNode = mSelRoad->insertNode( tPos, width, insertNodeIdx + 1);  
+         U32 newNode = mSelRoad->insertNode( tPos, width, insertNodeIdx + 1, "");  
          mIsDirty = true;
          setSelectedNode( newNode );
 

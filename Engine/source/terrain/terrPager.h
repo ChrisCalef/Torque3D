@@ -23,6 +23,9 @@
 #ifndef _MESHROAD_H_
 #include "environment/meshRoad.h"
 #endif
+#ifndef _DECALROAD_H_
+#include "environment/decalRoad.h"
+#endif
 #ifndef _CONCRETEPOLYLIST_H_
 #include "collision/concretePolyList.h"
 #endif
@@ -86,7 +89,8 @@ struct loadTerrainData
 
 struct osmNode
 {
-	int osmId;
+	int oseId;
+	char osmId[16];
 	float longitude;
 	float latitude;
 };
@@ -95,8 +99,10 @@ struct osmWay
 {
 	std::string type;
 	std::string name;
+	char osmId[16];
 	Vector <osmNode> nodes;
-	MeshRoad *road;
+	//MeshRoad *road;
+	DecalRoad *road;
 };
 
 // The TerrainPager organizes large numbers of stored terrain tiles and skyboxes, as well as the ability 
@@ -128,8 +134,8 @@ public:
 	Vector<ForestItemData *>mForestItemData;//Vector of pointers to forest item datablocks, so we can keep track of them. 
 	F32 mTreeRadiusMult;//Modifies the amount of space trees take up, to create sparser or denser forests.
 
-	std::map <int,osmWay> mStreets;
-	std::map <int,osmWay> mActiveStreets;
+	std::map <long,osmWay> mRoads;
+	std::map <long,osmWay> mActiveRoads;
 	std::map <int,TSStatic*> mStaticShapes;//All we need right now is oseId, to know whether we've loaded this shape, but let's keep a pointer.
 
    MRandom mRandom;
@@ -240,10 +246,11 @@ public:
 	void loadOSM(const char*,const char*);
 	void makeStaticShapes();
 	void saveStaticShapes();
+
 	void findStreetNodes();
-	void findStreetNodesCell(Point2F);
-	void makeStreets();
-	void pruneStreets();
+	void makeRoads();
+	void pruneRoads();
+	void saveRoads();
 
 	Point3F convertLatLongToXYZ(Point3F pos);
 	Point3F convertLatLongToXYZ(double longitude,double latitude, float altitude);
@@ -261,8 +268,9 @@ public:
 	void checkForest();
 	void fillForest();
 	//void updateForest();
-
+	const char *escapeSingleQuotes(std::string *myString);//guess I have to do this myself...
 	//bool pointWithinPoly(const ConcretePolyList::Poly &poly, const Point3F &point);//Courtesy of Kevin Ryan of Top Meadow Inc.
+	
 };
 /*
 	////////////////////////////////////////////////////////////

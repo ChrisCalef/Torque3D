@@ -620,6 +620,9 @@ MeshRoad::MeshRoad()
 	mMatInst[Top] = NULL;
    mMatInst[Bottom] = NULL;
    mMatInst[Side] = NULL;
+
+	mOseId = 0;
+	sprintf(mOsmId,"");
 }
 
 MeshRoad::~MeshRoad()
@@ -658,6 +661,13 @@ void MeshRoad::initPersistFields()
          "Do not modify, for internal use." );
 
    endGroup( "Internal" );
+	
+   addGroup( "openSimEarth" );
+	
+      addField( "oseId", TypeS32,  Offset( mOseId, MeshRoad ), "openSimEarth id." );
+      addField( "osmId", TypeString,  Offset( mOsmId, MeshRoad ), "OpenStreetMap id." );
+
+   endGroup( "openSimEarth" );
 
    Parent::initPersistFields();
 }
@@ -830,7 +840,7 @@ void MeshRoad::prepRenderImage( SceneRenderState* state )
 		
       BaseMatInstance *matInst;
       for ( U32 i = 0; i < SurfaceCount; i++ )
-      {             
+      {
          matInst = state->getOverrideMaterial( mMatInst[i] );   
          if ( !matInst )
             continue;
@@ -2142,9 +2152,9 @@ void MeshRoad::buildNodesFromList( MeshRoadNodeList* list )
    _regenerate();
 }
 
-U32 MeshRoad::insertNode( const Point3F &pos, const F32 &width, const F32 &depth, const VectorF &normal, const U32 &idx )
+U32 MeshRoad::insertNode( const Point3F &pos, const F32 &width, const F32 &depth, const VectorF &normal, const U32 &idx, const char *osmId )
 {
-   U32 ret = _insertNode( pos, width, depth, normal, idx );
+   U32 ret = _insertNode( pos, width, depth, normal, idx, osmId );
 
    regenerate();
 
@@ -2351,7 +2361,7 @@ U32 MeshRoad::_addNode( const Point3F &pos, const F32 &width, const F32 &depth, 
    return mNodes.size() - 1;
 }
 
-U32 MeshRoad::_insertNode( const Point3F &pos, const F32 &width, const F32 &depth, const VectorF &normal, const U32 &idx )
+U32 MeshRoad::_insertNode( const Point3F &pos, const F32 &width, const F32 &depth, const VectorF &normal, const U32 &idx, const char *osmId )
 {
    U32 ret;
    MeshRoadNode *node;
@@ -2373,6 +2383,8 @@ U32 MeshRoad::_insertNode( const Point3F &pos, const F32 &width, const F32 &dept
    node->depth = depth;
    node->width = width;     
    node->normal = normal;
+	if (strlen(osmId)>0)
+		sprintf(node->osmId,"%s",osmId);
 
    return ret;
 }
@@ -2459,4 +2471,27 @@ DefineEngineMethod( MeshRoad, postApply, void, (),,
                    )
 {
    object->inspectPostApply();
+}
+
+DefineEngineMethod( MeshRoad, getSegmentCount, S32, (),,
+                   "Return total segment count."
+                   )
+{
+   return object->getSegmentCount();
+}
+
+////////////////////// openSimEarth //////////////////////////////////
+
+const char *MeshRoad::getNodeOsmId(S32 idx)
+{
+	
+   if ( mNodes.size() - 1 < idx )
+      return 0;
+
+   return mNodes[idx].osmId;
+}
+
+DefineEngineMethod( MeshRoad, getNodeOsmId, const char *, (S32 id),,"Return OpenStreetMap ID.")
+{
+   return object->getNodeOsmId(id);
 }

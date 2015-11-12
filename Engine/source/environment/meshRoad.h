@@ -230,6 +230,10 @@ struct MeshRoadNode
    F32 depth;
 
    VectorF normal;   
+
+	//openSimEarth
+	char osmId[18];//Can't handle the long longs, converting to char for use in C++, convert back to int in SQLite
+	bool isDirty;
 };
 
 typedef Vector<MeshRoadNode> MeshRoadNodeVector;
@@ -476,7 +480,7 @@ public:
 
    void buildNodesFromList( MeshRoadNodeList* list );
 
-   U32 insertNode( const Point3F &pos, const F32 &width, const F32 &depth, const Point3F &normal, const U32 &idx );
+   U32 insertNode( const Point3F &pos, const F32 &width, const F32 &depth, const Point3F &normal, const U32 &idx, const char *osmId = "" );
    U32 addNode( const Point3F &pos, const F32 &width, const F32 &depth, const Point3F &normal );   
    void deleteNode( U32 idx );
 
@@ -518,7 +522,7 @@ protected:
 
    void _debugRender( ObjectRenderInst *ri, SceneRenderState *state, BaseMatInstance* );
 
-   U32 _insertNode( const Point3F &pos, const F32 &width, const F32 &depth, const Point3F &normal, const U32 &idx );
+   U32 _insertNode( const Point3F &pos, const F32 &width, const F32 &depth, const Point3F &normal, const U32 &idx, const char *osmId );
    U32 _addNode( const Point3F &pos, const F32 &width, const F32 &depth, const Point3F &normal );
 
    void _regenerate();
@@ -561,6 +565,13 @@ protected:
    Convex* mConvexList;
    Vector<MeshRoadConvex*> mDebugConvex;
    PhysicsBody *mPhysicsRep;
+
+public:
+
+	//openSimEarth
+	S32 mOseId;//Keep this too, just in case.
+	char mOsmId[18];
+	const char *getNodeOsmId(S32 idx);
 };
 
 
