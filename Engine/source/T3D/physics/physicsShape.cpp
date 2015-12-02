@@ -42,9 +42,18 @@
 #include "lighting/lightQuery.h"
 #include "console/engineAPI.h"
 #include "console/SQLiteObject.h"
+#include "T3D/camera.h"
+#include "T3D/player.h"
+#include <time.h>
+
+#ifndef _VEHICLEDATASOURCE_H_
+	#include "sim/dataSource/vehicleDataSource.h"
+#endif
 
 using namespace Torque;
 
+Point3F gPlanePos = Point3F(0,0,0);
+MatrixF gPlaneMat = MatrixF(true);
 
 bool PhysicsShape::smNoCorrections = false;
 bool PhysicsShape::smNoSmoothing = false;
@@ -266,7 +275,7 @@ void PhysicsShapeData::onRemove()
 
 void PhysicsShapeData::_onResourceChanged( const Torque::Path &path )
 {
-	if ( path != Path( shapeName ) )
+	if ( path != Torque::Path( shapeName ) )
       return;
 
    // Reload the changed shape.
@@ -426,26 +435,29 @@ PhysicsShape::PhysicsShape()
       mAmbientThread( NULL ),
       mAmbientSeq( -1 ),
       mCurrentSeq( -1 ),
-	  mHasGravity( true ),
-	  mIsDynamic( true ),
-	  mIsArticulated( false ),
-	  mIsRecording( false ),
-	  mSaveTranslations( false ),
-	  mCurrentTick( 0 ),
-	  mStartPos( Point3F(0,0,0) ),//maybe use mResetPos for this?
-	  mRecordSampleRate( 3 ),
-	  mRecordCount( 0 ),
-	  mShapeID( -1 ),
-	  mSceneID( -1 ),
-	  mSceneShapeID( -1 )	   
+		mContactBody( -1 ),
+		mHasGravity( true ),
+		mIsDynamic( true ),
+		mIsArticulated( false ),
+		mIsRecording( false ),
+		mUseDataSource( false ),
+		mIsGroundMoving( false ),
+		mSaveTranslations( false ),
+		mCurrentTick( 0 ),
+		mLastThreadPos( 0 ),
+		mStartPos( Point3F(0,0,0) ),//maybe use mResetPos for this?
+		mCurrentForce( Point3F(0,0,0) ),
+		mRecordSampleRate( 1 ),
+		mRecordCount( 0 ),
+		mShapeID( -1 ),
+		mSceneID( -1 ),
+		mSceneShapeID( -1 )	   
 {
    mNetFlags.set( Ghostable | ScopeAlways );
    mTypeMask |= DynamicShapeObjectType;
-   mContactBody = -1;
-   mIsGroundMoving = false;
-   mLastThreadPos = 0.0;
    mLastGroundTrans = Point3F::Zero;
    mLastGroundRot = QuatF::Identity;
+	mDataSource = NULL;
 }
 
 PhysicsShape::~PhysicsShape()
@@ -466,7 +478,7 @@ void PhysicsShape::consoleInit()
      "@brief Determines if client-side shapes will attempt to smoothly transition to "
      "their new position after reciving a correction.\n\n"
      "If true, shapes will immediately render at the position they are corrected to.\n\n");
-
+	
    Parent::consoleInit();   
 }
 
@@ -489,6 +501,9 @@ void PhysicsShape::initPersistFields()
 
 	  addField( "sceneID", TypeS32, Offset( mSceneID, PhysicsShape ),
 		  "@brief Database ID for this scene.\n\n");
+	  
+	  addField( "useDataSource", TypeBool, Offset( mUseDataSource, PhysicsShape ),
+		  "@brief Get shape transform via realtime feed from a vehicleDataSource.\n\n");
 
    endGroup( "PhysicsShape" );
 
@@ -669,6 +684,10 @@ bool PhysicsShape::onAdd()
       Con::errorf( "PhysicsShape::onAdd() - Shape creation failed!" );
       return false;
    }
+	
+   if (mUseDataSource)
+	   mDataSource = new vehicleDataSource(true);
+
 
    // The reset position is the transform on the server
    // at creation time... its not used on the client.
@@ -1037,7 +1056,7 @@ bool PhysicsShape::_createShape()
 		   //Con::printf("Pushing back a physics body, isServer %d",isServerObject());
 		   mPhysicsBodies.push_back(partBody);
 
-		   mLastTrans.push_back(MatrixF(true));// During kinematic animation we use these so we can find
+		   mLastTrans.push_back(MatrixF(true));// During kinematic animation we use these
 		  
 		   mStates.increment();
 		   if (mIsDynamic) partBody->getState(&(mStates.last()));
@@ -1262,7 +1281,6 @@ DefineEngineMethod( PhysicsShape, setIsRecording, void, (bool isRecording),,
 	return;
 }
 
-
 S32 PhysicsShape::getRecordingSize()
 {
 	S32 size;
@@ -1291,6 +1309,36 @@ void PhysicsShape::recordTick()
 		return;//For now, all important physics is being done on the client.
 
 	mRecordCount++;
+	bool kRelativePosition = true; 
+	Point3F kDiff,kPos;
+	if (mPhysicsBodies.size()==0)
+	{//FIX!! redundancy with following physics based logic, merge and refactor
+		if (!(mRecordCount % mRecordSampleRate))
+		{
+			mNodeTranslations.increment();
+			QuatF kRot = mRecordInitialOrientation;
+			kRot.inverse();
+			MatrixF bodyTransform = getTransform();
+			if (kRelativePosition)
+			{//TEMP - kRelativePosition: trying to figure out what will work for iClone.  Doesn't rotate  
+				//bvh position when you rotate actor.			
+				kDiff = bodyTransform.getPosition() - mRecordInitialPosition;
+				kRot.mulP(kDiff,&kPos);
+				//Con::printf("kPos recording relative: %3.2f %3.2f %3.2f, initial %3.2f %3.2f %3.2f",kPos.x,kPos.y,kPos.z,
+				//	mRecordInitialPosition.x,mRecordInitialPosition.y,mRecordInitialPosition.z);
+			} else {
+				kPos = bodyTransform.getPosition();
+				//Con::printf("kPos recording: %3.2f %3.2f %3.2f",kPos.x,kPos.y,kPos.z);
+			}
+			kPos /= mObjScale;
+			mNodeTranslations[mNodeTranslations.size()-1] = kPos;
+
+			QuatF q(bodyTransform);
+			mNodeRotations.increment();
+			mNodeRotations[mNodeRotations.size()-1].set(q);
+
+		}
+	}
 	//Con::printf("recording tick! mRecordCount %d, orderNodes %d",mRecordCount,mOrderNodes.size());
 	if (!(mRecordCount % mRecordSampleRate)&&(mIsArticulated))// Should make this possible for non articulated
 	{																	//shapes as well, and also for the server sim in that case.
@@ -1304,7 +1352,7 @@ void PhysicsShape::recordTick()
 		QuatF kRot = mRecordInitialOrientation;
 		kRot.inverse();
 		//NOW: make the conversion to global position happen 
-		bool kRelativePosition = true;    //ONLY at export time.
+		  //ONLY at export time.
 		//bool kRelativePosition = dynamic_cast<nxPhysManager*>(mPM)->mSceneRecordLocal;
 		MatrixF bodyTransform;
 		mPhysicsBodies[0]->getTransform(&bodyTransform);
@@ -1390,8 +1438,8 @@ void PhysicsShape::recordTick()
 			if (i==0) {
 				QuatF q;
 				tempRots[mOrderNodes[i]].getQuatF(&q);
-				Con::printf("nodeRot [0]: %f %f %f %f",
-					q.x,q.y,q.z,q.w);
+				//Con::printf("nodeRot [0]: %f %f %f %f",
+				//	q.x,q.y,q.z,q.w);
 			}
 			////nodeRotations[nodeRotations.size()-1] = tempRots[i];//same as old way, just testing first step
 
@@ -1446,6 +1494,8 @@ void PhysicsShape::makeSequence(const char *seqName)
 		return;
 	}
 	
+	Con::printf("client object trying to make sequence. nodeTranslations: %d  nodeRotations %d",mNodeTranslations.size(),mNodeRotations.size());
+	
 	U32 importGround = 0;
 	S32 numRealKeyframes;
    TSShape *kShape = mDataBlock->shape;
@@ -1489,12 +1539,17 @@ void PhysicsShape::makeSequence(const char *seqName)
 	kShape->sequences.increment();
 	TSShape::Sequence & seq = kShape->sequences.last();
 	constructInPlace(&seq);
+	S32 numKeys;
+	if (mPhysicsBodies.size()>0) 
+		numKeys = mNodeRotations.size() / mPhysicsBodies.size();//This should be safe no matter what.
+	else
+		numKeys = mNodeRotations.size();
 
-	S32 numKeys = mNodeRotations.size() / mPhysicsBodies.size();//This should be safe no matter what.
 	if (kRelativePosition)
 		seq.numKeyframes = numKeys;//nodeTranslations.size();//safe (NO LONGER) because only base node has translations, one per keyframe.
 	else//NOW - for iClone, adding ten frames at the beginning to interpolate out from (0,0,0) to starting position.
 		seq.numKeyframes = numKeys + 10;//nodeTranslations.size() + 10;
+
 	seq.duration = (F32)seq.numKeyframes * (TickSec*mRecordSampleRate);
 	seq.baseRotation = kShape->nodeRotations.size();
 	seq.baseTranslation = kShape->nodeTranslations.size();
@@ -1608,8 +1663,11 @@ void PhysicsShape::makeSequence(const char *seqName)
 	//U32 kTotalParts = mNumBodyParts;//for i=0 - numBodyparts, if (mWeapons[i]) kTotalParts++;
 	//if (mWeapon) kTotalParts++;//((mWeapon)&&(mWeaponBodypart->mPartID>=0))
 	//if (mWeapon2) kTotalParts++;//((mWeapon2)&&(mWeapon2Bodypart->mPartID>=0))
+	U32 bones = 1;
+	if (mPhysicsBodies.size()>0)
+		bones = mPhysicsBodies.size();
 
-	for(U32 j=0;j<mPhysicsBodies.size();j++)
+	for(U32 j=0;j<bones;j++)//mPhysicsBodies.size()
 	{
 		if ((!kRelativePosition)&&(!importGround))
 		{
@@ -1626,9 +1684,9 @@ void PhysicsShape::makeSequence(const char *seqName)
 
 			//TEMP
 			kShape->nodeRotations.increment();
-			kShape->nodeRotations[kShape->nodeRotations.size()-1] = mNodeRotations[(i*mPhysicsBodies.size())+j];
+			kShape->nodeRotations[kShape->nodeRotations.size()-1] = mNodeRotations[(i*bones)+j];
 			
-			QuatF qF = mNodeRotations[(i*mPhysicsBodies.size())+j].getQuatF();
+			QuatF qF = mNodeRotations[(i*bones)+j].getQuatF();
 			//Con::printf("  final nodeRots, bodypart %d:  %f %f %f %f",j,qF.x,qF.y,qF.z,qF.w);
 			//kShape->nodeRotations[kShape->nodeRotations.size()-1] = nodeRotations[(i*mNumBodyParts)+j];
 		}
@@ -1829,7 +1887,33 @@ void PhysicsShape::processTick( const Move *move )
    // Note that unlike TSStatic, the serverside PhysicsShape does not
    // need to play the ambient animation because even if the animation were
    // to move collision shapes it would not affect the physx representation.
-
+	Point3F pos = getPosition();
+	//if (isServerObject())
+	//	Con::printf("Server physics shape ticking! datablock %s position %f %f %f",mDataBlock->getName(),pos.x,pos.y,pos.z);
+	//if (mCurrentTick==0)
+	//{//TEMP: dealing with situations where we start with momentum and dynamic = true. Clear bodyparts and add forces.
+		//if (!isServerObject())
+		//{//Although perhaps if we go through and set mLastTrans[] to appropriate values, we can have initial velocities and not have
+			//Con::printf("Client physics shape ticking! isArticulated %d pos %f %f %f",mIsArticulated,pos.x,pos.y,pos.z);
+			//for (U32 i=0;i<mPhysicsBodies.size();i++)
+			//{
+			//	mCurrentForce = dynamic_cast<PhysicsShape*>(getServerObject())->mCurrentForce;
+			//	Point3F forceModifier = mCurrentForce * -10;//Times minus 1 to flip it, and then reduce to taste. TEMP TEMP TEMP, testing.
+			//	MatrixF tempTrans;
+			//	mPhysicsBodies[i]->getTransform(&tempTrans);
+			//	mLastTrans[i].setPosition(tempTrans.getPosition() + forceModifier);//maybe?
+			//	Con::printf("last trans pos %f %f %f",mLastTrans[i].getPosition().x,mLastTrans[i].getPosition().y,mLastTrans[i].getPosition().z);
+			//}
+			//setDynamic(true);//to bother with adding forces to body parts explicitly.
+			//Con::printf("Client physics shape ticking! datablock %s position %f %f %f bodyparts %d currentTick %d",mDataBlock->getName(),
+			//				pos.x,pos.y,pos.z,mPhysicsBodies.size(),mCurrentTick);
+			//for (U32 i=0;i<mPhysicsBodies.size();i++)
+			//	Con::printf("physicsBody[%d] isDynamic %d",i,mPhysicsBodies[i]->getMass(),mPhysicsBodies[i]->isDynamic());
+		//}
+	//} else {
+	//if (!isServerObject()) Con::printf("client object %d ticking %d physicsrep isDynamic %d isArticulated %d",
+	//									getId(),mCurrentTick,mPhysicsRep->isDynamic(),mIsArticulated);
+	//}
    mCurrentTick++;
    TSShape *kShape = mShapeInst->getShape();
 
@@ -1837,7 +1921,134 @@ void PhysicsShape::processTick( const Move *move )
    if (mIsRecording)
 	   recordTick();
 
-   //Now, this really belongs somewhere over in the ts directory, it is not related to physics at all, but for now testing it here.
+	 if (isClientObject())//((mUseDataSource ) && (isServerObject()))
+	 {
+		 bool firstTime = false;
+		 if (!mDataSource)
+		 {
+			 mDataSource = new vehicleDataSource(true);
+			 firstTime = true;
+			 Con::printf("creating new vehicleDataSource, first pass!!!!!!");
+		 }
+
+		 mDataSource->tick();
+		 
+		 QuatF dsQuat;
+		 dsQuat = QuatF(mDataSource->mFGTransform);
+		 Point3F dsPos =  mDataSource->mFGTransform.getPosition();
+		 Point3F currPos = getPosition();
+		 MatrixF trans;
+		 dsQuat.setMatrix(&trans);
+		 trans.setPosition(dsPos);
+
+		 //TEMP: this is for initial FG models, off on Z by ninety degrees. FIX THE MODELS
+		 MatrixF ninetyFix(EulerF(0,0,M_PI/2));
+		 trans *= ninetyFix;
+
+		 //mRenderState[1].position = dsPos;
+		 //mRenderState[1].orientation = dsQuat;//??? I have no idea how these work
+		 setTransform(trans);
+		 Parent::setTransform( trans );
+		 //Everything below this point is physics or groundMove related, so irrelevant if we are using a data source. 
+		 
+		 PhysicsShape *servObj = (PhysicsShape*)getServerObject();
+		 servObj->setTransform( trans );		 
+		 servObj->setMaskBits( StateMask );
+
+		 //Con::printf("helicopter data source, pos %f %f %f currPos %f %f %f",dsPos.x,dsPos.y,dsPos.z,currPos.x,currPos.y,currPos.z);
+		 
+		 //NOW: what would happen if we took this opportunity to override the player's camera and force it to  
+		 //follow us around as a chase cam instead? Probably horrible eye bleeding fight between this and the 
+		 //normal player camera function, until I hook up turning it off with turning this on.
+		 
+		 Vector<SceneObject*> kCameras;
+		 Vector<SceneObject*> kPlayers;
+		 Box3F bounds;
+		 Point3F clientPos;
+		 bool freeCamera;
+		 Player *myPlayer;
+		 Camera *myCamera;
+
+		 bounds.set(Point3F(-FLT_MAX,-FLT_MAX,-FLT_MAX),Point3F(FLT_MAX,FLT_MAX,FLT_MAX));
+		 gServerContainer.findObjectList(bounds, CameraObjectType, &kCameras);
+		 gServerContainer.findObjectList(bounds, PlayerObjectType, &kPlayers);
+		 for (U32 i=0;i<kPlayers.size();i++)
+		 {
+			 myPlayer = (Player *)(kPlayers[i]);
+			 Point3F playerPos = myPlayer->getPosition();
+			 if (kCameras.size()>0)
+			 {
+				 myCamera = dynamic_cast<Camera *>(kCameras[i]);//... sort out which belongs to controlling client.
+				 Point3F cameraPos = myCamera->getPosition();
+				 GameConnection *cameraClient = myCamera->getControllingClient();
+				 GameConnection *playerClient = myPlayer->getControllingClient();
+				 if (cameraClient) 
+				 {
+					 freeCamera = true;
+					 clientPos = cameraPos;
+				 } else if (playerClient) {
+					 freeCamera = false;
+					 clientPos = playerPos;
+				 } 
+			 } else {
+				 clientPos = playerPos;
+			 }
+		 } 
+		 if ((freeCamera))//&&(firstTime)
+		 {//Let's handle free camera first, you'll have to hit F8 before Alt F for this to work.
+			 //myCamera->setTrackObject(this,Point3F(0,0,2.0));
+			 Point3F offset(15.0,0,3.0);//(0,0,1,0)
+			 Point3F rotOffset;			 	
+			 MatrixF newTrans(trans);
+			 Point3F transPos = trans.getPosition();
+			 newTrans.setPosition(Point3F(0,0,0));
+			 newTrans.mulP(offset,&rotOffset);
+			 //Con::printf("rotOffset %f %f %f trans pos %f %f %f",rotOffset.x,rotOffset.y,rotOffset.z,transPos.x,transPos.y,transPos.z);
+			 Point3F camPos = transPos + rotOffset;
+			 
+			 //Point3F lastPos = clientPos;
+			 //Point3F camVel = camPos - lastPos;
+			 //camVel *= 32; //Because velocity will be in meters per second, and we are ticking 32 times per second.
+			 //myCamera->setVelocity(camVel);//Not entirely sure we're really accomplishing anything here though.
+			 //And the answer is NOPE, whatever you set this to has no impact.
+
+			 newTrans *= MatrixF(EulerF(0,0,-M_PI/2.0));//TEMP: fix the camera transform for the FG planes' 90 degree problem.
+
+			 myCamera->setTransform4x4(newTrans);//Use our new function that attempts to stuff the actual matrix	
+			 myCamera->setPosition(camPos);
+			 
+			 gPlanePos = camPos;
+			 gPlaneMat = newTrans;
+
+			 //Con::printf("setting camPos: %f %f %f server %d",camPos.x,camPos.y,camPos.z,myCamera->isServerObject());
+			 //EulerF kRot = newTrans.toEuler();
+			 //myCamera->setRotation(kRot);
+			 
+			 //gClientContainer.findObjectList(bounds, CameraObjectType, &kCameras);
+			 //if (kCameras.size()>0)
+			 //{
+				 //myCamera = dynamic_cast<Camera *>(kCameras[0]);
+				 //myCamera->setTransform4x4(newTrans);
+				 //myCamera->setPosition(camPos);
+				 //Con::printf("setting client camPos %f %f %f clock %d !!!!!!!!!!!!!!!!!!!!!!!!!!",camPos.x,camPos.y,camPos.z,clock());
+			 //}
+
+			 //one way, using limited rotation looking.
+			 //myCamera->setPosition(camPos);
+			 //myCamera->setVelocity(camVel);
+			 //myCamera->lookAt(trans.getPosition());
+
+
+			 //myCamera->setRenderTransform(trans);
+		 } else {
+			 //handle player camera
+		 }
+
+		 return;
+	 }
+
+	 ////////////////////////////////////////////////////////////////////////////////////////////////////
+   //GroundMove: really belongs in the ts directory, or somewhere else, not related to physics, but testing it here.
    if ( (mIsGroundMoving) && (mCurrentSeq>=0) && !isServerObject() && (!mIsDynamic ) )
    {
 	   TSSequence currSeq = kShape->sequences[mCurrentSeq];
@@ -1855,7 +2066,7 @@ void PhysicsShape::processTick( const Move *move )
 		   mLastGroundTrans = Point3F::Zero;
 		   //mLastGroundRot = MatrixF::Identity;
 	   }
-
+		
 	   Point3F tempPos,finalPos,groundPos;
 	   tempPos = pos + mulGroundTrans - mLastGroundTrans;
 
@@ -1878,10 +2089,12 @@ void PhysicsShape::processTick( const Move *move )
 	   mLastThreadPos = mAmbientThread->getPos();
    } 
 
+
    ///////////////////////////////////////////////////////////////////
    //If kinematic, we need to drive physics bodyparts with nodeTransforms data.
-   if ( !mPhysicsRep->isDynamic() )//This is testing the server physics body btw, which is kinda weird.
-   {
+   if ( !mPhysicsRep->isDynamic() )
+   {												
+		//Con::printf("mPhysicsRep is kinematic!");
 	   if ( isClientObject() && mIsArticulated ) 
 	   {
 		   MatrixF m1,m2;
@@ -1946,7 +2159,8 @@ void PhysicsShape::processTick( const Move *move )
    }
    ///////////////////////////////////////////////////////////////////
    // Else if dynamic, we need to drive nodeTransforms with physics.
-   if ( PHYSICSMGR->isSinglePlayer() && isClientObject() && getServerObject() )
+	
+	if (  isClientObject() && getServerObject() )//PHYSICSMGR->isSinglePlayer() &&
    {  //SINGLE PLAYER HACK!!!!
       PhysicsShape *servObj = (PhysicsShape*)getServerObject();
 	  if (!mIsDynamic)//relevant in any way?? this is our own bool, not testing physics body directly as above...
@@ -1965,7 +2179,6 @@ void PhysicsShape::processTick( const Move *move )
 		  //mShapeInst is our TSShapeInstance pointer.
 		  Point3F defTrans,newPos,globalPos,mulPos;
 		  MatrixF m1,m2;
-
 		  for (U32 i=0;i<mPhysicsBodies.size();i++)
 		  {
 			  mPhysicsBodies[i]->getState(&mStates[i]);
@@ -1995,9 +2208,10 @@ void PhysicsShape::processTick( const Move *move )
 				  //Con::printf("globalPos: %f %f %f  defTrans %f %f %f, newPos %f %f %f, mulPos %f %f %f",
 					//  globalPos.x,globalPos.y,globalPos.z,defTrans.x,defTrans.y,defTrans.z,
 					//  newPos.x,newPos.y,newPos.z,mulPos.x,mulPos.y,mulPos.z);
-				  m1.setPosition(mulPos - mulDefTrans);
-				  //Con::printf("setting hip node,  mulPos %f %f %f, newPos %f %f %f, globalPos %f %f %f",
-				//	 mulPos.x,mulPos.y,mulPos.z,newPos.x,newPos.y,newPos.z,globalPos.x,globalPos.y,globalPos.z);
+				  Point3F finalPos = mulPos - mulDefTrans;
+				  m1.setPosition(finalPos);
+				  //Con::printf("setting hip node,  finalPos %f %f %f, globalPos %f %f %f",
+					// finalPos.x,finalPos.y,finalPos.z,globalPos.x,globalPos.y,globalPos.z);
 				  mShapeInst->mNodeTransforms[mBodyNodes[i]] = m1;
 
 			  } else { //all other nodes, position is relative to parent
@@ -2008,6 +2222,7 @@ void PhysicsShape::processTick( const Move *move )
 				  m1 = invShapeTransform * m1;
 				  m1.setPosition(newPos);
 				  mShapeInst->mNodeTransforms[mBodyNodes[i]] = m1;
+				  //Con::printf("setting node transform %f %f %f",newPos.x,newPos.y,newPos.z);
 			  }
 		  }
 
@@ -2030,12 +2245,11 @@ void PhysicsShape::processTick( const Move *move )
 				  }
 			  }
 		  }
-	  }
+	  } 
       return;
    }
 
-
-
+END:
    // Store the last render state.
    mRenderState[0] = mRenderState[1];
 
@@ -2056,6 +2270,7 @@ void PhysicsShape::processTick( const Move *move )
 		   {
 			   mPhysicsRep->getState( &mState );
 			   _updateContainerForces();
+				Con:printf("got a mState");
 		   } //else { // This is where we could extrapolate. (?)  //}
 	   } else {
 		   //do nothing?
@@ -2072,16 +2287,20 @@ void PhysicsShape::processTick( const Move *move )
 
 	   // If we haven't been sleeping then update our transform
 	   // and set ourselves as dirty for the next client update.
-	   if ( !wasSleeping || !mState.sleeping )
+	   if ( !wasSleeping || !mState.sleeping )//TEMP
 	   {
 		   // Set the transform on the parent so that
 		   // the physics object isn't moved.
 		   if ((!mIsArticulated)||isServerObject())
+			{
 			   Parent::setTransform( mState.getTransform() );
+				Con::printf("setting parent transform!");
+			}
 		   else 
 		   {
 			   mPhysicsBodies[0]->getState( &mState );
 			   Parent::setTransform( mState.getTransform() );
+				Con::printf("setting parent transform!");
 		   }
 
 		   // If we're doing server simulation then we need
@@ -2339,7 +2558,7 @@ void PhysicsShape::setDynamic(bool isDynamic)
 			clientShape->setDynamic(isDynamic);
 			return;
 		}
-
+		//Con::printf("Client object setting dynamic, articulated %d",mIsArticulated);
 		if (!mIsArticulated)
 		{
 			mPhysicsRep->setDynamic(isDynamic);
@@ -2357,20 +2576,21 @@ void PhysicsShape::setDynamic(bool isDynamic)
 
 					posVel *= 32;//Times tick rate per second
 					mPhysicsBodies[i]->setLinVelocity(posVel);
+					//Con::printf("setting body %d with linVel %f %f %f",i,posVel.x,posVel.y,posVel.z);
+					
+					//if (0)//hmm, did I even finish this? where is curTrans coming from?
+					//{
+					//	EulerF angVel;
+					//	mLastTrans[i].invertTo(&invLastTrans);
+					//	diffTrans = curTrans * invLastTrans;
+					//	angVel = diffTrans.toEuler();
 
-					if (0)//hmm, did I even finish this? where is curTrans coming from?
-					{
-						EulerF angVel;
-						mLastTrans[i].invertTo(&invLastTrans);
-						diffTrans = curTrans * invLastTrans;
-						angVel = diffTrans.toEuler();
-
-						//angVel *= 180.0/M_PI;//Maybe?
-						angVel *= 32;//Times tick rate per second.
-						mPhysicsBodies[i]->setAngVelocity(angVel);
-						Con::printf("setting velocities: lin %f %f %f  ang %f %f %f",posVel.x,posVel.y,posVel.z,angVel.x,angVel.y,angVel.z);
-						//Very difficult to see effect, but setAngVelocity does work. Not sure how to turn it up.
-					}
+					//	//angVel *= 180.0/M_PI;//Maybe?
+					//	angVel *= 32;//Times tick rate per second.
+					//	mPhysicsBodies[i]->setAngVelocity(angVel);
+					//	Con::printf("setting velocities: lin %f %f %f  ang %f %f %f",posVel.x,posVel.y,posVel.z,angVel.x,angVel.y,angVel.z);
+					//	//Very difficult to see effect, but setAngVelocity does work. Not sure how to turn it up.
+					//}
 				}
 			}
 		}
@@ -2422,7 +2642,8 @@ void PhysicsShape::setPosition(Point3F pos)
 	if (isServerObject())
 	{        //SINGLE PLAYER HACK
 		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-		clientShape->setPosition(pos);
+		if (clientShape) 
+			clientShape->setPosition(pos);
 		//So weird, can't find MoveMask anymore?? How and where does Torque handle normal move ghosting again? Hmmm
 	}
 
@@ -2650,6 +2871,8 @@ bool PhysicsShape::loadSequence(const char *dsqPath)
 	
 }
 
+
+//////////////////////////////////////////////////////////////////////////////////////////
 DefineEngineMethod( PhysicsShape, loadSequence, void, (const char *path),,
    "@brief.\n\n")
 {  
@@ -2747,6 +2970,7 @@ DefineEngineMethod( PhysicsShape, applyImpulse, void, (Point3F pos,Point3F vec),
 DefineEngineMethod( PhysicsShape, applyImpulseToPart, void, (S32 partIndex,Point3F pos,Point3F vec),,
    "@brief Applies vec impulse to object at pos.\n\n")
 {
+	Con::printf("applying impulse to part! part %d vec %f %f %f",partIndex,vec.x,vec.y,vec.z);
    object->applyImpulseToPart(partIndex,pos,vec);
 }
 
@@ -2941,4 +3165,19 @@ DefineEngineMethod( PhysicsShape, getSceneID, S32, (),,
    "@brief \n\n")
 {  
 	return object->mSceneID;
+}
+
+
+DefineEngineMethod( PhysicsShape, showNodes, void, (),,
+   "@brief prints all nodes\n\n")
+{  
+	TSShape *kShape = object->mShapeInst->getShape();
+	QuatF q;
+	for (U32 i=0;i<kShape->nodes.size();i++)
+	{
+		q = kShape->defaultRotations[i].getQuatF();
+		Con::printf("nodes[%d] %s parent %d  pos %f %f %f  rot %f %f %f %f len %f",i,kShape->getName(kShape->nodes[i].nameIndex).c_str(),kShape->nodes[i].parentIndex,kShape->defaultTranslations[i].x,
+			kShape->defaultTranslations[i].y,kShape->defaultTranslations[i].z,
+			q.x,q.y,q.z,q.w,kShape->defaultTranslations[i].len());
+	}
 }

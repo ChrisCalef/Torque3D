@@ -136,9 +136,12 @@ void TerrainPager::initPersistFields()
 		
 	addField( "forestRadius", TypeF32, Offset( mForestRadius, TerrainPager ), "Forest radius." );
 	addField( "streetRadius", TypeF32, Offset( mStreetRadius, TerrainPager ), "Street radius." );
-	addField( "forestTries", TypeS32, Offset( mForestTries, TerrainPager ), "How many tries we take to fill a forest cell (increases density, up to amount allowed by treeRadiusMult)." );
+	addField( "forestTries", TypeS32, Offset( mForestTries, TerrainPager ), 
+		"How many tries we take to fill a forest cell (increases density, up to amount allowed by treeRadiusMult)." );
 	addField( "treeRadiusMult", TypeF32, Offset( mTreeRadiusMult, TerrainPager ), "Tree radius multiplier, lower number means denser forest." );
 	addField( "cellGridSize", TypeS32, Offset( mCellGridSize, TerrainPager ), "Cell grid size." );
+	addField( "forestTerrainEdgeDistance", TypeF32, Offset( mForestTerrainEdgeDistance, TerrainPager ), 
+												"Forest edge avoidance distance for terrain tiles in lat/long. (Temporary, terrain edge bug workaround.)" );
 
 	addField( "skyboxRes", TypeS32, Offset( mSkyboxRes, TerrainPager ), "Skybox image resolution." );
 
@@ -155,25 +158,8 @@ void TerrainPager::initPersistFields()
 	Parent::initPersistFields();
 }
 
-	//What the hell? TypeString just does not work?
-	//addField("skyboxPath", TypeString, Offset( mSkyboxPath, TerrainPager ));
-	//addField("terrainPath", TypeString, Offset( mTerrainPath, TerrainPager ));
-
-	//addField( "minHeight", TypeF32, Offset( mMinHeight, TerrainMaster ), "Terrain Matrix min height" );
-	//addField( "maxHeight", TypeF32, Offset( mMaxHeight, TerrainMaster ), "Terrain Matrix max height" );
-	
-	//addField( "tileWidth", TypeF32, Offset( mTileWidth, TerrainPager ), "Tile Width in Meters" );
-	//addField( "squareSize", TypeF32, Offset( mSquareSize, TerrainPager ), "Square Size in Meters" );
-	
-	//addField( "gridSize", TypeS32, Offset( mGridSize, TerrainPager ), "Number (per side) of neighboring terrains in grid surrounding base terrain. Must be an odd integer greater than one." );
-
-	//This perhaps could be automatically calculated using latitude of map center.
-	//addField( "tileWidthLongitude", TypeF32, Offset( mTileWidthLongitude, TerrainPager ), "Map Center, Longitude" );
-	//addField( "tileWidthLatitude", TypeF32, Offset( mTileWidthLatitude, TerrainPager ), "Map Center, Latitude" );
-
 bool TerrainPager::onAdd()
 {
-	//First, load up the decisions that have to come from the user.
 	mD.mMapCenterLongitude = mMapCenterLongitude;
 	mD.mMapCenterLatitude = mMapCenterLatitude;
 
@@ -186,34 +172,6 @@ bool TerrainPager::onAdd()
 
 	if (!mSQL->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
 		Con::printf("TerrainPager: cannot open map db: %s",Con::getVariable("$pref::OpenSimEarth::OSMDB"));
-
-	/*
-	//OpenStreetMap Testing...
-	if (mSQL->OpenDatabase("w130n40.db"))//FIX: make map naming convention using lat-lon coordinates at regular intervals. Ultimate solution:
-				// limit db size to something reasonable, and then use a quadtree system to subdivide larger or smaller regions as needed.
-	{
-		char select_query[512],insert_query[512];
-		int id,result;
-		sqlite_resultset *resultSet;
-
-		sprintf(select_query,"SELECT * FROM osmWay;");
-		result = mSQL->ExecuteSQL(select_query);
-		if (result!=0)
-		{		
-			resultSet = mSQL->GetResultSet(result);
-			Con::printf("OPENED MAP DATABASE: results: %d",resultSet->iNumRows);
-			for (U32 i=0;i<resultSet->iNumRows;i++)
-			{
-				id = dAtoi(resultSet->vRows[i]->vColumnValues[0]);
-				Con::printf("Way  %d  type: %s  name: %s",id,resultSet->vRows[i]->vColumnValues[1],resultSet->vRows[i]->vColumnValues[2]);
-			}
-		} else Con::printf("no results from query");
-	} else Con::printf("failed to open database");
-	*/
-
-
-	//Con::printf("calling TerrainPager::onAdd() mTileLoadRadius %f, mTileDropRadius %f",
-	//	mTileLoadRadius,mTileDropRadius);
 	
 	if ( !Parent::onAdd() )
 		return false;
@@ -1200,8 +1158,7 @@ void TerrainPager::fillForest()
 			{
 				fillForestCell(Point2F(cellPosLatLong.x,cellPosLatLong.y));
 			}
-		}
-		
+		}		
 		for (U32 i=1;i<(loops*2)+1;i++) // Right, top to bottom.
 		{
 			if (i>0) iterCell.y -= mCellWidth;
@@ -1213,8 +1170,7 @@ void TerrainPager::fillForest()
 			{
 				fillForestCell(Point2F(cellPosLatLong.x,cellPosLatLong.y));
 			}
-		}
-		
+		}		
 		for (U32 i=1;i<(loops*2);i++) // Bottom, right to left.
 		{
 			if (i>0) iterCell.x -= mCellWidth;
@@ -1237,11 +1193,9 @@ void TerrainPager::fillForest()
 	if (mClientPos.z-groundZ<8)
 		mForest->updateCollision();
 
-	
 	//big logic and queries ...
 	unsigned int latency = clock() - startTime;
 	Con::printf("fillForest() took %d milliseconds",latency);
-
 }
 
 void TerrainPager::fillForestCell(Point2F cellPosLatLong)
@@ -1276,9 +1230,8 @@ void TerrainPager::fillForestCell(Point2F cellPosLatLong)
 		Point3F randPosCoords = convertXYZToLatLong(randPos);
 		F32 xDiff = fabs(randPosCoords.x-terrainCellCoords.x);
 		F32 yDiff = fabs(randPosCoords.y-terrainCellCoords.y);
-			
-		if ( (xDiff<0.00015) || ((mD.mTileWidthLongitude-xDiff)<0.00015) ||
-					(yDiff<0.00015) || ((mD.mTileWidthLatitude-yDiff)<0.00015) )
+		if ( (xDiff<mForestTerrainEdgeDistance) || ((mD.mTileWidthLongitude-xDiff)<mForestTerrainEdgeDistance) ||
+					(yDiff<mForestTerrainEdgeDistance) || ((mD.mTileWidthLatitude-yDiff)<mForestTerrainEdgeDistance) )
 		{
 			Con::printf("found a position at an edge! height = %f  xDiff %f  yDiff %f tileWidthLong %f",worldCoordZ,xDiff,yDiff,mD.mTileWidthLongitude);
 			continue;//for now, just skip this position
@@ -1483,6 +1436,7 @@ bool TerrainPager::getGroundAt( const Point3F &worldPt, F32 *zValueOut, VectorF 
 	if ( !hit || strcmp(rinfo.object->getClassName(),"TerrainBlock"))
       return false;
    
+	Con::printf("fill forest cell, active roads: %d",mActiveRoads.size());
 	if (mActiveRoads.size()>0)
 	{
 		bool roadCollision = false;
@@ -2525,7 +2479,7 @@ void TerrainPager::makeRoads()
 
 	SimGroup *missionGroup;
 	if ( !Sim::findObject( "MissionGroup", missionGroup ) )               
-		Con::errorf( "TerrainPager - could not find MissionGroup to add new MeshRoad" );
+		Con::errorf( "TerrainPager - could not find MissionGroup to add new DecalRoad" );
 	
 	F32 worldZ;
 	Point3F normalVec;

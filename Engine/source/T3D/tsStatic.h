@@ -38,11 +38,15 @@
 #ifndef _TSSHAPE_H_
     #include "ts/tsShape.h"
 #endif
+#ifndef _PHYSICSSHAPE_H_
+   #include "T3D/physics/physicsShape.h"
+#endif
 
 class TSShapeInstance;
 class TSThread;
 class TSStatic;
 class PhysicsBody;
+class PhysicsShape;
 class PhysicsCloth;
 struct ObjectRenderInst;
 
@@ -237,6 +241,9 @@ public:
 	///// openSimEarth /////
 	U32 mOseId;
 	bool mIsDirty;
+
+	void spitM4s(Point3F pos,Point3F normal,S32 numBodies);
+
 };
 
 typedef TSStatic::MeshType TSMeshType;

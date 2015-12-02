@@ -1318,3 +1318,41 @@ void TSStatic::_disableCloth()
         SAFE_DELETE(mCloth);
     }
 }
+
+
+void TSStatic::spitM4s(Point3F pos,Point3F normal,S32 numBodies)
+{
+	//So, this is a temporary function just to test how to do this more efficiently in the future, and to
+	//accomplish the helicopter skyscraper attack scene for the Portlingrad trailer.
+	//Every hit needs to spit numBodies M4 ragdolls, along the normal vector, give or take a variance.
+	normal.normalize();
+	//Con::printf("trying to spit %d bodies out of %s at %f %f %f, normal %f %f %f",numBodies,getName(),pos.x,pos.y,pos.z,
+	//																		normal.x,normal.y,normal.z);
+	PhysicsShapeData *m4Data = dynamic_cast<PhysicsShapeData*>(Sim::findObject("M4Physics"));
+	if (!m4Data) 
+		return;
+
+	for (U32 i=0;i<numBodies;i++)
+	{
+		PhysicsShape *pShape = new PhysicsShape();
+		pShape->setDataBlock(m4Data);
+
+		pShape->registerObject();
+
+		pShape->setDynamic(true);
+		
+		pShape->setPosition(pos+normal);
+
+		pShape->mCurrentForce = normal;
+
+		Con::executef(pShape,"setBehavior","fallingTree");
+	}
+	//F32 impulseScale = 10.0;
+	//pShape->applyImpulseToPart(2,Point3F(0,0,0),normal*impulseScale);
+}
+
+DefineEngineMethod( TSStatic, spitM4s, void, (Point3F pos,Point3F normal,S32 numBodies),,
+   "@brief.\n\n")
+{
+	object->spitM4s(pos,normal,numBodies);
+}

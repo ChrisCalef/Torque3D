@@ -695,7 +695,7 @@ Vehicle::Vehicle()
    mWorkingQueryBoxCountDown = sWorkingQueryBoxStaleThreshold;
    mPhysicsRep = NULL;
    
-   mUseDataSource = false;//TEMP, put this in the datablock
+   mUseDataSource = false;
 }
 
 U32 Vehicle::getCollisionMask()
@@ -903,19 +903,17 @@ void Vehicle::processTick(const Move* move)
       // Process input move
       updateMove(move);
 
-	  
       // Save current rigid state interpolation
       mDelta.posVec = mRigid.linPosition;
       mDelta.rot[0] = mRigid.angPosition;
 
-	//HMM, not sure where to put this for best results...
+	  //HMM, not sure where to put this for best results...
 	  if ( mUseDataSource )// && isServerObject()
 	  {
 		  //Con::printf("vehicle setting position: %f %f %d",mDataSource->mFGPacket.longitude,mDataSource->mFGPacket.latitude,mDataSource->mFGPacket.altitude);
 		  //setPosition(Point3F(mDataSource->mFGPacket.longitude,mDataSource->mFGPacket.latitude,mDataSource->mFGPacket.altitude),ori);
 		  if (isServerObject())
 		  {
-
 			  //MatrixF oriMat,pitchMat,rollMat,headMat;
 			  //QuatF oriQuat;
 			  //oriMat.identity();
@@ -927,8 +925,8 @@ void Vehicle::processTick(const Move* move)
 			  //oriMat.mul(rollMat);
 
 			  QuatF oriQuat;
-			  oriQuat = QuatF(mDataSource->mFGTransform);//OMG IT WORKED?...
-			  mRigid.angPosition = oriQuat;// QuatF(oriEul);
+			  oriQuat = QuatF(mDataSource->mFGTransform);
+			  mRigid.angPosition = oriQuat;
 			  mRigid.linPosition = mDataSource->mFGTransform.getPosition();
 
 		  } else {
@@ -958,9 +956,8 @@ void Vehicle::processTick(const Move* move)
 	  // Update container database
 	  setPosition(mRigid.linPosition, mRigid.angPosition);
 	  
-	  //
-      setMaskBits(PositionMask);
-      updateContainer();
+     setMaskBits(PositionMask);
+     updateContainer();
 
 	  //Con::printf("vehicle position: %f %f %f",mRigid.linPosition.x,mRigid.linPosition.y,mRigid.linPosition.z);
       //TODO: Only update when position has actually changed
@@ -985,7 +982,6 @@ void Vehicle::interpolateTick(F32 dt)
       rot.interpolate(mDelta.rot[1], mDelta.rot[0], dt);
       Point3F pos = mDelta.pos + mDelta.posVec * dt;
       setRenderPosition(pos,rot);
-	  //Con::printf("interpolating tick!  pos %f %f %f dt %f",pos.x,pos.y,pos.z,dt);
    }
    mDelta.dt = dt;
 }
@@ -1006,7 +1002,6 @@ void Vehicle::advanceTime(F32 dt)
       (mCameraOffset * mDataBlock->cameraDecay +
       mRigid.linVelocity * mDataBlock->cameraLag) * dt;
 }
-
 
 //----------------------------------------------------------------------------
 

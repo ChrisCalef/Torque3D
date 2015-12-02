@@ -182,9 +182,6 @@ class Vehicle: public ShapeBase
    PhysicsBody *mPhysicsRep;
    void _createPhysics();
 
-   bool mUseDataSource;
-   vehicleDataSource *mDataSource;
-
    StateDelta mDelta;
    S32 mPredictionCount;            ///< Number of ticks to predict
    VehicleData* mDataBlock;
@@ -310,6 +307,12 @@ public:
    /// @{
    virtual void mountObject( SceneObject *obj, S32 node, const MatrixF &xfm = MatrixF::Identity );
    /// @}
+
+	////////// openSimEarth ////////////////
+   bool mUseDataSource;
+   vehicleDataSource *mDataSource;
+	////////// openSimEarth ////////////////
+
 
    DECLARE_CONOBJECT(Vehicle);
 };

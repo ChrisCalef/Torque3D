@@ -41,7 +41,7 @@ vehicleDataSource::vehicleDataSource(bool listening)
 	
 	if (mTerrainPager)
 		Con::printf("New vehicle data source object!!! listening: %d terrain pager mClientPos %f %f %f\n",listening,
-		mTerrainPager->mClientPos.x,mTerrainPager->mClientPos.y,mTerrainPager->mClientPos.z);
+				mTerrainPager->mClientPos.x,mTerrainPager->mClientPos.y,mTerrainPager->mClientPos.z);
 	else
 		Con::printf("New vehicle data source object!!! Terrain Pager NULL");
 }

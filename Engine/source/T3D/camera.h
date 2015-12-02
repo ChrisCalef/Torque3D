@@ -68,9 +68,10 @@ class Camera: public ShapeBase
          TrackObjectMode,
          OverheadMode,
          EditOrbitMode,       ///< Used by the World Editor
+			dataSourceMode,      // openSimEarth, do camera based on UDP stream of vehicle positions
 
          CameraFirstMode = 0,
-         CameraLastMode  = EditOrbitMode
+         CameraLastMode  = dataSourceMode
       };
 
       /// The ExtendedMove position/rotation index used for camera movements
@@ -144,7 +145,7 @@ class Camera: public ShapeBase
       bool mLocked;
 
       CameraMotionMode  mMode;
-
+		
       void _setPosition(const Point3F& pos,const Point3F& viewRot);
       void _setRenderPosition(const Point3F& pos,const Point3F& viewRot);
       void _validateEyePoint( F32 pos, MatrixF* mat );
@@ -162,11 +163,9 @@ class Camera: public ShapeBase
       virtual bool isValidCameraFov( F32 fov );
       virtual F32 getDamageFlash() const;
       virtual F32 getWhiteOut() const;
-      virtual void setTransform( const MatrixF& mat );
-      virtual void setRenderTransform( const MatrixF& mat );
 
    public:
-
+		
       Camera();
       ~Camera();
 
@@ -175,6 +174,10 @@ class Camera: public ShapeBase
       Point3F getPosition();
       Point3F getRotation() { return mRot; };
       void setRotation( const Point3F& viewRot );
+      void setRotation( const QuatF& viewQuat );
+      virtual void setTransform( const MatrixF& mat );
+      virtual void setTransform4x4( const MatrixF& mat );
+      virtual void setRenderTransform( const MatrixF& mat );
 
       Point3F getOffset() { return mOffset; };
       void lookAt( const Point3F& pos);

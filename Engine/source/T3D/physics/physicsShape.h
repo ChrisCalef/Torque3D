@@ -53,6 +53,7 @@ class PhysicsBody;
 class PhysicsWorld;
 class PhysicsDebrisData;
 class ExplosionData;
+class vehicleDataSource;
 
 enum physicsShapeType
 {
@@ -201,6 +202,7 @@ public: //protected:
    S32 mContactBody;//ID of mPhysicsBody having latest contact with raycast or ... ?
 
    Point3F mStartPos;
+   Point3F mCurrentForce;
 
    /// The starting position to place the shape when
    /// the level begins or is reset.
@@ -376,6 +378,9 @@ public:
 
    bool setCurrentSeq(S32);
    bool loadSequence(const char *path);
+	
+   bool mUseDataSource;
+   vehicleDataSource *mDataSource;
 
 };
 

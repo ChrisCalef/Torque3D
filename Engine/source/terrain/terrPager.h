@@ -271,6 +271,8 @@ public:
 	const char *escapeSingleQuotes(std::string *myString);//guess I have to do this myself...
 	//bool pointWithinPoly(const ConcretePolyList::Poly &poly, const Point3F &point);//Courtesy of Kevin Ryan of Top Meadow Inc.
 	
+	//TEMP
+	F32 mForestTerrainEdgeDistance;//To avoid tile edges, until we get the raycast problem solved.
 };
 /*
 	////////////////////////////////////////////////////////////

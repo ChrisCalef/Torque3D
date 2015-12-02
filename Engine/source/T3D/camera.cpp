@@ -35,11 +35,16 @@
 #include "math/mathUtils.h"
 #include "math/mTransform.h"
 
+#include <time.h>
+
 #ifdef TORQUE_EXTENDED_MOVE
    #include "T3D/gameBase/extended/extendedMove.h"
 #endif
 
 S32 Camera::smExtendedMovePosRotIndex = 0;  // The ExtendedMove position/rotation index used for camera movements
+
+extern Point3F gPlanePos;
+extern MatrixF gPlaneMat;
 
 #define MaxPitch 1.5706f
 #define CameraRadius 0.05f;
@@ -741,7 +746,6 @@ void Camera::processTick(const Move* move)
       {
          bool faster = move->trigger[0] || move->trigger[1];
          F32 scale = smMovementSpeed * (faster + 1);
-
          mObjToWorld.getColumn(3,&pos);
          mObjToWorld.getColumn(0,&vec);
          posVec = vec * move->x * TickSec * scale + vec * (strafeMode ? move->yaw * 2.0f * TickSec * scale : 0.0f);
@@ -749,6 +753,7 @@ void Camera::processTick(const Move* move)
          posVec += vec * move->y * TickSec * scale + vec * move->roll * TickSec * scale;
          mObjToWorld.getColumn(2,&vec);
          posVec += vec * move->z * TickSec * scale - vec * (strafeMode ? move->pitch * 2.0f * TickSec * scale : 0.0f);
+			//Con::printf("process tick pos %f   %f   %f server %d clock %d",pos.x,pos.y,pos.z,isServerObject(),clock());
       }
       else if(virtualMode == OverheadMode)
       {
@@ -813,8 +818,18 @@ void Camera::processTick(const Move* move)
          pos += posVec;
       }
 
+		//TEMP!!! Make a new mode for this!
+		if (gPlanePos.len()>0.0)
+		{
+			pos = gPlanePos;
+			//Con::printf("processTick plane pos %f %f %f",pos.x,pos.y,pos.z);
+			setTransform4x4(gPlaneMat);
+			Point3F vec;
+			gPlaneMat.getColumn(1, &vec);
+			mRot = Point3F(-mAtan2(vec.z, mSqrt(vec.x * vec.x + vec.y * vec.y)), 0.0f, -mAtan2(-vec.x, vec.y));
+		}//TEMP!!!
       _setPosition(pos,mRot);
-
+		
       // If on the client, calc delta for backstepping
       if (serverInterpolate || isClientObject())
       {
@@ -822,6 +837,8 @@ void Camera::processTick(const Move* move)
          mDelta.rot = mRot;
          mDelta.posVec = mDelta.posVec - mDelta.pos;
          mDelta.rotVec = mDelta.rotVec - mDelta.rot;
+			//Con::printf("process tick, pos %f   %f   %f clock %d planePos %f %f %f",pos.x,pos.y,pos.z,clock(),
+			//					gPlanePos.x,gPlanePos.y,gPlanePos.z);
          for(U32 i=0; i<3; ++i)
          {
             if (mDelta.rotVec[i] > M_PI_F)
@@ -878,9 +895,9 @@ void Camera::interpolateTick(F32 dt)
 
       return;
    }
-
+	
    Point3F rot = mDelta.rot + mDelta.rotVec * dt;
-
+	
    if((mMode == OrbitObjectMode || mMode == OrbitPointMode) && !mNewtonMode)
    {
       if(mMode == OrbitObjectMode && bool(mOrbitObject))
@@ -939,8 +956,22 @@ void Camera::interpolateTick(F32 dt)
    }
    else 
    {
-      Point3F pos = mDelta.pos + mDelta.posVec * dt;
+		Point3F pos;
+      //Point3F pos = mDelta.pos + mDelta.posVec * dt;//Wait, so this is about BACK stepping, which would be why
+		//Point3F pos = mDelta.pos + mDelta.posVec * (1.0 - dt);//it goes from 1.0 to 0.0 instead of the opposite...
+		if (gPlanePos.len()>0)
+		{
+			pos = gPlanePos;
+			Point3F vec;
+			setTransform4x4(gPlaneMat);
+			gPlaneMat.getColumn(1, &vec);
+			rot = Point3F(-mAtan2(vec.z, mSqrt(vec.x * vec.x + vec.y * vec.y)), 0.0f, -mAtan2(-vec.x, vec.y));
+		} else {
+			pos = mDelta.pos + mDelta.posVec * dt;
+		}
       _setRenderPosition(pos,rot);
+		//Con::printf("interptick, pos %f   %f   %f clock %d planePos %f %f %f dt %f",pos.x,pos.y,pos.z,clock(),
+		//						gPlanePos.x,gPlanePos.y,gPlanePos.z,dt);
       if(mMode == OrbitObjectMode || mMode == OrbitPointMode)
          _validateEyePoint(1.0f, &mRenderObjToWorld);
    }
@@ -1004,6 +1035,32 @@ void Camera::setRotation(const Point3F& rot)
    mRot = rot;
 }
 
+void Camera::setRotation(const QuatF& q)
+{/*
+   MatrixF xRot, zRot;
+   xRot.set(EulerF(rot.x, 0.0f, 0.0f));
+   zRot.set(EulerF(0.0f, 0.0f, rot.z));
+
+   MatrixF temp;
+
+   if(mDataBlock && mDataBlock->cameraCanBank)
+   {
+      // Take rot.y into account to bank the camera
+      MatrixF imat;
+      imat.mul(zRot, xRot);
+      MatrixF ymat;
+      ymat.set(EulerF(0.0f, rot.y, 0.0f));
+      temp.mul(imat, ymat);
+   }
+   else
+   {
+      temp.mul(zRot, xRot);
+   }
+
+   temp.setColumn(3, getPosition());
+   Parent::setTransform(temp);
+   mRot = rot;*/
+}
 //----------------------------------------------------------------------------
 
 void Camera::_setRenderPosition(const Point3F& pos,const Point3F& rot)
@@ -1052,7 +1109,6 @@ void Camera::writePacketData(GameConnection *connection, BitStream *bstream)
       bstream->write(mRot.y);
    }
    bstream->write(mRot.z);
-
    U32 writeMode = mMode;
    Point3F writePos = mPosition;
    S32 gIndex = -1;
@@ -1197,13 +1253,23 @@ void Camera::readPacketData(GameConnection *connection, BitStream *bstream)
    }
 
    _setPosition(pos,rot);
+	//Con::printf("pos: %f %f %f lastPos: %f %f %f clock %d mode %d",
+	//	pos.x,pos.y,pos.z,mDelta.pos.x,mDelta.pos.y,mDelta.pos.z,clock(),mMode);
+   
+	
    // Movement in OrbitObjectMode is not input-based - don't reset interpolation
    if(mMode != OrbitObjectMode)
    {
-      mDelta.pos = pos;
-      mDelta.posVec.set(0.0f, 0.0f, 0.0f);
+		//TEMP, I obviously don't know what I'm doing, but here goes...
+		Point3F lastPos = mDelta.pos;
+		mDelta.pos = pos;
+      //mDelta.posVec.set(pos.x - lastPos.x, pos.y - lastPos.y, pos.z - lastPos.z);
+		mDelta.posVec.set(0.0f, 0.0f, 0.0f);
+		Point3F lastRot = mDelta.rot;
       mDelta.rot = rot;
-      mDelta.rotVec.set(0.0f, 0.0f, 0.0f);
+      //mDelta.rotVec.set(rot.x - lastRot.x, rot.y - lastRot.y, rot.z - lastRot.z);
+		mDelta.rotVec.set(0.0f, 0.0f, 0.0f);
+		//Con::printf("new pos: %f %f %f lastPos: %f %f %f clock %d",pos.x,pos.y,pos.z,mDelta.pos.x,mDelta.pos.y,mDelta.pos.z,clock());
    }
 }
 
@@ -1330,7 +1396,7 @@ void Camera::unpackUpdate(NetConnection *con, BitStream *bstream)
       bstream->read(&rot.x);
       bstream->read(&rot.z);
       _setPosition(pos,rot);
-
+		Con::printf("reading camera position %f %f %f  clock %d",pos.x,pos.y,pos.z,clock());
       // NewtonMode
       if(bstream->readFlag())
       {
@@ -1631,6 +1697,14 @@ void Camera::setTransform(const MatrixF& mat)
    _setPosition(pos,rot);
 }
 
+void Camera::setTransform4x4(const MatrixF& mat)
+{
+   // This method should never be called on the client.
+
+   // This one uses the actual matrix.
+	Parent::setTransform(mat);
+
+}
 //-----------------------------------------------------------------------------
 
 void Camera::setRenderTransform(const MatrixF& mat)
