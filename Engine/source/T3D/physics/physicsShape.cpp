@@ -1946,7 +1946,7 @@ void PhysicsShape::processTick( const Move *move )
 		 trans *= ninetyFix;
 
 		 //mRenderState[1].position = dsPos;
-		 //mRenderState[1].orientation = dsQuat;//??? I have no idea how these work
+		 //mRenderState[1].orientation = dsQuat;//??? I have no idea how renderStates work
 		 setTransform(trans);
 		 Parent::setTransform( trans );
 		 //Everything below this point is physics or groundMove related, so irrelevant if we are using a data source. 
@@ -1958,9 +1958,7 @@ void PhysicsShape::processTick( const Move *move )
 		 //Con::printf("helicopter data source, pos %f %f %f currPos %f %f %f",dsPos.x,dsPos.y,dsPos.z,currPos.x,currPos.y,currPos.z);
 		 
 		 //NOW: what would happen if we took this opportunity to override the player's camera and force it to  
-		 //follow us around as a chase cam instead? Probably horrible eye bleeding fight between this and the 
-		 //normal player camera function, until I hook up turning it off with turning this on.
-		 
+		 //follow us around as a chase cam instead? 		 
 		 Vector<SceneObject*> kCameras;
 		 Vector<SceneObject*> kPlayers;
 		 Box3F bounds;

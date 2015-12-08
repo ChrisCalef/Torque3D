@@ -1356,3 +1356,17 @@ DefineEngineMethod( TSStatic, spitM4s, void, (Point3F pos,Point3F normal,S32 num
 {
 	object->spitM4s(pos,normal,numBodies);
 }
+
+DefineEngineMethod( TSStatic, showNodes, void, (),,
+   "@brief prints all nodes\n\n")
+{  
+	TSShape *kShape = object->getShape();
+	QuatF q;
+	for (U32 i=0;i<kShape->nodes.size();i++)
+	{
+		q = kShape->defaultRotations[i].getQuatF();
+		Con::printf("nodes[%d] %s parent %d  pos %f %f %f  rot %f %f %f %f len %f",i,kShape->getName(kShape->nodes[i].nameIndex).c_str(),kShape->nodes[i].parentIndex,kShape->defaultTranslations[i].x,
+			kShape->defaultTranslations[i].y,kShape->defaultTranslations[i].z,
+			q.x,q.y,q.z,q.w,kShape->defaultTranslations[i].len());
+	}
+}

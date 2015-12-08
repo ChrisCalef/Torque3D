@@ -543,7 +543,7 @@ void TerrainPager::checkForest()
 	//}
 	
 	unsigned int latency = clock() - startTime;
-	Con::printf("checkForest took %d milliseconds",latency);
+	//Con::printf("checkForest took %d milliseconds",latency);
 	mLastForestTick = mCurrentTick;
 }
 

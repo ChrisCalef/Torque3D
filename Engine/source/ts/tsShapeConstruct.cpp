@@ -1391,6 +1391,7 @@ DefineTSShapeConstructorMethod( addMesh, bool, ( const char* meshName, const cha
    "%this.addMesh( \"SimpleShape10\", \"./testShape.dae\", \"MyMesh2\", "" );\n"
    "@endtsexample\n" )
 {
+	Con::printf("TSShape trying to add mesh!  %s",srcShape);
    // Load the shape source file
    char filenameBuf[1024];
    Con::expandScriptFilename(filenameBuf, sizeof(filenameBuf), srcShape);
@@ -1401,10 +1402,10 @@ DefineTSShapeConstructorMethod( addMesh, bool, ( const char* meshName, const cha
       Con::errorf( "addMesh failed: Could not load source shape: '%s'", filenameBuf );
       return false;
    }
-
    TSShape* shape = const_cast<TSShape*>( (const TSShape*)hSrcShape );
    if ( !mShape->addMesh( shape, srcMesh, meshName ) )
       return false;
+	Con::printf("TSShape added mesh!!!!!!!!!!!!!!!");
 
    ADD_TO_CHANGE_SET();
    return true;
