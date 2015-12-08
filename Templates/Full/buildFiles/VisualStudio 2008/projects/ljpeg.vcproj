@@ -206,7 +206,7 @@
 				Optimization="3"
 				InlineFunctionExpansion="2"
 				AdditionalIncludeDirectories="../../../../../Engine/lib/ljpeg;"
-				PreprocessorDefinitions="UNICODE;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS"
+				PreprocessorDefinitions="UNICODE;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;TORQUE_RELEASE"
 				ExceptionHandling="0"
 				BasicRuntimeChecks="0"
 				StringPooling="true"
@@ -450,4 +450,4 @@
 	</Files>
 	<Globals>
 	</Globals>
-</VisualStudioProject>
+</VisualStudioProject>

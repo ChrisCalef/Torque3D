@@ -1971,7 +1971,6 @@
 							Filter="">
 							<File
 							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\pathTest.cpp">
-
 							</File>
 							<File
 							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\strTest.cpp">
@@ -1983,7 +1982,6 @@
 							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\tFixedSizeDequeTest.cpp">
 							</File>
 							<File
-
 							   RelativePath="..\..\..\..\..\Engine\source\core\util\test\tVectorTest.cpp">
 							</File>
 						</Filter>
@@ -3138,6 +3136,12 @@
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\gui\core\guiDefaultControlRender.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\gui\core\guiOffscreenCanvas.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\gui\core\guiOffscreenCanvas.h">
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\gui\core\guiScriptNotifyControl.cpp">
@@ -4379,7 +4383,6 @@
 						Filter="">
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\netTest.cpp">
-<<<<<<< HEAD
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformFileIOTest.cpp">
@@ -4394,7 +4397,7 @@
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\profilerTest.cpp">
 						</File>
 						<File
-=======
+
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformFileIOTest.cpp">
@@ -4409,7 +4412,6 @@
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\profilerTest.cpp">
 						</File>
 						<File
->>>>>>> terrain_pager
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\threadStaticTest.cpp">
 						</File>
 					</Filter>
@@ -4481,6 +4483,9 @@
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\platformWin32\platformWin32.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\platformWin32\stdint.h">
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\platformWin32\VFSRes.h">
