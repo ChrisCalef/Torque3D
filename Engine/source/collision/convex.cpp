@@ -641,7 +641,8 @@ bool Convex::getCollisionInfo(const MatrixF& mat, const Point3F& scale, Collisio
 
          state->b->getFeatures(bxform,v,&fb);
 
-         fa.collide(fb,cList,tol);
+         if ( fb.object->isCollisionEnabled() )
+            fa.collide(fb,cList,tol);
       }
    }
 

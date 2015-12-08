@@ -838,6 +838,8 @@ void WheeledVehicle::advanceTime(F32 dt)
    // set based on vehicle braking.
    if (mTailLightThread)
       mShapeInstance->advanceTime(dt,mTailLightThread);
+
+   mShapeInstance->animate();
 }
 
 

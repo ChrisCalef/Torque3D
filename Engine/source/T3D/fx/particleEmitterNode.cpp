@@ -272,7 +272,7 @@ void ParticleEmitterNode::processTick(const Move* move)
    if ( isMounted() )
    {
       MatrixF mat;
-      mMount.object->getMountTransform( mMount.node, mMount.xfm, &mat );
+      mMount.object->getNodeTransform( mMount.node, mMount.xfm, &mat );
       setTransform( mat );
    }
 }
@@ -283,6 +283,13 @@ void ParticleEmitterNode::advanceTime(F32 dt)
    
    if(!mActive || mEmitter.isNull() || !mDataBlock)
       return;
+
+   if ( isMounted() )
+   {
+      MatrixF mat;
+      mMount.object->getRenderNodeTransform( mMount.node, mMount.xfm, &mat );
+      setTransform( mat );
+   }
 
    Point3F emitPoint, emitVelocity;
    Point3F emitAxis(0, 0, 1);

@@ -794,8 +794,11 @@ U32 SceneObject::packUpdate( NetConnection* conn, U32 mask, BitStream* stream )
             stream->writeFlag( true );
             stream->writeInt( gIndex, NetConnection::GhostIdBitSize );
             if ( stream->writeFlag( mMount.node != -1 ) )
-               stream->writeInt( mMount.node, NumMountPointBits );
-            mathWrite( *stream, mMount.xfm );
+               stream->writeInt( mMount.node, NumNodeIndexBits );
+            if ( stream->writeFlag( mMount.fromNode != -1 ) )
+               stream->writeInt( mMount.fromNode, NumNodeIndexBits );
+            if ( stream->writeFlag( !mMount.xfm.isIdentity() ) )
+               mathWrite( *stream, mMount.xfm );
          }
          else
             // Will have to try again later
@@ -831,15 +834,19 @@ void SceneObject::unpackUpdate( NetConnection* conn, BitStream* stream )
          SceneObject* obj = dynamic_cast<SceneObject*>( conn->resolveGhost( gIndex ) );
          S32 node = -1;
          if ( stream->readFlag() ) // node != -1
-            node = stream->readInt( NumMountPointBits );
-         MatrixF xfm;
-         mathRead( *stream, &xfm );
+            node = stream->readInt( NumNodeIndexBits );
+         S32 fromNode = -1;
+         if ( stream->readFlag() ) // fromNode != -1
+            fromNode = stream->readInt( NumNodeIndexBits );
+         MatrixF xfm(true);
+         if ( stream->readFlag() ) // !identity
+            mathRead( *stream, &xfm );
          if ( !obj )
          {
             conn->setLastError( "Invalid packet from server." );
             return;
          }
-         obj->mountObject( this, node, xfm );
+         obj->mountObjectEx( this, node, fromNode, xfm );
       }
       else
          unmount();
@@ -944,7 +951,8 @@ void SceneObject::setProcessTick( bool t )
 
    if ( mProcessTick )
    {
-      plUnlink();
+      if ( !getMountedObjectCount() )
+         plUnlink(); // Only unlink if there is nothing mounted to us
       mProcessTick = false;
    }
    else
@@ -1004,12 +1012,19 @@ SceneObject* SceneObject::getMountedObject(S32 idx)
 
 S32 SceneObject::getMountedObjectNode(S32 idx)
 {
+   S32 nodeIndex = -1;
    if (idx >= 0) {
       S32 count = 0;
       for (SceneObject* itr = mMount.list; itr; itr = itr->mMount.link)
          if (count++ == idx)
-            return itr->mMount.node;
+         {
+            nodeIndex = itr->mMount.node;
+            break;
+         }
    }
+
+   if ( nodeIndex != -1 )
+      return nodeIdxToMountNum(nodeIndex);
    return -1;
 }
 
@@ -1017,9 +1032,20 @@ S32 SceneObject::getMountedObjectNode(S32 idx)
 
 SceneObject* SceneObject::getMountNodeObject(S32 node)
 {
-   for (SceneObject* itr = mMount.list; itr; itr = itr->mMount.link)
-      if (itr->mMount.node == node)
-         return itr;
+   S32 nodeIndex = -1;
+   if ( node >= 0 && node < NumMountPoints )
+   {
+      char fullName[32];
+      dSprintf(fullName, sizeof(fullName), "mount%d", node);
+      nodeIndex = resolveNodeIndex(fullName);
+   }
+
+   if ( nodeIndex != -1 )
+   {
+      for (SceneObject* itr = mMount.list; itr; itr = itr->mMount.link)
+         if (itr->mMount.node == nodeIndex)
+            return itr;
+   }
    return NULL;
 }
 
@@ -1060,37 +1086,14 @@ void SceneObject::resolveMountPID()
 
 void SceneObject::mountObject( SceneObject *obj, S32 node, const MatrixF &xfm )
 {
-   if ( obj->mMount.object == this )
+   S32 nodeIndex =  -1;
+   if ( node >= 0 && node < NumMountPoints )
    {
-      // Already mounted to this
-      // So update our node and xfm which may have changed.
-      obj->mMount.node = node;
-      obj->mMount.xfm = xfm;
+      char fullName[32];
+      dSprintf(fullName, sizeof(fullName), "mount%d", node);
+      nodeIndex = resolveNodeIndex(fullName);
    }
-   else
-   {
-      if ( obj->mMount.object )
-         obj->unmount();
-
-      obj->mMount.object = this;
-      obj->mMount.node = node;
-      obj->mMount.link = mMount.list;
-      obj->mMount.xfm = xfm;
-      mMount.list = obj;
-
-      // Assign PIDs to both objects
-      if ( isServerObject() )
-      {
-         obj->getOrCreatePersistentId();
-         if ( !obj->mMountPID )
-         {
-            obj->mMountPID = getOrCreatePersistentId();
-            obj->mMountPID->incRefCount();
-         }
-      }
-
-      obj->onMount( this, node );
-   }
+   mountObjectEx(obj, nodeIndex, -1, xfm);
 }
 
 //-----------------------------------------------------------------------------
@@ -1118,7 +1121,7 @@ void SceneObject::unmountObject( SceneObject *obj )
          obj->mMountPID = NULL;
       }
 
-      obj->onUnmount( this, obj->mMount.node );
+      obj->onUnmount( this, nodeIdxToMountNum(obj->mMount.node) );
    }
 }
 
@@ -1180,6 +1183,83 @@ void SceneObject::getRenderMountTransform( F32 delta, S32 index, const MatrixF &
    mountTransform.setPosition( position );
 
    outMat->mul( mRenderObjToWorld, mountTransform );
+}
+
+//-----------------------------------------------------------------------------
+
+void SceneObject::mountObjectEx( SceneObject *obj, S32 toNode, S32 fromNode, const MatrixF &xfm )
+{
+   if ( obj->mMount.object == this )
+   {
+      // Already mounted to this
+      // So update our nodes and xfm which may have changed.
+      obj->mMount.node = toNode;
+      obj->mMount.fromNode = fromNode;
+      obj->mMount.xfm = xfm;
+   }
+   else
+   {
+      if ( obj->mMount.object )
+         obj->unmount();
+
+      obj->mMount.object = this;
+      obj->mMount.node = toNode;
+      obj->mMount.fromNode = fromNode;
+      obj->mMount.link = mMount.list;
+      obj->mMount.xfm = xfm;
+      mMount.list = obj;
+
+      // Assign PIDs to both objects
+      if ( isServerObject() )
+      {
+         obj->getOrCreatePersistentId();
+         if ( !obj->mMountPID )
+         {
+            obj->mMountPID = getOrCreatePersistentId();
+            obj->mMountPID->incRefCount();
+         }
+      }
+
+      obj->onMount( this, nodeIdxToMountNum(toNode) );
+   }
+
+   if ( isServerObject() )
+      setMaskBits( MountedMask );
+}
+
+//-----------------------------------------------------------------------------
+
+SceneObject* SceneObject::getNodeObjectEx( const char *nodeName )
+{
+   S32 nodeIndex = resolveNodeIndex(nodeName);
+   if ( nodeIndex != -1 )
+   {
+      for (SceneObject* itr = mMount.list; itr; itr = itr->mMount.link)
+         if (itr->mMount.node == nodeIndex)
+            return itr;
+   }
+   return NULL;
+}
+
+//-----------------------------------------------------------------------------
+
+const String& SceneObject::getMountedObjectNodeEx(S32 idx)
+{
+   S32 nodeIndex = -1;
+   if (idx >= 0) {
+      S32 count = 0;
+      for (SceneObject* itr = mMount.list; itr; itr = itr->mMount.link)
+         if (count++ == idx)
+         {
+            nodeIndex = itr->mMount.node;
+            break;
+         }
+   }
+
+   if ( nodeIndex != -1 )
+      return nodeIdxToNodeName(nodeIndex);
+
+   return String::EmptyString;
 }
 
 //=============================================================================
@@ -1449,4 +1529,48 @@ DefineEngineMethod( SceneObject, isGlobalBounds, bool, (),,
    "@return true if the object has a global bounds." )
 {
    return object->isGlobalBounds();
+}
+
+//-----------------------------------------------------------------------------
+
+DefineEngineMethod( SceneObject, mountObjectEx, bool,
+   ( SceneObject* objB, const char *toNode, const char *fromNode, TransformF txfm ), ( "", "", MatrixF::Identity ),
+   "@brief Mount objB to this object at the desired node with fromNode on objB aligned "
+   "to node and offset by txfm.\n\n"
+
+   "@param objB     Object to mount onto us.\n"
+   "@param toNode   (optional) Name of the node to mount to. If ommitted, objB will mount to our origin.\n"
+   "@param fromNode (optional) Name of the node on objB to align with toNode. If ommitted, the origin of objB will be used.\n"
+   "@param txfm     (optional) mount offset transform.\n"
+   "@return true if successful, false if failed (objB is not valid)" )
+{
+   if ( objB )
+   {
+      S32 toIndex = object->resolveNodeIndex(toNode);
+      S32 fromIndex = objB->resolveNodeIndex(fromNode);
+      object->mountObjectEx( objB, toIndex, fromIndex, txfm.getMatrix() );
+      return true;
+   }
+   return false;
+}
+
+//-----------------------------------------------------------------------------
+
+DefineEngineMethod( SceneObject, getNodeObjectEx, S32, ( const char *nodeName ), ( "" ),
+   "@brief Get the first object mounted at the named node.\n\n"
+   "@param nodeName name of the node to query\n"
+   "@return ID of the first object mounted at the node, or 0 if none found." )
+{
+   SceneObject* mobj = object->getNodeObjectEx( nodeName );
+   return mobj? mobj->getId(): 0;
+}
+
+//-----------------------------------------------------------------------------
+
+DefineEngineMethod( SceneObject, getMountedObjectNodeEx, const char *, ( S32 slot ), ( -1 ),
+   "@brief Get the mount node index of the object mounted at our given slot.\n\n"
+   "@param slot mount slot index to query\n"
+   "@return index of the mount node used by the object mounted in this slot." )
+{
+   return object->getMountedObjectNodeEx( slot );
 }

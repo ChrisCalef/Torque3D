@@ -260,7 +260,7 @@ void LightBase::advanceTime( F32 timeDelta )
    if ( isMounted() )
    {
       MatrixF mat( true );
-      mMount.object->getRenderMountTransform( 0.f, mMount.node, mMount.xfm, &mat );
+      mMount.object->getRenderNodeTransform( mMount.node, mMount.xfm, &mat );
       mLight->setTransform( mat );
       Parent::setTransform( mat );
    }

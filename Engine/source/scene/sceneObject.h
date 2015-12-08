@@ -113,6 +113,7 @@ class SceneObject : public NetObject, private SceneContainer::Link, public Proce
 
          NumMountPoints = 32,
          NumMountPointBits = 5,
+         NumNodeIndexBits = 12,  // 2048 possible nodes per shape MAX_TS_SET_SIZE
       };
       
       /// Networking dirty mask.
@@ -184,6 +185,7 @@ class SceneObject : public NetObject, private SceneContainer::Link, public Proce
          SceneObject* object;            ///< Object this object is mounted on.
          SceneObject* link;              ///< Link to next object mounted to this object's mount
          S32 node;                       ///< Node point we are mounted to.
+         S32 fromNode;                   ///< Node point to align with the node we are mounted to.
          MatrixF xfm;
       };
 
@@ -674,6 +676,41 @@ class SceneObject : public NetObject, private SceneContainer::Link, public Proce
       virtual SceneObject* getMountNodeObject( S32 node );
 
       void resolveMountPID();
+
+      /// ex: Mount B to A aligning B's node B_n at A's node A_n with optional offset transform
+      /// A.mountObjectEx( B, A_n, B_n, xfm )
+      /// 
+      /// @param   obj   Object to mount
+      /// @param   toNode  Mount node on this object
+      /// @param   fromNode  Node to align on the object that's mounting to this
+      /// @param   xfm Offset transform between the to and from nodes
+      virtual void mountObjectEx( SceneObject *obj, S32 toNode, S32 fromNode, const MatrixF &xfm = MatrixF::Identity );
+
+      /// Returns the first object in the mount list that is mounted to the named node
+      /// @param   nodeName
+      virtual SceneObject* getNodeObjectEx( const char *nodeName );
+
+      /// Returns the name of the node the object at idx is mounted to
+      /// @param   idx   Index
+      virtual const String& getMountedObjectNodeEx(S32 idx);
+
+      /// Returns the node index for the passed node name
+      /// Returns -1 if the node does not exist or the object does not contain nodes.
+      virtual S32 resolveNodeIndex( const char *nodeName ) { return -1; }
+
+      /// Returns the mount number 0...31. If the node is not named MountNN, returns -1
+      virtual S32 nodeIdxToMountNum( S32 nodeIndex ) { return -1; }
+
+      /// Returns the name of the node at nodeIndex
+      /// @param   nodeIndex   Index
+      virtual const String& nodeIdxToNodeName(S32 nodeIndex) { return String::EmptyString; }
+
+      /// Returns node to world space transform at tick time.
+      virtual void getNodeTransform( S32 nodeIndex, const MatrixF &xfm, MatrixF *outMat ) { getMountTransform(nodeIndex, xfm, outMat); }
+
+      /// Returns node to world space transform at render time.
+      /// Note this will only be correct if called after this object has interpolated.
+      virtual void getRenderNodeTransform( S32 nodeIndex, const MatrixF &xfm, MatrixF *outMat ) { getRenderMountTransform(0.0f, nodeIndex, xfm, outMat); }
 
       /// @}
       

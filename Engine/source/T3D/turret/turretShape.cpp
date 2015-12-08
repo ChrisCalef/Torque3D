@@ -632,13 +632,6 @@ void TurretShape::processTick(const Move* move)
    if (!isGhost())
       updateAnimation(TickSec);
 
-   if (isMounted()) {
-      MatrixF mat;
-      mMount.object->getMountTransform( mMount.node, mMount.xfm, &mat );
-      ShapeBase::setTransform(mat);
-      ShapeBase::setRenderTransform(mat);
-   }
-
    updateMove(move);
 }
 
@@ -648,7 +641,19 @@ void TurretShape::interpolateTick(F32 dt)
 
    if (isMounted()) {
       MatrixF mat;
-      mMount.object->getRenderMountTransform( dt, mMount.node, mMount.xfm, &mat );
+      MatrixF xfmMat = mMount.xfm;
+      if ( mMount.fromNode != -1 )
+      {
+         MatrixF mulTransform, mountTransform = mShapeInstance->mNodeTransforms[mMount.fromNode];
+         const Point3F& scale = getScale();
+         Point3F position = mountTransform.getPosition();
+         position.convolve( scale );
+         xfmMat.mulV(position);
+         mountTransform.setPosition( position );
+         mulTransform = mountTransform.affineInverse();
+         xfmMat.mulL(mulTransform);
+      }
+      mMount.object->getRenderNodeTransform( mMount.node, xfmMat, &mat );
       ShapeBase::setRenderTransform(mat);
    }
 
@@ -679,19 +684,11 @@ void TurretShape::advanceTime(F32 dt)
       }
    }
 
-   // If there is a recoil or image-based thread then
-   // we also need to update the nodes.
-   if (mRecoilThread || mImageStateThread)
-      updateNodes = true;
-
    Parent::advanceTime(dt);
 
    updateAnimation(dt);
 
-   if (updateNodes)
-   {
-      _updateNodes(mRot);
-   }
+   _setRotation(mRot);
 }
 
 void TurretShape::setTransform( const MatrixF& mat )

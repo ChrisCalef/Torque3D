@@ -118,7 +118,7 @@ void PhysicsForce::onMount( SceneObject *obj, S32 node )
    processAfter( obj );
 
    MatrixF mat( true );
-   mMount.object->getMountTransform( mMount.node, mMount.xfm, &mat );
+   mMount.object->getNodeTransform( mMount.node, mMount.xfm, &mat );
    setTransform( mat );   
 }
 
@@ -157,7 +157,7 @@ void PhysicsForce::processTick( const Move * )
       AssertFatal( test != mMount.xfm, "Error!" );
 
       MatrixF mat( true );
-      mMount.object->getMountTransform( mMount.node, mMount.xfm, &mat );
+      mMount.object->getNodeTransform( mMount.node, mMount.xfm, &mat );
       setTransform( mat );
    }
 

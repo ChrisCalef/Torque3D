@@ -240,10 +240,10 @@ class SceneContainer
       typedef bool ( *CastRayCallback )( RayInfo* ri );
 
       /// Test against collision geometry -- fast.
-      bool castRay( const Point3F &start, const Point3F &end, U32 mask, RayInfo* info, CastRayCallback callback = NULL );
+      bool castRay( const Point3F &start, const Point3F &end, U32 mask, RayInfo* info, CastRayCallback callback = NULL, bool interpolated = false );
 
       /// Test against rendered geometry -- slow.
-      bool castRayRendered( const Point3F &start, const Point3F &end, U32 mask, RayInfo* info, CastRayCallback callback = NULL );
+      bool castRayRendered( const Point3F &start, const Point3F &end, U32 mask, RayInfo* info, CastRayCallback callback = NULL, bool interpolated = false );
 
       bool collideBox(const Point3F &start, const Point3F &end, U32 mask, RayInfo* info);
 
@@ -298,7 +298,7 @@ class SceneContainer
       void cleanupSearchVectors();
 
       /// Base cast ray code
-      bool _castRay( U32 type, const Point3F &start, const Point3F &end, U32 mask, RayInfo* info, CastRayCallback callback );
+      bool _castRay( U32 type, const Point3F &start, const Point3F &end, U32 mask, RayInfo* info, CastRayCallback callback, bool interpolated );
 
       void _findSpecialObjects( const Vector< SceneObject* >& vector, U32 mask, FindCallback, void *key = NULL );
       void _findSpecialObjects( const Vector< SceneObject* >& vector, const Box3F &box, U32 mask, FindCallback callback, void *key = NULL );   

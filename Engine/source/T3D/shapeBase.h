@@ -1381,6 +1381,11 @@ public:
    virtual void onUnmount( SceneObject *obj,S32 node );   
    virtual void getMountTransform( S32 index, const MatrixF &xfm, MatrixF *outMat );
    virtual void getRenderMountTransform( F32 delta, S32 index, const MatrixF &xfm, MatrixF *outMat );
+   virtual void getNodeTransform( S32 nodeIndex, const MatrixF &xfm, MatrixF *outMat );
+   virtual void getRenderNodeTransform( S32 nodeIndex, const MatrixF &xfm, MatrixF *outMat );
+   virtual S32 resolveNodeIndex(const char *nodeName);
+   virtual S32 nodeIdxToMountNum(S32 nodeIndex);
+   virtual const String& nodeIdxToNodeName(S32 nodeIndex);
    /// @}
 
    /// Returns where the AI should be to repair this object

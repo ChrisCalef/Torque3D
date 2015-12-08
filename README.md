@@ -1,4 +1,40 @@
+<<<<<<< HEAD
 Torque 3D v3.6.3 - PhysX 3.3 Advanced
+=======
+mountObjectEx
+-------------
+This branch uses the ToNode/FromNode model described [here](http://www.garagegames.com/community/blogs/view/20581) to expand mounting to any named node in a model. SceneObject has three new console methods for mounting objects.
+
+bool mountObjectEx(SceneObject* objB, const char *toNode, const char *fromNode, TransformF txfm)
+
+Mounts objB to this object at the desired node with fromNode on objB aligned to toNode and offset by txfm.
+* objB Object to mount onto us.
+* toNode   (optional) Name of the node to mount to. If ommitted, objB will mount to our origin.
+* fromNode (optional) Name of the node on objB to align with toNode. If ommitted, the origin of objB will be used.
+* txfm     (optional) mount offset transform.
+* Returns true if successful, false if failed (objB is not valid).
+
+S32 getNodeObjectEx(const char *nodeName)
+
+Gets the object ID of the first object mounted to the named node.
+
+const char *getMountedObjectNodeEx(S32 Index)
+
+Gets the name of the node that the object at mount index is mounted to.
+
+Scripting Example
+```
+    %tsExMount = new TSStatic() {
+       shapeName = "art/shapes/weapons/Lurker/TP_Lurker.DAE";
+       scale = "2 2 2";
+    };
+    %obj.mountObjectEx(%tsExMount, "Hub0", "MuzzlePoint");
+```
+
+
+Torque 3D v3.5.1
+================
+>>>>>>> OTHGMars/mount_object_ex
 
 Sample Project Available At:
 

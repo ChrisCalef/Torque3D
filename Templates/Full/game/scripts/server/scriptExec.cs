@@ -59,3 +59,5 @@ exec("./gameDM.cs"); // Overrides GameCore with DeathMatch functionality.
 
 // setup the behavior tree framework
 exec("./BadBehavior/main.cs");
+
+exec("./mountTest.cs");

@@ -223,6 +223,13 @@ public:
    void onScaleChanged();
    void prepRenderImage( SceneRenderState *state );
    void inspectPostApply();
+   virtual void onMount( SceneObject *obj, S32 node );
+   virtual void onUnmount( SceneObject *obj, S32 node );
+   virtual void getNodeTransform( S32 nodeIndex, const MatrixF &xfm, MatrixF *outMat );
+   virtual void getRenderNodeTransform( S32 nodeIndex, const MatrixF &xfm, MatrixF *outMat );
+   virtual S32 resolveNodeIndex(const char *nodeName);
+   virtual S32 nodeIdxToMountNum(S32 nodeIndex);
+   virtual const String& nodeIdxToNodeName(S32 nodeIndex);
 
    /// The type of mesh data use for collision queries.
    MeshType getCollisionType() const { return mCollisionType; }

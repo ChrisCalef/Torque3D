@@ -815,24 +815,24 @@ void SceneContainer::_findSpecialObjects( const Vector< SceneObject* >& vector, 
 
 //-----------------------------------------------------------------------------
 
-bool SceneContainer::castRay( const Point3F& start, const Point3F& end, U32 mask, RayInfo* info, CastRayCallback callback )
+bool SceneContainer::castRay( const Point3F& start, const Point3F& end, U32 mask, RayInfo* info, CastRayCallback callback, bool interpolated )
 {
    AssertFatal( info->userData == NULL, "SceneContainer::castRay - RayInfo->userData cannot be used here!" );
 
    PROFILE_START( SceneContainer_CastRay );
-   bool result = _castRay( CollisionGeometry, start, end, mask, info, callback );
+   bool result = _castRay( CollisionGeometry, start, end, mask, info, callback, interpolated );
    PROFILE_END();
    return result;
 }
 
 //-----------------------------------------------------------------------------
 
-bool SceneContainer::castRayRendered( const Point3F& start, const Point3F& end, U32 mask, RayInfo* info, CastRayCallback callback )
+bool SceneContainer::castRayRendered( const Point3F& start, const Point3F& end, U32 mask, RayInfo* info, CastRayCallback callback, bool interpolated )
 {
    AssertFatal( info->userData == NULL, "SceneContainer::castRayRendered - RayInfo->userData cannot be used here!" );
 
    PROFILE_START( SceneContainer_CastRayRendered );
-   bool result = _castRay( RenderedGeometry, start, end, mask, info, callback );
+   bool result = _castRay( RenderedGeometry, start, end, mask, info, callback, interpolated );
    PROFILE_END();
    return result;
 }
@@ -851,7 +851,7 @@ bool SceneContainer::castRayRendered( const Point3F& start, const Point3F& end, 
 //             rasterizer for anti-aliased lines that will serve better than what
 //             we have below.
 
-bool SceneContainer::_castRay( U32 type, const Point3F& start, const Point3F& end, U32 mask, RayInfo* info, CastRayCallback callback )
+bool SceneContainer::_castRay( U32 type, const Point3F& start, const Point3F& end, U32 mask, RayInfo* info, CastRayCallback callback, bool interpolated )
 {
    AssertFatal( !mSearchInProgress, "SceneContainer::_castRay - Container queries are not re-entrant" );
    mSearchInProgress = true;
@@ -873,8 +873,16 @@ bool SceneContainer::_castRay( U32 type, const Point3F& start, const Point3F& en
              ptr->isCollisionEnabled() == true)
          {
             Point3F xformedStart, xformedEnd;
-            ptr->mWorldToObj.mulP(start, &xformedStart);
-            ptr->mWorldToObj.mulP(end,   &xformedEnd);
+            if ( interpolated )
+            {
+               ptr->mRenderWorldToObj.mulP(start, &xformedStart);
+               ptr->mRenderWorldToObj.mulP(end,   &xformedEnd);
+            }
+            else
+            {
+               ptr->mWorldToObj.mulP(start, &xformedStart);
+               ptr->mWorldToObj.mulP(end,   &xformedEnd);
+            }
             xformedStart.convolveInverse(ptr->mObjScale);
             xformedEnd.convolveInverse(ptr->mObjScale);
 
@@ -972,8 +980,16 @@ bool SceneContainer::_castRay( U32 type, const Point3F& start, const Point3F& en
                   if (ptr->getWorldBox().collideLine(start, end) || chain->object->isGlobalBounds())
                   {
                      Point3F xformedStart, xformedEnd;
-                     ptr->mWorldToObj.mulP(start, &xformedStart);
-                     ptr->mWorldToObj.mulP(end,   &xformedEnd);
+                     if ( interpolated )
+                     {
+                        ptr->mRenderWorldToObj.mulP(start, &xformedStart);
+                        ptr->mRenderWorldToObj.mulP(end,   &xformedEnd);
+                     }
+                     else
+                     {
+                        ptr->mWorldToObj.mulP(start, &xformedStart);
+                        ptr->mWorldToObj.mulP(end,   &xformedEnd);
+                     }
                      xformedStart.convolveInverse(ptr->mObjScale);
                      xformedEnd.convolveInverse(ptr->mObjScale);
 
@@ -1069,8 +1085,16 @@ bool SceneContainer::_castRay( U32 type, const Point3F& start, const Point3F& en
                         if (ptr->getWorldBox().collideLine(start, end))
                         {
                            Point3F xformedStart, xformedEnd;
-                           ptr->mWorldToObj.mulP(start, &xformedStart);
-                           ptr->mWorldToObj.mulP(end,   &xformedEnd);
+                           if ( interpolated )
+                           {
+                              ptr->mRenderWorldToObj.mulP(start, &xformedStart);
+                              ptr->mRenderWorldToObj.mulP(end,   &xformedEnd);
+                           }
+                           else
+                           {
+                              ptr->mWorldToObj.mulP(start, &xformedStart);
+                              ptr->mWorldToObj.mulP(end,   &xformedEnd);
+                           }
                            xformedStart.convolveInverse(ptr->mObjScale);
                            xformedEnd.convolveInverse(ptr->mObjScale);
 
@@ -1118,7 +1142,10 @@ bool SceneContainer::_castRay( U32 type, const Point3F& start, const Point3F& en
       fakePlane.d = 0;
 
       PlaneF result;
-      mTransformPlane(info->object->getTransform(), info->object->getScale(), fakePlane, &result);
+      if ( interpolated )
+         mTransformPlane(info->object->getRenderTransform(), info->object->getScale(), fakePlane, &result);
+      else
+         mTransformPlane(info->object->getTransform(), info->object->getScale(), fakePlane, &result);
       info->normal = result;
 
       return true;

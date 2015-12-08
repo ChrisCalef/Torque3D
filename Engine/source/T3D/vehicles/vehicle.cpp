@@ -863,6 +863,8 @@ void Vehicle::processTick(const Move* move)
    PROFILE_SCOPE( Vehicle_ProcessTick );
 
    Parent::processTick(move);
+   if ( isMounted() )
+      return;
 
    if (mUseDataSource)
 	   mDataSource->tick();
@@ -973,6 +975,8 @@ void Vehicle::interpolateTick(F32 dt)
    PROFILE_SCOPE( Vehicle_InterpolateTick );
 
    Parent::interpolateTick(dt);
+   if ( isMounted() )
+      return;
 
    if(dt == 0.0f)
       setRenderPosition(mDelta.pos, mDelta.rot[1]);
@@ -1410,7 +1414,9 @@ bool Vehicle::updateCollision(F32 dt)
    if (state && state->dist <= mDataBlock->collisionTol) 
    {
       //resolveDisplacement(ns,state,dt);
+      disableCollision();
       mConvex.getCollisionInfo(cmat, getScale(), &mCollisionList, mDataBlock->collisionTol);
+      enableCollision();
    }
 
    // Resolve collisions
