@@ -270,11 +270,11 @@ void GuiControl::initPersistFields()
 
       addField("variable",          TypeString,       Offset(mConsoleVariable, GuiControl),
          "Name of the variable to which the value of this control will be synchronized." );
-      addField("command",           TypeRealString,   Offset(mConsoleCommand, GuiControl),
+      addField("command",           TypeCommand,   Offset(mConsoleCommand, GuiControl),
          "Command to execute on the primary action of the control.\n\n"
          "@note Within this script snippet, the control on which the #command is being executed is bound to "
             "the global variable $ThisControl." );
-      addField("altCommand",        TypeRealString,   Offset(mAltConsoleCommand, GuiControl),
+      addField("altCommand",        TypeCommand,   Offset(mAltConsoleCommand, GuiControl),
          "Command to execute on the secondary action of the control.\n\n"
          "@note Within this script snippet, the control on which the #altCommand is being executed is bound to "
             "the global variable $ThisControl." );
@@ -2831,9 +2831,9 @@ DefineConsoleMethod( GuiControl, setExtent, void, ( const char* extOrX, const ch
    "@hide" )
 {
    Point2I extent;
-   if(!dStrIsEmpty(extOrX) && dStrIsEmpty(y))
+   if(!String::isEmpty(extOrX) && String::isEmpty(y))
       dSscanf(extOrX, "%d %d", &extent.x, &extent.y);
-   else if(!dStrIsEmpty(extOrX) && !dStrIsEmpty(y))
+   else if(!String::isEmpty(extOrX) && !String::isEmpty(y))
    {
       extent.x = dAtoi(extOrX);
       extent.y = dAtoi(y);
