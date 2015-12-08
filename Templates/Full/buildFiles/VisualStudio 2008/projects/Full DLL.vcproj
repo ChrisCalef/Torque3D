@@ -344,6 +344,214 @@
 				Name="Engine"
 				Filter="">
 				<Filter
+					Name="BadBehavior"
+					Filter="">
+					<Filter
+						Name="composite"
+						Filter="">
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\composite\ActiveSelector.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\composite\ActiveSelector.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\composite\Parallel.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\composite\Parallel.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\composite\RandomSelector.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\composite\RandomSelector.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\composite\Selector.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\composite\Selector.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\composite\Sequence.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\composite\Sequence.h">
+						</File>
+					</Filter>
+					<Filter
+						Name="core"
+						Filter="">
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\behavior.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\behavior.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Branch.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Branch.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Composite.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Composite.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Core.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Core.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Decorator.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Decorator.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Runner.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Runner.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Signal.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Signal.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Stepper.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\core\Stepper.h">
+						</File>
+					</Filter>
+					<Filter
+						Name="decorator"
+						Filter="">
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\FailAlways.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\FailAlways.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\Inverter.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\Inverter.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\Loop.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\Loop.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\Monitor.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\Monitor.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\Root.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\Root.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\SucceedAlways.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\SucceedAlways.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\Ticker.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\decorator\Ticker.h">
+						</File>
+					</Filter>
+					<Filter
+						Name="leaf"
+						Filter="">
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\RandomWait.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\RandomWait.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\ScriptedBehavior.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\ScriptedBehavior.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\ScriptEval.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\ScriptEval.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\ScriptFunc.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\ScriptFunc.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\SubTree.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\SubTree.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\Wait.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\Wait.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\WaitForSignal.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\WaitForSignal.h">
+						</File>
+						<Filter
+							Name="compiled"
+							Filter="">
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\compiled\followBehaviorAction.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\leaf\compiled\followBehaviorAction.h">
+							</File>
+						</Filter>
+					</Filter>
+					<Filter
+						Name="tools"
+						Filter="">
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\tools\BTUndoActions.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\tools\BTUndoActions.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\tools\guiBTViewCtrl.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\BadBehavior\tools\guiBTViewCtrl.h">
+						</File>
+					</Filter>
+				</Filter>
+				<Filter
 					Name="T3D"
 					Filter="">
 					<File
@@ -598,6 +806,22 @@
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\T3D\zone.h">
 					</File>
+					<Filter
+						Name="assets"
+						Filter="">
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\T3D\assets\ExampleAsset.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\T3D\assets\ExampleAsset.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\T3D\assets\ShapeAsset.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\T3D\assets\ShapeAsset.h">
+						</File>
+					</Filter>
 					<Filter
 						Name="decal"
 						Filter="">
@@ -869,6 +1093,12 @@
 						   RelativePath="..\..\..\..\..\Engine\source\T3D\physics\physicsForce.h">
 						</File>
 						<File
+						   RelativePath="..\..\..\..\..\Engine\source\T3D\physics\physicsJoint.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\T3D\physics\physicsJoint.h">
+						</File>
+						<File
 						   RelativePath="..\..\..\..\..\Engine\source\T3D\physics\physicsMaterial.cpp">
 						</File>
 						<File
@@ -1060,6 +1290,85 @@
 						   RelativePath="..\..\..\..\..\Engine\source\app\net\tcpObject.h">
 						</File>
 					</Filter>
+				</Filter>
+				<Filter
+					Name="assets"
+					Filter="">
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetBase.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetBase.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetBase_ScriptBinding.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetDefinition.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetFieldTypes.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetFieldTypes.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetManager.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetManager.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetManager_ScriptBinding.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetPtr.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetQuery.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetQuery.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetQuery_ScriptBinding.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetTagsManifest.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetTagsManifest.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\assetTagsManifest_ScriptBinding.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\core.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\declaredAssets.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\declaredAssets.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\referencedAssets.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\referencedAssets.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\tamlAssetDeclaredUpdateVisitor.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\tamlAssetDeclaredVisitor.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\tamlAssetReferencedUpdateVisitor.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\assets\tamlAssetReferencedVisitor.h">
+					</File>
 				</Filter>
 				<Filter
 					Name="cinterface"
@@ -1499,6 +1808,21 @@
 					   RelativePath="..\..\..\..\..\Engine\source\console\SimXMLDocument.h">
 					</File>
 					<File
+					   RelativePath="..\..\..\..\..\Engine\source\console\sqlite3.c">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\console\sqlite3.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\console\sqlite3ext.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\console\SQLiteObject.cc">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\console\SQLiteObject.h">
+					</File>
+					<File
 					   RelativePath="..\..\..\..\..\Engine\source\console\stringStack.cpp">
 					</File>
 					<File
@@ -1570,6 +1894,9 @@
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\core\dnet.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\core\factoryCache.h">
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\core\fileio.h">
@@ -4124,6 +4451,187 @@
 					</Filter>
 				</Filter>
 				<Filter
+					Name="module"
+					Filter="">
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\module\moduleCallbacks.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\module\moduleDefinition.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\module\moduleDefinition.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\module\moduleDefinition_ScriptBinding.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\module\moduleManager.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\module\moduleManager.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\module\moduleManager_ScriptBinding.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\module\moduleMergeDefinition.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\module\moduleMergeDefinition.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\module\tamlModuleIdUpdateVisitor.h">
+					</File>
+				</Filter>
+				<Filter
+					Name="persistence"
+					Filter="">
+					<Filter
+						Name="rapidjson"
+						Filter="">
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\allocators.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\document.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\encodedstream.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\encodings.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\filereadstream.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\filestream.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\filewritestream.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\prettywriter.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\rapidjson.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\reader.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\stringbuffer.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\rapidjson\writer.h">
+						</File>
+					</Filter>
+					<Filter
+						Name="taml"
+						Filter="">
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\fsTinyXml.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\fsTinyXml.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\taml.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\taml.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\tamlCallbacks.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\tamlChildren.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\tamlCustom.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\tamlCustom.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\tamlParser.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\tamlVisitor.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\tamlWriteNode.cpp">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\tamlWriteNode.h">
+						</File>
+						<File
+						   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\taml_ScriptBinding.h">
+						</File>
+						<Filter
+							Name="binary"
+							Filter="">
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\binary\tamlBinaryReader.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\binary\tamlBinaryReader.h">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\binary\tamlBinaryWriter.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\binary\tamlBinaryWriter.h">
+							</File>
+						</Filter>
+						<Filter
+							Name="json"
+							Filter="">
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\json\tamlJSONParser.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\json\tamlJSONParser.h">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\json\tamlJSONReader.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\json\tamlJSONReader.h">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\json\tamlJSONWriter.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\json\tamlJSONWriter.h">
+							</File>
+						</Filter>
+						<Filter
+							Name="xml"
+							Filter="">
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\xml\tamlXmlParser.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\xml\tamlXmlParser.h">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\xml\tamlXmlReader.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\xml\tamlXmlReader.h">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\xml\tamlXmlWriter.cpp">
+							</File>
+							<File
+							   RelativePath="..\..\..\..\..\Engine\source\persistence\taml\xml\tamlXmlWriter.h">
+							</File>
+						</Filter>
+					</Filter>
+				</Filter>
+				<Filter
 					Name="platform"
 					Filter="">
 					<File
@@ -4383,21 +4891,6 @@
 						Filter="">
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\netTest.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformFileIOTest.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformTimerTest.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformTypesTest.cpp">
-						</File>
-						<File
-						   RelativePath="..\..\..\..\..\Engine\source\platform\test\profilerTest.cpp">
-						</File>
-						<File
-
 						</File>
 						<File
 						   RelativePath="..\..\..\..\..\Engine\source\platform\test\platformFileIOTest.cpp">
@@ -5484,6 +5977,12 @@
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\terrain\terrMaterial.h">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\terrain\terrPager.cpp">
+					</File>
+					<File
+					   RelativePath="..\..\..\..\..\Engine\source\terrain\terrPager.h">
 					</File>
 					<File
 					   RelativePath="..\..\..\..\..\Engine\source\terrain\terrRender.cpp">

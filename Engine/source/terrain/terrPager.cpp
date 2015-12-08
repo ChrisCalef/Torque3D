@@ -95,7 +95,11 @@ TerrainPager::TerrainPager()
 	wchar_t wtext[MAX_PATH];
 	long x = GetModuleFileName(NULL, wtext, MAX_PATH); 
 	String gamePath = wtext;
-	gamePath.replace("OpenSimEarthGame.exe","");
+	gamePath.replace("openSimEarth.exe","");//FIX!!! This is why it doesn't work with debug mode! Also you can't change the
+	//name of the executable without coming back here. Would be nice to find the name of this executable procedurally.
+	//In the meantime, I guess we can do this for the debug build, it won't do anything if it doesn't find it.
+	gamePath.replace("openSimEarth_DEBUG.exe","");
+
 	gamePath.replace("\\","/");//not too confident about sending backslashes through the system...
 
 	mD.mTerrainPath = gamePath + "art/terrains/openSimEarth/";//FIX: Hard coded for now,
@@ -1528,6 +1532,8 @@ TerrainBlock *TerrainPager::addTerrainBlock(F32 startLong,F32 startLat)
 	} else 
 		terrExists = true;
 
+	Con::printf("adding terrain block! %s",terrFileName.c_str());
+
 	block = new TerrainBlock();
 
 	if( !block->setFile( terrFileName ) )
@@ -1926,7 +1932,7 @@ Point2F TerrainPager::findTileCoords(Point3F pos)
 void TerrainPager::loadTileGrid()
 {
 	bool loaded;
-	bool verbose = false;
+	bool verbose = true;
 	char tileName[20],heightfilename[256],texturefilename[256],terrainfilename[256];
 	U32 gridMidpoint = (mGridSize-1)/2;
 	Vector <loadTerrainData> loadTerrains;
@@ -1988,7 +1994,8 @@ void TerrainPager::loadTileGrid()
 
 				}
 				if (loaded==false)
-				{//Here, let's check for the bin file existing first
+				{//Here, let's check for the bin file existing firstif (verbose) 
+					Con::printf("checking bin file: %s  %s  %s",terrainfilename,heightfilename,texturefilename);
 					if ( (checkFileExists(terrainfilename)) || 
 						((checkFileExists(heightfilename))&&(checkFileExists(texturefilename))) )
 						mTerrainGrid[y*mGridSize+x] = addTerrainBlock(kLong,kLat);

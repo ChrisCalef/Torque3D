@@ -21,7 +21,7 @@
 //-----------------------------------------------------------------------------
 
 #include "platform/platform.h"
-#include "console/consoleTypes.h"
+
 #include "T3D/physics/physx3/px3World.h"
 #include "T3D/physics/physx3/px3Plugin.h"
 #include "T3D/physics/physx3/px3Collision.h"
@@ -32,9 +32,11 @@
 #include "T3D/physics/physx3/px3Joint.h"
 
 #include "T3D/physics/physicsShape.h"
+#include "console/SQLiteObject.h"
+
+#include "console/consoleTypes.h"
 #include "T3D/gameBase/gameProcess.h"
 #include "core/util/tNamedFactory.h"
-#include "console/SQLiteObject.h"
 
 AFTER_MODULE_INIT( Sim )
 {
