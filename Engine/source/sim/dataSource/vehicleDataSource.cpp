@@ -95,7 +95,7 @@ void vehicleDataSource::listenForPacket()
     memset(&buff, 0, sizeof(buff));
 
     n = recvfrom(SOCKET(mListenSockfd),(char *)(&buff),sizeof(buff),0,(struct sockaddr*)&source_addr,&addrSize);
-	//Con::printf("receiving bytes: %d",n);
+	 //Con::printf("receiving bytes: %d",n);
     while (n>0) {//Do a loop here in case we have multiple packets piled up waiting.
 		//Con::printf("lat %3.8f long %3.8f",buff.latitude,buff.longitude);
 		if ((buff.latitude!=0.0)||(buff.longitude!=0.0)) //((float_swap(buff.latitude)!=0.0)||(float_swap(buff.longitude)!=0.0)) 
@@ -109,9 +109,19 @@ void vehicleDataSource::listenForPacket()
 			mFGPacket.roll = buff.roll;//float_swap(buff.roll);
 			mFGPacket.pitch = buff.pitch;//float_swap(buff.pitch);
 			mFGPacket.heading = buff.heading;//float_swap(buff.heading);
+			mFGPacket.left_aileron = buff.left_aileron;
+			mFGPacket.right_aileron = buff.right_aileron;
+			mFGPacket.elevator = buff.elevator;
+			mFGPacket.rudder = buff.rudder;
+			mFGPacket.gear = buff.gear;
+			mFGPacket.throttle = buff.throttle;
+			mFGPacket.engine_rpm = buff.engine_rpm;
+			mFGPacket.rotor_rpm = buff.rotor_rpm;
+			
 			U32 latency =  Platform::getRealMilliseconds() - mLastSendTimeMS;      
 			mLastSendTimeMS = mLastSendTimeMS = Platform::getRealMilliseconds();
-			//Con::printf("lat %f long %f alt %f roll %f heading %f latency %d",mFGPacket.latitude,mFGPacket.longitude,mFGPacket.altitude,buff.roll,buff.heading,latency);
+			//Con::printf("elevator %f rudder %f gear %f throttle %f engine rmp %f rotor rpm %f",
+			//	mFGPacket.elevator,mFGPacket.rudder,mFGPacket.gear,mFGPacket.throttle,mFGPacket.engine_rpm,mFGPacket.rotor_rpm);
 
 			MatrixF oriMat,pitchMat,rollMat,headMat;
 			QuatF oriQuat;

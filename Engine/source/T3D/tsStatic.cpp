@@ -49,6 +49,7 @@
 #include "materials/materialFeatureTypes.h"
 #include "console/engineAPI.h"
 #include "T3D/accumulationVolume.h"
+#include "console/SQLiteObject.h"
 
 // andrewmac: Cloth Addon
 #include "T3D/physics/physicsCloth.h"
@@ -280,7 +281,7 @@ void TSStatic::inspectPostApply()
 
 bool TSStatic::onAdd()
 {
-   PROFILE_SCOPE(TSStatic_onAdd);
+   //PROFILE_SCOPE(TSStatic_onAdd);
 
    if ( isServerObject() )
    {
@@ -393,6 +394,129 @@ bool TSStatic::_createShape()
     if ( mClothEnabled )
         _enableCloth();
 
+	 Con::printf("creating tsstatic, shapeName %s strcmp %d",mShapeName,strcmp(mShapeName,"art/shapes/fg_convert/ka50/Models/ka50.dts"));
+	 //TEMP!!! Gotta make a new db structure to deal with this new reality. Tie it to shapeName instead of physicsShape ID.
+	if (isServerObject())//Wish I had a one line insta-scan of the database here to find out if any mounts exist for this shape...
+	{//Damn, this is totally crashing, and I think I should wait till I get my debug build sorted out to fix it.
+		SQLiteObject *kSQL = PHYSICSMGR->mSQL;
+
+	   char file_query[512],part_query[512],datablock_query[512];
+	   S32 result,result2;
+	   sqlite_resultset *resultSet,*resultSet2;
+		S32 file_id;
+
+		sprintf(file_query,"SELECT id FROM shapeFile WHERE path IN ('%s')",mShapeName);
+	   result = kSQL->ExecuteSQL(file_query);
+		if (result==0)
+			goto EXIT;
+		else
+		{
+			resultSet = kSQL->GetResultSet(result);
+			if (resultSet->iNumRows<=0)
+				goto EXIT; 	
+			file_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+			kSQL->ClearResultSet(result);
+		}
+		Con::printf("found a file_Id: %d",file_id);
+		
+
+	   sprintf(part_query,"SELECT * FROM shapeMount WHERE parent_shape_id=%d;",file_id);
+	   result = kSQL->ExecuteSQL(part_query);
+	   if (result==0)
+		   goto EXIT; 				
+
+	   resultSet = kSQL->GetResultSet(result);
+	   if (resultSet->iNumRows<=0)
+		   goto EXIT; 	
+		
+		Con::printf("didn't exit out, going for a mounting loop! parent id %d, numResults %d",file_id,resultSet->iNumRows);
+
+	   TSShape *kShape = mShapeInstance->getShape();
+		TSStatic *mountObj;
+
+	   for (U32 i=0;i<resultSet->iNumRows;i++)
+	   {
+		   S32 j=0;
+		   char baseNode[255],childNode[255];
+
+		   //////////////////////////////////////////
+		   // Mount Data
+		   physicsMountData* MD = new physicsMountData;
+
+		   S32 ID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   j++;//We already know parent_shape		
+
+		   MD->childShape = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   S32 offset_id = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   S32 orient_id = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   MD->jointID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);			
+		   MD->parentNode = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);	
+		   MD->childNode = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+						
+		   sprintf(file_query,"SELECT path FROM shapeFile WHERE id=%d;",MD->childShape);
+			result2 = kSQL->ExecuteSQL(file_query);
+			resultSet2 = kSQL->GetResultSet(result2);
+			char childShape[255];
+			sprintf(childShape,resultSet2->vRows[0]->vColumnValues[0]);
+			kSQL->ClearResultSet(result2);
+
+			sprintf(datablock_query,"SELECT x,y,z FROM vector3 WHERE id=%d;",offset_id);
+			result2 = kSQL->ExecuteSQL(datablock_query);
+			resultSet2 = kSQL->GetResultSet(result2);//Sure do wish I had a cleaner interface to sql results...
+			MD->offset = Point3F(dAtof(resultSet2->vRows[0]->vColumnValues[0]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[1]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[2]));
+			kSQL->ClearResultSet(result2);
+			
+			sprintf(datablock_query,"SELECT x,y,z FROM vector3 WHERE id=%d;",orient_id);
+			result2 = kSQL->ExecuteSQL(datablock_query);
+			resultSet2 = kSQL->GetResultSet(result2);
+			MD->orient = Point3F(dAtof(resultSet2->vRows[0]->vColumnValues[0]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[1]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[2]));
+			kSQL->ClearResultSet(result2);
+
+			Con::printf("object %d found a shape mount! childShape %s, offset %f %f %f orient %f %f %f",
+				getId(),childShape,MD->offset.x,MD->offset.y,MD->offset.z,MD->orient.x,MD->orient.y,MD->orient.z);
+		   
+
+			SimSet* missionGroup = NULL;
+			missionGroup = dynamic_cast<SimSet*>(Sim::findObject("MissionGroup"));
+
+			//SimDataBlockGroup* pGroup = Sim::getDataBlockGroup();
+			//SimDataBlock* pDataBlock = NULL;
+			//pDataBlock = dynamic_cast<SimDataBlock*>(Sim::findObject(childShape));
+			//if (pDataBlock)
+			//	Con::printf("Found the datablock with Sim::findObject! %s %d",pDataBlock->getClassName(),pDataBlock->getId());
+			//else 
+			//{
+			//	Con::printf("FAILED to find a datablock with name %s",dbName);	
+			//	continue;
+			//}
+
+			EulerF kOrient = EulerF(mDegToRad(MD->orient.x),mDegToRad(MD->orient.y),mDegToRad(MD->orient.z));
+			MatrixF mat(kOrient);
+			mat.setPosition(MD->offset);
+
+         //PhysicsShape *mountObj = new PhysicsShape();
+			mountObj = new TSStatic();
+         //mountObj->setDataBlock( dynamic_cast<GameBaseData *>(pDataBlock) );
+
+         ////mountObj->setTransform( mat );
+			char objName[255];
+			sprintf(objName,"%s_mount_%d",getName(),i);		
+			mountObj->mShapeName = StringTable->insert(childShape);
+         mountObj->registerObject(objName);
+			missionGroup->addObject(mountObj);	
+			Point3F tempPos = mat.getPosition();
+			Con::printf("object %d using shapefile: %s position %f %f %f",mountObj->getId(),mountObj->mShapeName,
+								tempPos.x,tempPos.y,tempPos.z);
+			this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj),MD->parentNode,MD->childNode,mat);
+		}
+EXIT:
+
+		kSQL->ClearResultSet(result);
+	}
     return true;
 }
 
@@ -536,13 +660,10 @@ void TSStatic::reSkin()
 void TSStatic::processTick( const Move *move )
 {
     // andrewmac : Cloth
-   	if ( mClothEnabled && mCloth )
+   if ( mClothEnabled && mCloth )
         mCloth->processTick();
-    
-	// Die gracefully.
-    if ( !(mPlayAmbient && mAmbientThread) ) return;
 
-   if ( isServerObject() )
+   if ( isServerObject() && mPlayAmbient &&  mAmbientThread)
       mShapeInstance->advanceTime( TickSec, mAmbientThread );
 
    if ( isMounted() )
@@ -572,9 +693,9 @@ void TSStatic::interpolateTick( F32 delta )
 void TSStatic::advanceTime( F32 dt )
 {
 	// andrewmac : Die gracefully.
-    if ( !(mPlayAmbient && mAmbientThread) ) return;
-   
-	mShapeInstance->advanceTime( dt, mAmbientThread );
+   // if ( !(mPlayAmbient && mAmbientThread) ) return;
+   if ( (mPlayAmbient && mAmbientThread) )
+		mShapeInstance->advanceTime( dt, mAmbientThread );
 
    if ( isMounted() )
    {
@@ -797,6 +918,7 @@ U32 TSStatic::packUpdate(NetConnection *con, U32 mask, BitStream *stream)
    if ( stream->writeFlag( mask & AdvancedStaticOptionsMask ) )  
    {
       stream->writeString( mShapeName );
+		Con::printf("tsstatic writing shapename: %s",mShapeName);
       stream->write( (U32)mDecalType );
 
       stream->writeFlag( mAllowPlayerStep );
@@ -877,7 +999,7 @@ void TSStatic::unpackUpdate(NetConnection *con, BitStream *stream)
    if ( stream->readFlag() ) // AdvancedStaticOptionsMask
    {
       mShapeName = stream->readSTString();
-
+		Con::printf("tsstatic reading shapeName: %s",mShapeName);
       stream->read( (U32*)&mDecalType );
 
       mAllowPlayerStep = stream->readFlag();
@@ -1235,6 +1357,7 @@ void TSStaticPolysoupConvex::getFeatures(const MatrixF& mat,const VectorF& n, Co
 void TSStatic::onMount( SceneObject *obj, S32 node )
 {
    Parent::onMount(obj, node);
+	Con::printf("tsStatic mounting onto node %d",node);
    _updateShouldTick();
 }
 
@@ -1457,7 +1580,7 @@ void TSStatic::_disableCloth()
     }
 }
 
-
+/// TEMP ///////////////////////////
 void TSStatic::spitM4s(Point3F pos,Point3F normal,S32 numBodies)
 {
 	//So, this is a temporary function just to test how to do this more efficiently in the future, and to
@@ -1506,5 +1629,51 @@ DefineEngineMethod( TSStatic, showNodes, void, (),,
 		Con::printf("nodes[%d] %s parent %d  pos %f %f %f  rot %f %f %f %f len %f",i,kShape->getName(kShape->nodes[i].nameIndex).c_str(),kShape->nodes[i].parentIndex,kShape->defaultTranslations[i].x,
 			kShape->defaultTranslations[i].y,kShape->defaultTranslations[i].z,
 			q.x,q.y,q.z,q.w,kShape->defaultTranslations[i].len());
+
 	}
+
+	//meshes
+	Con::printf("Meshes %d  ",kShape->meshes.size());
+	for (U32 i=0;i<kShape->meshes.size();i++)
+	{
+		if (kShape->meshes[i])
+		{
+			Point3F center = kShape->meshes[i]->getCenter();
+			Con::printf("mesh %d center %f %f %f",i,center.x,center.y,center.z);
+			//if (i<=7) object->setMeshHidden(i,true);//TEMP
+		}
+	}
+}
+
+void TSStatic::setMeshHidden(S32 index,bool hide)
+{
+	if (isServerObject())
+	{
+		TSStatic *clientShape = NULL;
+		clientShape = dynamic_cast<TSStatic *>(getClientObject());//SINGLE PLAYER HACK
+		clientShape->setMeshHidden(index,hide);
+	} else {
+		if (index < mShape->meshes.size())
+			mShapeInstance->setMeshForceHidden(index,hide);
+	}
+}
+
+DefineEngineMethod( TSStatic, setMeshHidden, void, (S32 index,bool hide),,
+   "@brief hides/unhides a mesh\n\n")
+{  
+	object->setMeshHidden(index,hide);
+}
+
+DefineEngineMethod( TSStatic, setNodeTransform, void, (const char *nodeName, Point3F offset, Point3F rot),,
+   "@brief .\n\n")
+{ 
+	TSStatic *clientShape = dynamic_cast<TSStatic *>(object->getClientObject());
+	clientShape->getShapeInstance()->setNodeTransform(nodeName,offset,EulerF(mDegToRad(rot.x),mDegToRad(rot.y),mDegToRad(rot.z)));
+}
+
+DefineEngineMethod( TSStatic, addNodeTransform, void, (const char *nodeName, Point3F offset, Point3F rot),,
+   "@brief .\n\n")
+{ 
+	TSStatic *clientShape = dynamic_cast<TSStatic *>(object->getClientObject());
+	clientShape->getShapeInstance()->addNodeTransform(nodeName,offset,EulerF(mDegToRad(rot.x),mDegToRad(rot.y),mDegToRad(rot.z)));
 }

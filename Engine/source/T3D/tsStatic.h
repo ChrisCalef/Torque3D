@@ -249,6 +249,11 @@ public:
 	U32 mOseId;
 	bool mIsDirty;
 
+	void setMeshHidden(S32 index,bool hide);
+
+
+	//TEMP: experimental functions for specific situations. Eventually all such things will have to be moved to 
+	//derived classes or otherwise isolated into related groups.
 	void spitM4s(Point3F pos,Point3F normal,S32 numBodies);
 
 };

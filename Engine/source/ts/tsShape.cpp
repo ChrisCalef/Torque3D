@@ -171,6 +171,9 @@ const String& TSShape::getMeshName( S32 meshIndex ) const
 
 const String& TSShape::getNodeName( S32 nodeIndex ) const
 {   
+	if (( nodeIndex < 0) || ( nodeIndex >= nodes.size()))
+		return String::EmptyString;
+
    S32 nameIdx = nodes[nodeIndex].nameIndex;
    if ( nameIdx < 0 )
       return String::EmptyString;

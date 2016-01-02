@@ -102,8 +102,15 @@ TerrainPager::TerrainPager()
 
 	gamePath.replace("\\","/");//not too confident about sending backslashes through the system...
 
-	mD.mTerrainPath = gamePath + "art/terrains/openSimEarth/";//FIX: Hard coded for now,
-	mD.mSkyboxPath  = gamePath + "art/skies/night/";//   allow user prefs for these later.
+	if (strlen(Con::getVariable("$pref::OpenSimEarth::terrainPath"))>0)
+		mD.mTerrainPath = gamePath + Con::getVariable("$pref::OpenSimEarth::terrainPath");
+	else
+		mD.mTerrainPath = gamePath + "art/terrains/openSimEarth/";
+
+	if (strlen(Con::getVariable("$pref::OpenSimEarth::skyboxPath"))>0)
+		mD.mSkyboxPath = gamePath + Con::getVariable("$pref::OpenSimEarth::skyboxPath");
+	else
+		mD.mSkyboxPath  = gamePath + "art/skies/openSimEarth/";//   allow user prefs for these later.
 	
 	//mD.mTerrainLockfile = mD.mTerrainPath + "lockfile.terrain.tmp";//Revisit this when paths are
 	//mD.mSkyboxLockfile = mD.mSkyboxPath + "lockfile.skybox.tmp";//   working from script as they should.
@@ -174,30 +181,29 @@ bool TerrainPager::onAdd()
 
 	mSQL = new SQLiteObject();
 
-	if (!mSQL->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
-		Con::printf("TerrainPager: cannot open map db: %s",Con::getVariable("$pref::OpenSimEarth::OSMDB"));
+	if (!mSQL->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::MapDB")))
+		Con::printf("TerrainPager: cannot open map db: %s",Con::getVariable("$pref::OpenSimEarth::MapDB"));
 	
 	if ( !Parent::onAdd() )
 		return false;
 	
-	
-	//terrain_materials.push_back( "city1" );
-	//terrain_materials.push_back( "forest1a" );
-	//terrain_materials.push_back( "drycrop2" );
-	//terrain_materials.push_back( "grass_green_hires" );
-	//terrain_materials.push_back( "sand_hires" );
-	//terrain_materials.push_back( "water" );
-	//terrain_materials.push_back( "asphalt" );
+	//mTerrainMaterials.push_back( "city1" );
+	//mTerrainMaterials.push_back( "forest1a" );
+	//mTerrainMaterials.push_back( "drycrop2" );
+	//mTerrainMaterials.push_back( "grass_green_hires" );
+	//mTerrainMaterials.push_back( "sand_hires" );
+	//mTerrainMaterials.push_back( "water" );
+	//mTerrainMaterials.push_back( "asphalt" );
 
 	//FIX!! Need to read materials from terrain block, OR get a list of texture names from FG.
-	terrain_materials.push_back( "TT_Gravel_02" );
-	terrain_materials.push_back( "TT_Mud_07" );
-	terrain_materials.push_back( "TT_Grass_20" );
-	terrain_materials.push_back( "TT_Snow_01" );
-	terrain_materials.push_back( "TT_Sand_01" );
-	terrain_materials.push_back( "TT_Rock_14" );
-	terrain_materials.push_back( "forest1a_mat" );
-	terrain_materials.push_back( "TT_Grass_01" );
+	mTerrainMaterials.push_back( "TT_Gravel_02" );//
+	mTerrainMaterials.push_back( "TT_Mud_07" );
+	mTerrainMaterials.push_back( "TT_Grass_20" );
+	mTerrainMaterials.push_back( "TT_Earth_01" );//TT_Snow_01
+	mTerrainMaterials.push_back( "TT_Sand_01" );
+	mTerrainMaterials.push_back( "TT_Rock_14" );
+	mTerrainMaterials.push_back( "forest1a_mat" );
+	mTerrainMaterials.push_back( "TT_Grass_01" );
 
 	SimSet* scopeAlwaysSet = Sim::getGhostAlwaysSet();
 	const TerrainBlock *tempTerrain;
@@ -226,14 +232,9 @@ bool TerrainPager::onAdd()
 			
 			mD.mTileWidthLongitude = mD.mDegreesPerMeterLongitude * mD.mTileWidth;
 			mD.mTileWidthLatitude = mD.mDegreesPerMeterLatitude * mD.mTileWidth;
-
-			//for (U32 i=0;i<mTerrain->mBaseTextures.size();i++)
-			//{
-			//	Con::printf("material %d: %s",i,mTerrain->mBaseTextures[i].??? // Is there any way to get name back out??
-			//}
 		}
 	}
-	//Now, try this again to see if we can find our Forest object. If not this, look for "theForest".
+	//Now, find the forest object.
 	for(SimSet::iterator itr = scopeAlwaysSet->begin(); itr != scopeAlwaysSet->end(); itr++)
 	{
 		Forest* kForest = dynamic_cast<Forest*>(*itr);
@@ -246,8 +247,8 @@ bool TerrainPager::onAdd()
 				mForestItemData[1]->getName(),mForestItemData[2]->getName(),mForestItemData[3]->getName());
 		}
 	}
-	//delete mTerrain;//Is this safe, at all? What is proper way to remove a terrain block? MissionGroup.remove()?
 
+	//Yay, we don't need these anymore!
 	//mD.mSkyboxLockfile = mD.mSkyboxPath + "lockfile.skybox.tmp";
 	//mD.mTerrainLockfile = mD.mTerrainPath + "lockfile.terrain.tmp";
 	
@@ -437,7 +438,7 @@ void TerrainPager::checkForest()
 												mD.mTileWidth,mCellGridSize,mCellArea,mCellWidth,items.size());
 	
       //String osmFile( Con::getVariable( "$pref::OpenSimEarth::OSM" ) );
-      //String mapDB( Con::getVariable( "$pref::OpenSimEarth::OSMDB" ) );
+      //String mapDB( Con::getVariable( "$pref::OpenSimEarth::MapDB" ) );
 		//loadOSM(osmFile.c_str(),mapDB.c_str());
 		if (mDoStaticShapes)
 		{
@@ -628,7 +629,7 @@ void TerrainPager::makeStaticShapes()
 	}
 
 	//NOW, we have a list of cellnames, let's use them:
-	if (mSQL)//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
+	if (mSQL)//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::MapDB")))
 	{
 		long nodeId,fileId,posId,rotId,scaleId,shapeId;
 		int result,total_query_len=0;
@@ -714,7 +715,6 @@ void TerrainPager::makeStaticShapes()
 
 						missionGroup->addObject(shape);
 						mStaticShapes[shapeId] = shape;
-
 					}
 				}
 			} 
@@ -739,7 +739,7 @@ void TerrainPager::saveStaticShapes()
 	if (!mSQL)
 		Con::printf("mSQL is not valid");
 
-	if ((mSQL)&&(missionGroup))//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
+	if ((mSQL)&&(missionGroup))//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::MapDB")))
 	{
 		int nodeId,shapeId,fileId,posId,rotId,scaleId;
 		int result,total_query_len=0;
@@ -1016,7 +1016,7 @@ void TerrainPager::findStreetNodes()
 	//NOW, we have a list of cellnames, let's use them:
 	// SELECT DISTINCT w.osm_id, w.name, w.type FROM osmWay w JOIN osmNode n ...JOIN osmWayNode wn ... WHERE n.cell_name IN {=' << activeCell[i]
 	
-	if (mSQL)//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
+	if (mSQL)//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::MapDB")))
 	{
 		long wayId;
 		int result,total_query_len=0;
@@ -1237,7 +1237,7 @@ void TerrainPager::fillForestCell(Point2F cellPosLatLong)
 		if ( (xDiff<mForestTerrainEdgeDistance) || ((mD.mTileWidthLongitude-xDiff)<mForestTerrainEdgeDistance) ||
 					(yDiff<mForestTerrainEdgeDistance) || ((mD.mTileWidthLatitude-yDiff)<mForestTerrainEdgeDistance) )
 		{
-			Con::printf("found a position at an edge! height = %f  xDiff %f  yDiff %f tileWidthLong %f",worldCoordZ,xDiff,yDiff,mD.mTileWidthLongitude);
+			//Con::printf("found a position at an edge! height = %f  xDiff %f  yDiff %f tileWidthLong %f",worldCoordZ,xDiff,yDiff,mD.mTileWidthLongitude);
 			continue;//for now, just skip this position
 		}
 
@@ -1517,7 +1517,7 @@ TerrainBlock *TerrainPager::addTerrainBlock(F32 startLong,F32 startLat)
 
 	//HERE: height files are 257K, texture files are 64K. It would take approximately 15 ticks, or half a second, to pass
 	//all one tile's worth of this data across the socket instead of writing it to disk. Eight tiles should take four seconds.
-	getTileName(startLong,startLat,tileName);
+	getTileName(startLong,startLat,tileName);//The real solution for all of this is probably shared memory.
 	sprintf(heightfilename,"%shght.%s.bin",mD.mTerrainPath.c_str(),tileName);
 	sprintf(texturefilename,"%stext.%s.bin",mD.mTerrainPath.c_str(),tileName);
 	sprintf(terrainName,"terrain.%s.ter",tileName);
@@ -1528,7 +1528,7 @@ TerrainBlock *TerrainPager::addTerrainBlock(F32 startLong,F32 startLat)
 	if (checkFileExists(terrFileName.c_str())==false)
 	{
 		Con::printf("trying to make terrain file: %s heightmapres %d ",terrFileName.c_str(),mD.mHeightmapRes );	
-		TerrainFile::createByName( &terrFileName, mD.mHeightmapRes, terrain_materials );
+		TerrainFile::createByName( &terrFileName, mD.mHeightmapRes, mTerrainMaterials );
 	} else 
 		terrExists = true;
 
@@ -1559,7 +1559,7 @@ TerrainBlock *TerrainPager::addTerrainBlock(F32 startLong,F32 startLat)
 
 	if (terrExists==false)
 	{
-		if (block->loadTerrainData(heightfilename,texturefilename,mD.mTextureRes,terrain_materials.size(),"treefile.txt"))
+		if (block->loadTerrainData(heightfilename,texturefilename,mD.mTextureRes,mTerrainMaterials.size(),"treefile.txt"))
 			Con::printf("block loaded terrain data: %s",heightfilename);
 		else {
 			Con::printf("block failed to load terrain data: %s",heightfilename);
@@ -1932,7 +1932,7 @@ Point2F TerrainPager::findTileCoords(Point3F pos)
 void TerrainPager::loadTileGrid()
 {
 	bool loaded;
-	bool verbose = true;
+	bool verbose = false;
 	char tileName[20],heightfilename[256],texturefilename[256],terrainfilename[256];
 	U32 gridMidpoint = (mGridSize-1)/2;
 	Vector <loadTerrainData> loadTerrains;
@@ -1995,7 +1995,7 @@ void TerrainPager::loadTileGrid()
 				}
 				if (loaded==false)
 				{//Here, let's check for the bin file existing firstif (verbose) 
-					Con::printf("checking bin file: %s  %s  %s",terrainfilename,heightfilename,texturefilename);
+					//Con::printf("checking bin file: %s  %s  %s",terrainfilename,heightfilename,texturefilename);
 					if ( (checkFileExists(terrainfilename)) || 
 						((checkFileExists(heightfilename))&&(checkFileExists(texturefilename))) )
 						mTerrainGrid[y*mGridSize+x] = addTerrainBlock(kLong,kLat);
@@ -2696,7 +2696,7 @@ void TerrainPager::saveRoads()//WIP: need to step through the road's nodes, and 
 	if (!mSQL)
 		Con::printf("mSQL is not valid");
 
-	if ((mSQL)&&(missionGroup))//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::OSMDB")))
+	if ((mSQL)&&(missionGroup))//->OpenDatabase(Con::getVariable("$pref::OpenSimEarth::MapDB")))
 	{
 		int nodeId;
 		int result,total_query_len=0;

@@ -812,3 +812,49 @@ Vector<TSShapeInstance::MeshObjectInstance*> TSShapeInstance::findMeshInstances(
 	}
 	return results;
 }
+
+void TSShapeInstance::setNodeTransform(const char *nodeName, Point3F offset,  EulerF rot)
+{
+	S32 node = mShape->findNode(nodeName);
+	if (node>=0)
+	{
+		Point3F nodeOffset = offset;
+		MatrixF nodeRot = MatrixF(rot);
+		Point3F nodeOffsetPos;
+		nodeRot.mulP(nodeOffset,&nodeOffsetPos);
+		MatrixF nodeTrans;
+
+		//Set transform: put the change on top of default transform.
+		mShape->defaultRotations[node].getQuatF().setMatrix(&nodeTrans);
+
+		Point3F nodePos = mShape->defaultTranslations[node];//Fallback so our modifications aren't additive.
+		nodeTrans.setPosition(Point3F(0,0,0));
+		nodeTrans = nodeRot * nodeTrans;
+		nodeTrans.setPosition(nodePos - nodeOffset + nodeOffsetPos);
+		nodePos = nodeTrans.getPosition();
+		mNodeTransforms[node] = nodeTrans;
+	}
+}
+
+void TSShapeInstance::addNodeTransform(const char *nodeName, Point3F offset, EulerF rot)
+{
+	S32 node = mShape->findNode(nodeName);
+	if (node>=0)
+	{
+		Point3F nodeOffset = offset;
+		MatrixF nodeRot = MatrixF(rot);
+		Point3F nodeOffsetPos;
+		nodeRot.mulP(nodeOffset,&nodeOffsetPos);
+
+		//Add transform: put the change on top of the last change.
+		MatrixF nodeTrans = mNodeTransforms[node];
+
+		//mShape->defaultRotations[node].getQuatF().setMatrix(&nodeTrans);
+		Point3F nodePos = mShape->defaultTranslations[node];//Fallback so our modifications aren't additive.
+		nodeTrans.setPosition(Point3F(0,0,0));
+		nodeTrans = nodeRot * nodeTrans;
+		nodeTrans.setPosition(nodePos - nodeOffset + nodeOffsetPos);
+		nodePos = nodeTrans.getPosition();
+		mNodeTransforms[node] = nodeTrans;
+	}
+}

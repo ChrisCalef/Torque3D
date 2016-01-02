@@ -814,6 +814,14 @@ class SceneObject : public NetObject, private SceneContainer::Link, public Proce
    // Note: This was placed in SceneObject to both ShapeBase and TSStatic could support it.
    public:
       GFXTextureObject* mAccuTex;
+
+		//TEMP: Not sure where things like this are going to belong, either generalized and left here or 
+		void showPropBlades();//left specific but moved to a very specific vehicle class.
+		void showPropBlur();
+		void showPropDisc();
+		void showRotorBlades();
+		void showRotorBlur();
+		void showRotorDisc();
 };
 
 #endif  // _SCENEOBJECT_H_

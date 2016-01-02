@@ -428,7 +428,7 @@ PhysicsShape::PhysicsShape()
       mDataBlock( NULL ),
       mWorld( NULL ),
       mJoint( NULL ),
-      mShapeInst( NULL ),
+      mShapeInstance( NULL ),
       mResetPos( MatrixF::Identity ),
       mDestroyed( false ),
       mPlayAmbient( false ),
@@ -586,16 +586,16 @@ void PhysicsShape::unpackUpdate( NetConnection *con, BitStream *stream )
    Parent::unpackUpdate( con, stream );
 
    if ( stream->readFlag() ) // InitialUpdateMask
-   {
-      MatrixF mat;
-      stream->readAffineTransform( &mat );
-      setTransform( mat );
-      mPlayAmbient = stream->readFlag();
-      mHasGravity = stream->readFlag();
-	  mIsDynamic = stream->readFlag();
+	{
+		MatrixF mat;
+		stream->readAffineTransform( &mat );
+		setTransform( mat );
+		mPlayAmbient = stream->readFlag();
+		mHasGravity = stream->readFlag();
+		mIsDynamic = stream->readFlag();
 
-      if ( isProperlyAdded() )
-         _initAmbient();
+		if ( isProperlyAdded() )
+			_initAmbient();
 
       if ( stream->readFlag() )
       {
@@ -688,7 +688,6 @@ bool PhysicsShape::onAdd()
    if (mUseDataSource)
 	   mDataSource = new vehicleDataSource(true);
 
-
    // The reset position is the transform on the server
    // at creation time... its not used on the client.
    if ( isServerObject() )
@@ -726,7 +725,7 @@ void PhysicsShape::onRemove()
    removeFromScene();
 
    SAFE_DELETE( mPhysicsRep );
-   SAFE_DELETE( mShapeInst );
+   SAFE_DELETE( mShapeInstance );
    mAmbientThread = NULL;
    mAmbientSeq = -1;
    mCurrentSeq = -1;
@@ -775,7 +774,7 @@ bool PhysicsShape::onNewDataBlock( GameBaseData *dptr, bool reload )
 bool PhysicsShape::_createShape()
 {
    SAFE_DELETE( mPhysicsRep );
-   SAFE_DELETE( mShapeInst );
+   SAFE_DELETE( mShapeInstance );
    mAmbientThread = NULL;
    mWorld = NULL;
    mAmbientSeq = -1;
@@ -800,16 +799,21 @@ bool PhysicsShape::_createShape()
 
    // Create the shape instance.   
    TSShape *kShape = mDataBlock->shape;
-   mShapeInst = new TSShapeInstance( mDataBlock->shape, isClientObject() );
-   //mShapeInst = new TSShapeInstance( kShape, isClientObject() );//NOPE! const Resource<TSShape> version is not same as TSShape* version!
-   //With a pointer I get a "no material" on my shape, unknown if anything else breaks.
+   mShapeInstance = new TSShapeInstance( mDataBlock->shape, isClientObject() );
 
    if ( isClientObject() )
    {	  
       _initAmbient();   
    }
 
-   // If the shape has a mass then its dynamic... else
+	
+	SQLiteObject *kSQL = PHYSICSMGR->mSQL;//openSimEarth
+	char part_query[512],datablock_query[512],joint_query[512];
+	S32 result,result2,file_id;
+	sqlite_resultset *resultSet,*resultSet2;
+	S32 shape_id = mDataBlock->shapeID;
+
+   // If the shape has a mass then it's dynamic... else
    // its a kinematic shape. [Edit: now allowing mIsDynamic to be set from console at 
    // object creation time, but also turn it off if mass is less than or equal to zero.
    //
@@ -859,7 +863,7 @@ bool PhysicsShape::_createShape()
 	   colShape = PHYSICSMGR->createCollision();
 	   MatrixF localTrans = MatrixF::Identity;
 
-	   colShape->addBox(Point3F(0.03,0.02,0.015),localTrans);//TEMP server physics doesn't really matter for our immediate 
+	   colShape->addBox(Point3F(0.03,0.02,0.015),localTrans);//FIX server physics doesn't really matter for our immediate 
 			// purposes, but depending on the application, this could be replaced with a capsule or a character controller.
 
 	   //Oops, just realized this would break everything not articulated, or at least replace it with a colshape
@@ -893,14 +897,7 @@ bool PhysicsShape::_createShape()
 
    } else { //mIsArticulated == true, and we're on the client.
 
-	   //Use shapeID to find joint and bodypart info in the database.
-	   SQLiteObject *kSQL = PHYSICSMGR->mSQL;
-
-	   char part_query[512],joint_query[512];
-	   S32 result,result2;
-	   sqlite_resultset *resultSet,*resultSet2;
-
-	   sprintf(part_query,"SELECT * FROM physicsShapePart WHERE physicsShape_id=%d;",mDataBlock->shapeID);
+	   sprintf(part_query,"SELECT * FROM physicsShapePart WHERE physicsShape_id=%d;",shape_id);
 	   result = kSQL->ExecuteSQL(part_query);
 	   if (result==0)
 		   return NULL; 				
@@ -909,7 +906,7 @@ bool PhysicsShape::_createShape()
 	   if (resultSet->iNumRows<=0)
 		   return NULL;
 
-	   TSShape *kShape = mShapeInst->getShape();
+	   TSShape *kShape = mShapeInstance->getShape();
 
 	   for (U32 i=0;i<resultSet->iNumRows;i++)
 	   {
@@ -1019,7 +1016,7 @@ bool PhysicsShape::_createShape()
 			   colShape->addBox(halfDim,localTrans);//(for now hold it down with a box)		   
 		   }
 		   MatrixF finalTrans;
-		   MatrixF nodeTrans = mShapeInst->mNodeTransforms[PD->baseNode];
+		   MatrixF nodeTrans = mShapeInstance->mNodeTransforms[PD->baseNode];
 		   finalTrans.mul(shapeTrans,nodeTrans);
 		   Point3F bodypartPos = finalTrans.getPosition();
 
@@ -1042,7 +1039,7 @@ bool PhysicsShape::_createShape()
 			   mWorld );	 
 
 		   partBody->setMaterial( mDataBlock->restitution, mDataBlock->dynamicFriction, mDataBlock->staticFriction );
-		   	   
+		   
 		   if ( mIsDynamic )
 		   {
 			   partBody->setDamping( mDataBlock->linearDamping, mDataBlock->angularDamping );
@@ -1067,7 +1064,6 @@ bool PhysicsShape::_createShape()
 		   // Create Joint
 		   if ((hasJoint)&&(PD->baseNode>0))
 		   {
-
 			   //Now, we need to find the parent physics body, which may involve skipping TSShape nodes in the hierarchy 
 			   //if they don't have physics.
 			   S32 parentNode,finalParentNode=-1;
@@ -1124,7 +1120,293 @@ bool PhysicsShape::_createShape()
 		   }		   
 	   }
 	   setupOrderNodes();
-   }
+	}
+
+	//And, another bit of application-specific logic that should probably go somewhere else: load range/offset of rudder, etc.
+	if (isClientObject())
+	{
+		S32 vehicle_id = 0;
+		char vehicle_query[512],offset_query[255];
+		String rudderNodes,elevNodes,rightAilerNodes,leftAilerNodes,propNodes,rotorNodesA,rotorNodesB,tailRotorNodes;
+
+		sprintf(vehicle_query,"SELECT vehicle_id FROM physicsShape WHERE id=%d;",shape_id);
+		result = kSQL->ExecuteSQL(vehicle_query);
+		resultSet = kSQL->GetResultSet(result);
+		if (resultSet->iNumRows==1)
+				vehicle_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+		kSQL->ClearResultSet(result);
+
+		if (vehicle_id>0)
+		{
+			sprintf(vehicle_query,"SELECT * FROM shapeVehicle WHERE id=%d;",vehicle_id);
+			result = kSQL->ExecuteSQL(vehicle_query);
+			resultSet = kSQL->GetResultSet(result);
+			if (resultSet->iNumRows==1)
+			{
+				S32 rudOff,elevOff,ailOff;
+				const char* p;
+
+				mRudderRange = mDegToRad(dAtof(resultSet->vRows[0]->vColumnValues[1]));
+				rudOff = dAtoi(resultSet->vRows[0]->vColumnValues[2]);
+				mElevRange = mDegToRad(dAtof(resultSet->vRows[0]->vColumnValues[3]));
+				elevOff = dAtoi(resultSet->vRows[0]->vColumnValues[4]);
+				mAilerRange = mDegToRad(dAtof(resultSet->vRows[0]->vColumnValues[5]));
+				ailOff = dAtoi(resultSet->vRows[0]->vColumnValues[6]);
+
+				rudderNodes = resultSet->vRows[0]->vColumnValues[7];
+				elevNodes = resultSet->vRows[0]->vColumnValues[8];
+				rightAilerNodes = resultSet->vRows[0]->vColumnValues[9];
+				leftAilerNodes = resultSet->vRows[0]->vColumnValues[10];
+				propNodes = resultSet->vRows[0]->vColumnValues[11];
+				rotorNodesA = resultSet->vRows[0]->vColumnValues[12];
+				rotorNodesB = resultSet->vRows[0]->vColumnValues[13];
+				tailRotorNodes = resultSet->vRows[0]->vColumnValues[14];
+				
+				mPropBlurSpeed = dAtof(resultSet->vRows[0]->vColumnValues[15]);
+				mPropDiscSpeed = dAtof(resultSet->vRows[0]->vColumnValues[16]);
+
+				//////////////////////////////////////////////
+				//REFACTOR: This is going to be an ugly mess of repetitive code for the first pass, but some kind of
+				//loop would sure be nice.
+				if (!rudderNodes.find(","))
+				{
+					mRudderNodes.increment();
+					mRudderNodes[0] = rudderNodes;
+				} else {
+					for (p = strtok( (char *)rudderNodes.c_str(), "," );  p;  p = strtok( NULL, "," ))
+					{
+						mRudderNodes.increment();
+						mRudderNodes.last() = p;
+					}
+				}//////////////////////////////////////////////
+				if (!elevNodes.find(","))
+				{
+					mElevNodes.increment();
+					mElevNodes[0] = elevNodes;
+				} else {
+					for (p = strtok( (char *)elevNodes.c_str(), "," );  p;  p = strtok( NULL, "," ))
+					{
+						mElevNodes.increment();
+						mElevNodes.last() = p;
+					}
+				}//////////////////////////////////////////////				
+				if (!rightAilerNodes.find(","))
+				{
+					mRightAilerNodes.increment();
+					mRightAilerNodes[0] = rightAilerNodes;
+				} else {
+					for (p = strtok( (char *)rightAilerNodes.c_str(), "," );  p;  p = strtok( NULL, "," ))
+					{
+						mRightAilerNodes.increment();
+						mRightAilerNodes.last() = p;
+					}
+				}//////////////////////////////////////////////				
+				if (!leftAilerNodes.find(","))
+				{
+					mLeftAilerNodes.increment();
+					mLeftAilerNodes[0] = leftAilerNodes;
+				} else {
+					for (p = strtok( (char *)leftAilerNodes.c_str(), "," );  p;  p = strtok( NULL, "," ))
+					{
+						mLeftAilerNodes.increment();
+						mLeftAilerNodes.last() = p;
+					}
+				}//////////////////////////////////////////////				
+				if (!propNodes.find(","))
+				{
+					mPropNodes.increment();
+					mPropNodes[0] = propNodes;
+				} else {
+					for (p = strtok( (char *)propNodes.c_str(), "," );  p;  p = strtok( NULL, "," ))
+					{
+						mPropNodes.increment();
+						mPropNodes.last() = p;
+					}
+				}//////////////////////////////////////////////				
+				if (!rotorNodesA.find(","))
+				{
+					mRotorNodesA.increment();
+					mRotorNodesA[0] = rotorNodesA;
+				} else {
+					for (p = strtok( (char *)rotorNodesA.c_str(), "," );  p;  p = strtok( NULL, "," ))
+					{
+						mRotorNodesA.increment();
+						mRotorNodesA.last() = p;
+					}
+				}//////////////////////////////////////////////
+				if (!rotorNodesB.find(","))
+				{
+					mRotorNodesB.increment();
+					mRotorNodesB[0] = rotorNodesB;
+				} else {
+					for (p = strtok( (char *)rotorNodesB.c_str(), "," );  p;  p = strtok( NULL, "," ))
+					{
+						mRotorNodesB.increment();
+						mRotorNodesB.last() = p;
+					}
+				}//////////////////////////////////////////////
+				if (!tailRotorNodes.find(","))
+				{
+					mTailRotorNodes.increment();
+					mTailRotorNodes[0] = tailRotorNodes;
+				} else {
+					for (p = strtok( (char *)tailRotorNodes.c_str(), "," );  p;  p = strtok( NULL, "," ))
+					{
+						mTailRotorNodes.increment();
+						mTailRotorNodes.last() = p;
+					}
+				}//////////////////////////////////////////////
+
+				//NOW, can we PLEASE start doing this in one big query with lots of subqueries? NOW??
+ 				sprintf(offset_query,"SELECT x,y,z FROM vector3 WHERE id=%d;",rudOff);
+				result2 = kSQL->ExecuteSQL(offset_query);
+				resultSet2 = kSQL->GetResultSet(result2);
+				if (resultSet2->iNumRows==1)
+				{
+					mRudderOffset = Point3F(dAtof(resultSet2->vRows[0]->vColumnValues[0]),
+													dAtof(resultSet2->vRows[0]->vColumnValues[1]),
+													dAtof(resultSet2->vRows[0]->vColumnValues[2]));
+					Con::printf("rudder offset: %f %f %f",mRudderOffset.x,mRudderOffset.y,mRudderOffset.z);
+					kSQL->ClearResultSet(result2);
+				}
+
+ 				sprintf(offset_query,"SELECT x,y,z FROM vector3 WHERE id=%d;",elevOff);
+				result2 = kSQL->ExecuteSQL(offset_query);
+				resultSet2 = kSQL->GetResultSet(result2);
+				if (resultSet2->iNumRows==1)
+				{
+					mElevOffset = Point3F(dAtof(resultSet2->vRows[0]->vColumnValues[0]),
+													dAtof(resultSet2->vRows[0]->vColumnValues[1]),
+													dAtof(resultSet2->vRows[0]->vColumnValues[2]));
+					Con::printf("elevator offset: %f %f %f",mElevOffset.x,mElevOffset.y,mElevOffset.z);
+					kSQL->ClearResultSet(result2);
+				}
+
+				sprintf(offset_query,"SELECT x,y,z FROM vector3 WHERE id=%d;",ailOff);
+				result2 = kSQL->ExecuteSQL(offset_query);
+				resultSet2 = kSQL->GetResultSet(result2);
+				if (resultSet2->iNumRows==1)
+				{
+					mAilerOffset = Point3F(dAtof(resultSet2->vRows[0]->vColumnValues[0]),
+													dAtof(resultSet2->vRows[0]->vColumnValues[1]),
+													dAtof(resultSet2->vRows[0]->vColumnValues[2]));
+					kSQL->ClearResultSet(result2);
+				}
+			}
+			kSQL->ClearResultSet(result);
+		}		
+	}
+
+	//shapeMount
+	if (isServerObject())//Wish I had a one line insta-scan of the database here to find out if any mounts exist for this shape...
+	{
+	   sprintf(part_query,"SELECT id FROM shapeFile WHERE path IN ('%s');",mDataBlock->shapeName);
+	   result = kSQL->ExecuteSQL(part_query);
+		if (result==0) goto EXIT; 				
+		resultSet = kSQL->GetResultSet(result);
+	   if (resultSet->iNumRows<=0) goto EXIT; 	
+		file_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+
+	   sprintf(part_query,"SELECT * FROM shapeMount WHERE parent_shape_id=%d;",file_id);
+	   result = kSQL->ExecuteSQL(part_query);
+	   if (result==0)
+		   goto EXIT; 				
+
+	   resultSet = kSQL->GetResultSet(result);
+	   if (resultSet->iNumRows<=0)
+		   goto EXIT; 	
+
+	   TSShape *kShape = mShapeInstance->getShape();
+		TSStatic *mountObj;
+
+	   for (U32 i=0;i<resultSet->iNumRows;i++)
+	   {
+		   S32 j=0;//column counter
+		   char baseNode[255],childNode[255];
+
+		   //////////////////////////////////////////
+		   // Mount Data
+		   physicsMountData* MD = new physicsMountData;
+
+		   S32 ID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   j++;//We already know parent_shape, so skip it.		
+
+		   MD->childShape = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   S32 offset_id = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   S32 orient_id = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   MD->jointID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);			
+		   MD->parentNode = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);	
+		   MD->childNode = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+						
+		   sprintf(datablock_query,"SELECT path FROM shapeFile WHERE id=%d;",MD->childShape);
+			result2 = kSQL->ExecuteSQL(datablock_query);
+			resultSet2 = kSQL->GetResultSet(result2);
+			char shapeFile[255];
+			sprintf(shapeFile,resultSet2->vRows[0]->vColumnValues[0]);
+			kSQL->ClearResultSet(result2);
+
+			sprintf(datablock_query,"SELECT x,y,z FROM vector3 WHERE id=%d;",offset_id);
+			result2 = kSQL->ExecuteSQL(datablock_query);
+			resultSet2 = kSQL->GetResultSet(result2);//Sure do wish I had a cleaner interface to sql results...
+			MD->offset = Point3F(dAtof(resultSet2->vRows[0]->vColumnValues[0]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[1]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[2]));
+			kSQL->ClearResultSet(result2);
+			
+			sprintf(datablock_query,"SELECT x,y,z FROM vector3 WHERE id=%d;",orient_id);
+			result2 = kSQL->ExecuteSQL(datablock_query);
+			resultSet2 = kSQL->GetResultSet(result2);
+			MD->orient = Point3F(dAtof(resultSet2->vRows[0]->vColumnValues[0]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[1]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[2]));
+			kSQL->ClearResultSet(result2);
+
+			//Con::printf("found a shape mount! childShape %d, offset %f %f %f orient %f %f %f path %s",
+			//	MD->childShape,MD->offset.x,MD->offset.y,MD->offset.z,MD->orient.x,MD->orient.y,MD->orient.z,shapeFile);
+		   
+
+			SimSet* missionGroup = NULL;
+			missionGroup = dynamic_cast<SimSet*>(Sim::findObject("MissionGroup"));
+			/*
+			SimDataBlockGroup* pGroup = Sim::getDataBlockGroup();
+			SimDataBlock* pDataBlock = NULL;
+			pDataBlock = dynamic_cast<SimDataBlock*>(Sim::findObject(dbName));
+			if (pDataBlock)
+				Con::printf("Found the datablock with Sim::findObject! %s %d",pDataBlock->getClassName(),pDataBlock->getId());
+			else 
+			{
+				Con::printf("FAILED to find a datablock with name %s",dbName);	
+				continue;
+			}*/
+
+			EulerF kOrient = EulerF(mDegToRad(MD->orient.x),mDegToRad(MD->orient.y),mDegToRad(MD->orient.z));
+			MatrixF mat(kOrient);
+			mat.setPosition(MD->offset);
+
+         //PhysicsShape *mountObj = new PhysicsShape();
+			mountObj = new TSStatic();
+         //mountObj->setDataBlock( dynamic_cast<GameBaseData *>(pDataBlock) );
+
+         ////mountObj->setTransform( mat );
+			char objName[255];
+			sprintf(objName,"obj_%d_mount_%d",getId(),i);		
+			mountObj->mShapeName = StringTable->insert(shapeFile);
+         mountObj->registerObject(objName);
+			missionGroup->addObject(mountObj);	
+			Con::printf("object %d using shapefile: %s, parent node %d  child node %d",
+				mountObj->getId(),mountObj->mShapeName,MD->parentNode,MD->childNode);
+			this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj),MD->parentNode,MD->childNode,mat);
+         //this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj),-1,-1,mat);
+			
+			//this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj),MD->parentNode,MD->childNode,mat);
+        // this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj2),0,0,mat);
+			//mountObj->registerObject();
+		}
+
+EXIT:
+		kSQL->ClearResultSet(result);
+	}
+
    return true;
 }
 
@@ -1139,10 +1421,10 @@ void PhysicsShape::_initAmbient()
    {
       // Create thread if we dont already have.
       if ( mAmbientThread == NULL )
-         mAmbientThread = mShapeInst->addThread();
+         mAmbientThread = mShapeInstance->addThread();
     
       // Play the sequence.
-      mShapeInst->setSequence( mAmbientThread, mAmbientSeq, 0);
+      mShapeInstance->setSequence( mAmbientThread, mAmbientSeq, 0);
 	  mCurrentSeq = mAmbientSeq;
       setProcessTick(true);
    }
@@ -1150,7 +1432,7 @@ void PhysicsShape::_initAmbient()
    {
       if ( mAmbientThread != NULL )
       {
-         mShapeInst->destroyThread( mAmbientThread );
+         mShapeInstance->destroyThread( mAmbientThread );
          mAmbientThread = NULL;
       }
    }
@@ -1161,23 +1443,23 @@ void PhysicsShape::_setCurrent()
    if ( isServerObject() )
       return;
 
-   bool willPlay = (mCurrentSeq >= 0) && (mCurrentSeq < mShapeInst->getShape()->sequences.size());
+   bool willPlay = (mCurrentSeq >= 0) && (mCurrentSeq < mShapeInstance->getShape()->sequences.size());
 
    if ( willPlay )
    {
       // Create thread if we dont already have.
       if ( mAmbientThread == NULL )
-         mAmbientThread = mShapeInst->addThread();
+         mAmbientThread = mShapeInstance->addThread();
     
       // Play the sequence.
-      mShapeInst->setSequence( mAmbientThread, mCurrentSeq, 0);
+      mShapeInstance->setSequence( mAmbientThread, mCurrentSeq, 0);
       setProcessTick(true);
    }
    else
    {//Hmm, do we really want to destroy the thread every time a seq fails? I guess so, easy to recreate it above.
       if ( mAmbientThread != NULL )
       {
-         mShapeInst->destroyThread( mAmbientThread );
+         mShapeInstance->destroyThread( mAmbientThread );
          mAmbientThread = NULL;
       }
    }
@@ -1216,7 +1498,7 @@ void PhysicsShape::setTransform( const MatrixF &newMat )
 	   mState.position = getPosition();
    else // is articulated, and is on the client... try this. Might need to rotate defTrans by newMat however.
    {
-	   mState.position = getPosition() + mShapeInst->getShape()->defaultTranslations[0];
+	   mState.position = getPosition() + mShapeInstance->getShape()->defaultTranslations[0];
 	   //updatePhysicsBodies()??
    }
    mState.orientation.set( newMat );
@@ -1271,7 +1553,6 @@ void PhysicsShape::setIsRecording(bool record)
 	}
 	else
 		mIsRecording = false;
-
 }
 
 DefineEngineMethod( PhysicsShape, setIsRecording, void, (bool isRecording),, 
@@ -1336,7 +1617,6 @@ void PhysicsShape::recordTick()
 			QuatF q(bodyTransform);
 			mNodeRotations.increment();
 			mNodeRotations[mNodeRotations.size()-1].set(q);
-
 		}
 	}
 	//Con::printf("recording tick! mRecordCount %d, orderNodes %d",mRecordCount,mOrderNodes.size());
@@ -1914,21 +2194,23 @@ void PhysicsShape::processTick( const Move *move )
 	//if (!isServerObject()) Con::printf("client object %d ticking %d physicsrep isDynamic %d isArticulated %d",
 	//									getId(),mCurrentTick,mPhysicsRep->isDynamic(),mIsArticulated);
 	//}
+
    mCurrentTick++;
-   TSShape *kShape = mShapeInst->getShape();
+   TSShape *kShape = mShapeInstance->getShape();
 
    //Now, this also only makes sense on the client, for articulated shapes at least...
    if (mIsRecording)
 	   recordTick();
 
 	 if (isClientObject())//((mUseDataSource ) && (isServerObject()))
-	 {
+	 {//FIX! Need to find out what is wrong with mUseDataSource on client, and right it, so we can have normal phyicsShapes again.
 		 bool firstTime = false;
 		 if (!mDataSource)
 		 {
 			 mDataSource = new vehicleDataSource(true);
 			 firstTime = true;
-			 Con::printf("creating new vehicleDataSource, first pass!!!!!!");
+			 mPropStatus = 0;//0=blades, 1=propblur, 2=propdisc
+			 Con::printf("creating new vehicleDataSource, first pass, useDataSource %d!!!!!!",mUseDataSource);
 		 }
 
 		 mDataSource->tick();
@@ -1948,17 +2230,215 @@ void PhysicsShape::processTick( const Move *move )
 		 //mRenderState[1].position = dsPos;
 		 //mRenderState[1].orientation = dsQuat;//??? I have no idea how renderStates work
 		 setTransform(trans);
-		 Parent::setTransform( trans );
-		 //Everything below this point is physics or groundMove related, so irrelevant if we are using a data source. 
-		 
+		 Parent::setTransform( trans ); 
+		 EulerF rudderRot,elevRot,ailerRot,propRot,rotorRot;
+		 F32 engineRPM,rotorRPM,rotPerTick;
+
 		 PhysicsShape *servObj = (PhysicsShape*)getServerObject();
 		 servObj->setTransform( trans );		 
 		 servObj->setMaskBits( StateMask );
 
-		 //Con::printf("helicopter data source, pos %f %f %f currPos %f %f %f",dsPos.x,dsPos.y,dsPos.z,currPos.x,currPos.y,currPos.z);
+		 rudderRot = EulerF(0,0,(mRudderRange * mDataSource->mFGPacket.rudder));
+		 for (U32 c=0;c<mRudderNodes.size();c++)
+			 mShapeInstance->setNodeTransform(mRudderNodes[c].c_str(),mRudderOffset,rudderRot);
+		 Con::printf("rudder range: %f !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",mRudderRange);
+		 elevRot = EulerF(0,(mElevRange * mDataSource->mFGPacket.elevator),0);
+		 for (U32 c=0;c<mElevNodes.size();c++)
+			 mShapeInstance->setNodeTransform(mElevNodes[c].c_str(),mElevOffset,elevRot);
+
+		 ailerRot = EulerF(0,(mAilerRange * mDataSource->mFGPacket.right_aileron),0);
+		 for (U32 c=0;c<mRightAilerNodes.size();c++)
+			 mShapeInstance->setNodeTransform(mRightAilerNodes[c].c_str(),mAilerOffset,ailerRot);
+
+		 ailerRot = EulerF(0,0,(-mAilerRange * mDataSource->mFGPacket.right_aileron));
+		 for (U32 c=0;c<mLeftAilerNodes.size();c++)
+			 mShapeInstance->setNodeTransform(mLeftAilerNodes[c].c_str(),mAilerOffset,ailerRot);
+
+		 // Propeller, get rotations per tick out of the RPM value, and do blur effects.
+		 engineRPM = mDataSource->mFGPacket.engine_rpm;
+		 rotPerTick = (engineRPM / (60 * 32)) * (2 * M_PI);
+		 propRot = EulerF(rotPerTick,0,0);
+		 //For a spinning object, instead of setting the transform, add it:
+		 for (U32 c=0;c<mPropNodes.size();c++)
+			 mShapeInstance->addNodeTransform(mPropNodes[c].c_str(),mPropOffset,propRot);
+
+		 if ((engineRPM < mPropBlurSpeed) && (mPropStatus!=0))
+		 {
+			 showPropBlades();
+			 mPropStatus = 0;//CAUTION: assuming here that no helicopter also has a separate propeller.
+		 }
+		 else if ((rotorRPM > mPropBlurSpeed) && (rotorRPM < mPropDiscSpeed) && (mPropStatus!=1))
+		 {
+			 showPropBlur();
+			 mPropStatus = 1;
+		 }
+		 else if ((rotorRPM > mPropDiscSpeed) && (mPropStatus!=2))
+		 {
+			 showPropDisc();
+			 mPropStatus = 2;
+		 }
+
+
+		 ////////////////////////////////////////////////////////////////
+		 rotorRPM = mDataSource->mFGPacket.rotor_rpm;
+		 rotPerTick = (rotorRPM / (60 * 32)) * (2 * M_PI);
+		 //And now, a remaining bit of hard coding I don't know what to do with. On the ka50, rotors and blades are 
+		 //a separate mounted object, on other helicopters they are part of the helicopter model. For now just checking
+		 //for the MainRotor.dts being mounted.
+		 bool isKa50 = false;//TEMP, gotta work out a generalized system for whether we have mounted rotors or not.
+		 for (U32 i=0;i<getMountedObjectCount();i++)
+		 {
+			 TSStatic *mountObj = dynamic_cast<TSStatic*>(getMountedObject(i));
+			 if (!mountObj) 
+				 continue;
+			 if (strstr(mountObj->getShapeFileName(),"MainRotor.dts")>0)
+			 {
+				 TSShapeInstance *rotorShapeInst = mountObj->getShapeInstance();
+				 
+				 rotorRot = EulerF(0,0,rotPerTick); 
+				 for (U32 c=0;c<mRotorNodesA.size();c++)
+					 rotorShapeInst->addNodeTransform(mRotorNodesA[c].c_str(),mRotorOffsetA,rotorRot);
+
+
+				 rotorRot = EulerF(0,0,-rotPerTick);
+				 for (U32 c=0;c<mRotorNodesB.size();c++)
+					 rotorShapeInst->addNodeTransform(mRotorNodesB[c].c_str(),mRotorOffsetA,rotorRot);
+				 
+				 isKa50 = true;
+			 }
+		 }
+		 if (isKa50 == false)
+		 {//For all (so far) other helicopters that have their rotors attached to the main model. Also mixing
+			 //tail rotor in here, because ka50 also doesn't have one.
+			 rotorRot = EulerF(0,0,rotPerTick); 
+			 for (U32 c=0;c<mRotorNodesA.size();c++)
+				 mShapeInstance->addNodeTransform(mRotorNodesA[c].c_str(),mRotorOffsetA,rotorRot);
+			 for (U32 c=0;c<mTailRotorNodes.size();c++)
+					 mShapeInstance->addNodeTransform(mTailRotorNodes[c].c_str(),mTailRotorOffset,rotorRot);
+		 }
+
+		 //Now, either of them could use rotor blur.
+		 if ((rotorRPM < mPropBlurSpeed) && (mPropStatus!=0))
+		 {
+			 showRotorBlades();
+			 mPropStatus = 0;
+		 }
+		 else if ((rotorRPM > mPropBlurSpeed) && (rotorRPM < mPropDiscSpeed) && (mPropStatus!=1))
+		 {
+			 showRotorBlur();
+			 mPropStatus = 1;
+		 }
+		 else if ((rotorRPM > mPropDiscSpeed) && (mPropStatus!=2))
+		 {
+			 showRotorDisc();
+			 mPropStatus = 2;
+		 }
+
+		 //...
+
+
+
+		 //EulerF rudderRange = EulerF(0,0,(mRudderRange * mDataSource->mFGPacket.rudder));
+		 //for (U32 c=0;c<mRudderNodes.size();c++)
+		//	 mShapeInstance->setNodeTransform(mRudderNodes[c].c_str(),mAilerOffset,ailerRange);
+
 		 
-		 //NOW: what would happen if we took this opportunity to override the player's camera and force it to  
-		 //follow us around as a chase cam instead? 		 
+		 /*
+		 //HERE: next stage of the ugly hack: start switching between aircraft. FIX grab this data from DB.
+		 //And don't do that here!!! You need to load the relevant variables ONCE for each aircraft.
+		 if (strstr(mDataBlock->shapeName,"ka50.dts")>0)
+		 {
+			 //Con::printf("helicopter data source, elevator: %f  rudder %f",mDataSource->mFGPacket.elevator,mDataSource->mFGPacket.rudder);
+			 rudderOffset = Point3F(0.4,0,0);
+			 rudderRange = (M_PI/8.0);
+			 mShapeInstance->setNodeTransform("Direction",rudderOffset,EulerF(0,0,(rudderRange * mDataSource->mFGPacket.rudder)));
+
+			 elevOffset = Point3F(0.4,0,0);
+			 elevRange = -(M_PI/8.0);//Elevator numbers come in opposite, hence the sign flip.
+			 mShapeInstance->setNodeTransform("profondeurG",elevOffset,EulerF(0,(elevRange * mDataSource->mFGPacket.elevator),0));
+			 mShapeInstance->setNodeTransform("profondeurD",elevOffset,EulerF(0,(elevRange * mDataSource->mFGPacket.elevator),0));
+
+			 //And then, since this is a ka50 and not a fixed wing, we need to turn the rotors.
+			 for (U32 i=0;i<getMountedObjectCount();i++)
+			 {
+				 TSStatic *mountObj = dynamic_cast<TSStatic*>(getMountedObject(i));
+				 if (!mountObj) 
+					 continue;
+				 if (strstr(mountObj->getShapeFileName(),"MainRotor.dts")>0)
+				 {
+					 //From FG we have rpm, rotations per minute. What we need is an angle increment for a tick lasting
+					 //only 1/32 of a second. One full rotation should be 2 * M_PI, so if we had 60 RPM, it would be one rotation
+					 //per second, and hence we would need (2 * M_PI) / 32 * rpm / 60, or more naturally, (rpm / (60 * 32))
+					 F32 rpm = mDataSource->mFGPacket.rotor_rpm;
+					 F32 rotPerTick = (rpm / (60 * 32)) * (2 * M_PI);
+
+					 TSShapeInstance *shpInst = mountObj->getShapeInstance();
+					 shpInst->addNodeTransform("upperRotorAttach",Point3F(0,0,0),EulerF(0,0,rotPerTick));
+					 shpInst->addNodeTransform("partrotorH1",Point3F(0,0,0),EulerF(0,0,rotPerTick));
+					 shpInst->addNodeTransform("partrotorH2",Point3F(0,0,0),EulerF(0,0,rotPerTick));
+
+					 shpInst->addNodeTransform("lowerRotorAttach",Point3F(0,0,0),EulerF(0,0,-rotPerTick));
+					 shpInst->addNodeTransform("partrotorB1",Point3F(0,0,0),EulerF(0,0,-rotPerTick));
+					 shpInst->addNodeTransform("partrotorB2",Point3F(0,0,0),EulerF(0,0,-rotPerTick));
+					 shpInst->addNodeTransform("partrotorB3",Point3F(0,0,0),EulerF(0,0,-rotPerTick));
+					 shpInst->addNodeTransform("partrotorB4",Point3F(0,0,0),EulerF(0,0,-rotPerTick));
+
+					 //Works, but looks even worse than plain blades. Needs work with transparency, and interpolateTick/advanceTime.
+					 
+					 F32 blurPoint = 130.0;//Trial and error...
+					 F32 discPoint = 260.0;
+					 Con::printf("rotor rpm: %f",mDataSource->mFGPacket.rotor_rpm);
+					 if ((rpm < blurPoint) && (mPropStatus!=0))
+					 {
+						showHelicopterBlades();
+						mPropStatus = 0;
+					 }
+					 else if ((rpm > blurPoint) && (rpm < discPoint) && (mPropStatus!=1))
+					 {
+						showHelicopterPropBlur();
+						mPropStatus = 1;
+					 }
+					 else if ((rpm > discPoint) && (mPropStatus!=2))
+					 {
+						showHelicopterPropDisc();
+						mPropStatus = 2;
+					 }
+				 }
+			 }
+		 }
+		 else if (strstr(mDataBlock->shapeName,"dragonfly.dts")>0)
+		 {
+			 rudderOffset = Point3F(0.4,0,0);
+			 rudderRange = (M_PI/8.0);
+			 mShapeInstance->setNodeTransform("Rudder",rudderOffset,EulerF(0,0,(rudderRange * mDataSource->mFGPacket.rudder)));
+
+			 elevOffset = Point3F(0.4,0,0);
+			 elevRange = -(M_PI/8.0);//Elevator numbers come in opposite, hence the -1.0.
+			 mShapeInstance->setNodeTransform("Elevator",elevOffset,EulerF(0,(elevRange * mDataSource->mFGPacket.elevator),0));
+		
+		 }		 
+		 else if (strstr(mDataBlock->shapeName,"a6m2.dts")>0)
+		 {
+			 rudderOffset = Point3F(0.4,0,0);
+			 rudderRange = (M_PI/8.0);
+			 mShapeInstance->setNodeTransform("Rudder",rudderOffset,EulerF(0,0,(rudderRange * mDataSource->mFGPacket.rudder)));
+
+			 elevOffset = Point3F(0.4,0,0);
+			 elevRange = -(M_PI/8.0);//Elevator numbers come in opposite, hence the -1.0.
+			 mShapeInstance->setNodeTransform("Elevator",elevOffset,EulerF(0,(elevRange * mDataSource->mFGPacket.elevator),0));
+
+			 ailOffset = Point3F(0.4,0,0);
+			 ailRange = -(M_PI/8.0);
+			 mShapeInstance->setNodeTransform("RHaileron_1",elevOffset,EulerF(0,(ailRange * mDataSource->mFGPacket.right_aileron),0));
+			 mShapeInstance->setNodeTransform("LHaileron_1",elevOffset,EulerF(0,(ailRange * mDataSource->mFGPacket.left_aileron),0));
+		 }
+		 else if (strstr(mDataBlock->shapeName,"bo105.dts")>0)
+		 {
+
+		 }
+		 */
+
+		 //NOW: override the player's camera and force it to follow us around as a chase cam instead.	 
 		 Vector<SceneObject*> kCameras;
 		 Vector<SceneObject*> kPlayers;
 		 Box3F bounds;
@@ -1991,11 +2471,11 @@ void PhysicsShape::processTick( const Move *move )
 			 } else {
 				 clientPos = playerPos;
 			 }
-		 } 
+		 }
 		 if ((freeCamera))//&&(firstTime)
 		 {//Let's handle free camera first, you'll have to hit F8 before Alt F for this to work.
 			 //myCamera->setTrackObject(this,Point3F(0,0,2.0));
-			 Point3F offset(15.0,0,3.0);//(0,0,1,0)
+			 Point3F offset(18.0,0,8.0);//3.0
 			 Point3F rotOffset;			 	
 			 MatrixF newTrans(trans);
 			 Point3F transPos = trans.getPosition();
@@ -2120,7 +2600,7 @@ void PhysicsShape::processTick( const Move *move )
 			   defTrans = kShape->defaultTranslations[mBodyNodes[i]];
 			   S32 parentInd = kShape->nodes[mBodyNodes[i]].parentIndex;
 			   if (parentInd>=0)
-				   m2 = mShapeInst->mNodeTransforms[parentInd];
+				   m2 = mShapeInstance->mNodeTransforms[parentInd];
 			   else
 			   {
 				   m2.identity();
@@ -2132,11 +2612,11 @@ void PhysicsShape::processTick( const Move *move )
 			   newPos += ( mStartPos );
 			  // newPos +=  mStartPos;
 
-			   m1 = mShapeInst->mNodeTransforms[mBodyNodes[i]];
+			   m1 = mShapeInstance->mNodeTransforms[mBodyNodes[i]];
 			   m1 = mStartMat * m1;
 
 			   if (i==0) {
-				   Point3F nodePos = mShapeInst->mNodeTransforms[mBodyNodes[i]].getPosition();
+				   Point3F nodePos = mShapeInstance->mNodeTransforms[mBodyNodes[i]].getPosition();
 				   Point3F mulPos;
 				   mStartMat.mulP(nodePos,&mulPos);
 				   //m1.setPosition((mStartPos-defTrans)+nodePos);//Well this is awkward, but mStartPos already has defTrans[0] in it.
@@ -2145,7 +2625,7 @@ void PhysicsShape::processTick( const Move *move )
 					m1.setPosition(mStartPos + mulPos);
 				   
 			   }
-			   //if (i==0) // + mShapeInst->mNodeTransforms[mBodyNodes[i]].getPosition() //NOPE!
+			   //if (i==0) // + mShapeInstance->mNodeTransforms[mBodyNodes[i]].getPosition() //NOPE!
 			   else m1.setPosition(newPos);
 
 			   mPhysicsBodies[i]->getTransform(&mLastTrans[i]);//store transform for when we go dynamic.
@@ -2174,7 +2654,7 @@ void PhysicsShape::processTick( const Move *move )
 		  shapeTransform.setPosition(Point3F(0,0,0));
 		  MatrixF invShapeTransform = shapeTransform;
 		  invShapeTransform.inverse();
-		  //mShapeInst is our TSShapeInstance pointer.
+		  //mShapeInstance is our TSShapeInstance pointer.
 		  Point3F defTrans,newPos,globalPos,mulPos;
 		  MatrixF m1,m2;
 		  for (U32 i=0;i<mPhysicsBodies.size();i++)
@@ -2210,16 +2690,16 @@ void PhysicsShape::processTick( const Move *move )
 				  m1.setPosition(finalPos);
 				  //Con::printf("setting hip node,  finalPos %f %f %f, globalPos %f %f %f",
 					// finalPos.x,finalPos.y,finalPos.z,globalPos.x,globalPos.y,globalPos.z);
-				  mShapeInst->mNodeTransforms[mBodyNodes[i]] = m1;
+				  mShapeInstance->mNodeTransforms[mBodyNodes[i]] = m1;
 
 			  } else { //all other nodes, position is relative to parent
 
 				  defTrans = kShape->defaultTranslations[mBodyNodes[i]];
-				  m2 = mShapeInst->mNodeTransforms[kShape->nodes[mBodyNodes[i]].parentIndex];
+				  m2 = mShapeInstance->mNodeTransforms[kShape->nodes[mBodyNodes[i]].parentIndex];
 				  m2.mulP(defTrans,&newPos);
 				  m1 = invShapeTransform * m1;
 				  m1.setPosition(newPos);
-				  mShapeInst->mNodeTransforms[mBodyNodes[i]] = m1;
+				  mShapeInstance->mNodeTransforms[mBodyNodes[i]] = m1;
 				  //Con::printf("setting node transform %f %f %f",newPos.x,newPos.y,newPos.z);
 			  }
 		  }
@@ -2235,11 +2715,11 @@ void PhysicsShape::processTick( const Move *move )
 				  if (parentIndex>=0)
 				  {
 					  defTrans = kShape->defaultTranslations[i];
-					  m2 = mShapeInst->mNodeTransforms[parentIndex];
+					  m2 = mShapeInstance->mNodeTransforms[parentIndex];
 					  m2.mulP(defTrans,&newPos);//There, that sets up our position, but now we need to grab our orientation
 					  m1 = m2;                       //directly from the parent node.
 					  m1.setPosition(newPos);
-					  mShapeInst->mNodeTransforms[i] = m1;
+					  mShapeInstance->mNodeTransforms[i] = m1;
 				  }
 			  }
 		  }
@@ -2292,13 +2772,13 @@ END:
 		   if ((!mIsArticulated)||isServerObject())
 			{
 			   Parent::setTransform( mState.getTransform() );
-				Con::printf("setting parent transform!");
+				//Con::printf("setting parent transform!");
 			}
 		   else 
 		   {
 			   mPhysicsBodies[0]->getState( &mState );
 			   Parent::setTransform( mState.getTransform() );
-				Con::printf("setting parent transform!");
+				//Con::printf("setting parent transform!");
 		   }
 
 		   // If we're doing server simulation then we need
@@ -2316,7 +2796,11 @@ END:
 void PhysicsShape::advanceTime( F32 timeDelta )
 {
 	if ( isClientObject() && mPlayAmbient && mAmbientThread != NULL && !mIsDynamic )
-      mShapeInst->advanceTime( timeDelta, mAmbientThread );
+      mShapeInstance->advanceTime( timeDelta, mAmbientThread );
+
+	if (isServerObject())
+		Con::printf("trying to call advanceTime on a server object!!!!!!!!!!!!!!!!!!!");
+
 }
 
 
@@ -2378,7 +2862,7 @@ void PhysicsShape::prepRenderImage( SceneRenderState *state )
 
    PROFILE_SCOPE( PhysicsShape_prepRenderImage );
 
-   if( !mShapeInst )
+   if( !mShapeInstance )
          return;
 
    Point3F cameraOffset;
@@ -2389,7 +2873,7 @@ void PhysicsShape::prepRenderImage( SceneRenderState *state )
       dist = 0.01f;
 
    F32 invScale = (1.0f/getMax(getMax(mObjScale.x,mObjScale.y),mObjScale.z));   
-   if ( mShapeInst->setDetailFromDistance( state, dist * invScale ) < 0 )
+   if ( mShapeInstance->setDetailFromDistance( state, dist * invScale ) < 0 )
       return;
 
    GFXTransformSaver saver;
@@ -2409,8 +2893,8 @@ void PhysicsShape::prepRenderImage( SceneRenderState *state )
    mat.scale( mObjScale );
    GFX->setWorldMatrix( mat );
 
-   mShapeInst->animate();
-   mShapeInst->render( rdata );
+   mShapeInstance->animate();
+   mShapeInstance->render( rdata );
 }
 
 void PhysicsShape::destroy()
@@ -2662,7 +3146,7 @@ bool PhysicsShape::setCurrentSeq(S32 seq)
 		return clientShape->setCurrentSeq(seq);
 	}
 
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	if ((seq >= 0)&&(seq < mShapeInstance->getShape()->sequences.size()))
 	{
 		mCurrentSeq = seq;
 		_setCurrent();
@@ -2674,7 +3158,7 @@ bool PhysicsShape::setCurrentSeq(S32 seq)
 
 bool PhysicsShape::setActionSeq(const char *name,S32 seq)
 {
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size())&&(dStrlen(name)>0))
+	if ((seq >= 0)&&(seq < mShapeInstance->getShape()->sequences.size())&&(dStrlen(name)>0))
 	{
 		mActionSeqs[name] = seq;
 		return true;
@@ -2689,7 +3173,7 @@ bool PhysicsShape::setAmbientSeq(S32 seq)
 		clientShape->setAmbientSeq(seq);
 	}
 
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	if ((seq >= 0)&&(seq < mShapeInstance->getShape()->sequences.size()))
 	{
 		mAmbientSeq = seq;
 		_initAmbient();
@@ -2714,7 +3198,7 @@ bool PhysicsShape::setAmbientSeq(const char *name)
 	}
 
 	S32 seq = mDataBlock->shape->findSequence( name );
-	if ((seq >= 0)&&(seq < mShapeInst->getShape()->sequences.size()))
+	if ((seq >= 0)&&(seq < mShapeInstance->getShape()->sequences.size()))
 	{
 		mAmbientSeq = seq;
 		if (!isServerObject())
@@ -2836,13 +3320,13 @@ bool PhysicsShape::loadSequence(const char *dsqPath)
 		delete sql;
 	}
 	*/
-	const String myPath = mShapeInst->getShapeResource()->getPath().getPath();
-	const String myFileName = mShapeInst->getShapeResource()->getPath().getFileName();
-	const String myFullPath = mShapeInst->getShapeResource()->getPath().getFullPath();
+	const String myPath = mShapeInstance->getShapeResource()->getPath().getPath();
+	const String myFileName = mShapeInstance->getShapeResource()->getPath().getFileName();
+	const String myFullPath = mShapeInstance->getShapeResource()->getPath().getFullPath();
 	
 	Con::printf("shape adding sequence, myPath %s, myFileName %s fullPath %s",myPath.c_str(),myFileName.c_str(),myFullPath.c_str());
 
-	TSShape *kShape = mShapeInst->getShape();
+	TSShape *kShape = mShapeInstance->getShape();
 
 	//S32 seqindex = kShape->findSequence(seq_name);
 	//if (seqindex>=0)
@@ -2870,6 +3354,37 @@ bool PhysicsShape::loadSequence(const char *dsqPath)
 }
 
 
+void PhysicsShape::loadXml(const char *file)
+{
+	SimXMLDocument *doc = new SimXMLDocument();
+	doc->registerObject();
+
+	S32 loaded = doc->loadFile(file);
+	if (loaded) 
+	{
+		Con::printf("we loaded an xml file!!!!!!!!!!!!!!!!!");
+		
+		doc->pushFirstChildElement("PropertyList");
+		
+		doc->pushFirstChildElement("path");
+
+		Con::printf("path: %s",doc->getData());
+
+		while(doc->nextSiblingElement("model"))
+		{
+			doc->pushFirstChildElement("offsets");
+			doc->pushFirstChildElement("x-m");			
+			Con::printf("x: %f",dAtof(doc->getData()));
+			doc->nextSiblingElement("y-m");	
+			Con::printf("y: %f",dAtof(doc->getData()));
+			doc->nextSiblingElement("z-m");	
+			Con::printf("z: %f",dAtof(doc->getData()));
+
+			doc->popElement();
+		}
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 DefineEngineMethod( PhysicsShape, loadSequence, void, (const char *path),,
    "@brief.\n\n")
@@ -2881,19 +3396,19 @@ DefineEngineMethod( PhysicsShape, loadSequence, void, (const char *path),,
 DefineEngineMethod( PhysicsShape, getPath, const char *, (),,
    "@brief.\n\n")
 {  
-	return object->mShapeInst->getShapeResource()->getPath().getPath();
+	return object->mShapeInstance->getShapeResource()->getPath().getPath();
 }
 
 DefineEngineMethod( PhysicsShape, getFile, const char *, (),,
    "@brief.\n\n")
 {  
-	return object->mShapeInst->getShapeResource()->getPath().getFileName();
+	return object->mShapeInstance->getShapeResource()->getPath().getFileName();
 }
 
 DefineEngineMethod( PhysicsShape, getFullPath, const char *, (),,
    "@brief.\n\n")
 {  
-	return object->mShapeInst->getShapeResource()->getPath().getFullPath();
+	return object->mShapeInstance->getShapeResource()->getPath().getFullPath();
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -3048,7 +3563,7 @@ DefineEngineMethod( PhysicsShape, getSceneShapeID, S32, (),,
 DefineEngineMethod( PhysicsShape, setActionSeq, bool, (const char *name,const char *seqname),,
    "@brief \n\n")
 {  
-	S32 seq = object->mShapeInst->getShape()->findSequence(seqname);
+	S32 seq = object->mShapeInstance->getShape()->findSequence(seqname);
 	if ((seq >= 0)&&(strlen(name)>0))
 	{
 		object->setActionSeq(name,seq);
@@ -3076,7 +3591,7 @@ DefineEngineMethod( PhysicsShape, actionSeq, void, (const char *name),,
 DefineEngineMethod( PhysicsShape, setAmbientSeq, bool, (S32 seq),,
    "@brief \n\n")
 {  
-	if ((seq >= 0)&&(seq < object->mShapeInst->getShape()->sequences.size())) 
+	if ((seq >= 0)&&(seq < object->mShapeInstance->getShape()->sequences.size())) 
 	{
 		object->setAmbientSeq(seq);
 		return true;
@@ -3092,7 +3607,7 @@ DefineEngineMethod( PhysicsShape, getAmbientSeq, S32, (),,
 DefineEngineMethod( PhysicsShape, getAmbientSeqName, const char *, (),,
    "@brief \n\n")
 {  
-	return object->mShapeInst->getShape()->getSequenceName(object->mAmbientSeq);
+	return object->mShapeInstance->getShape()->getSequenceName(object->mAmbientSeq);
 }
 
 //HERE: all of these should be stored in the DB as actionSequences.
@@ -3125,7 +3640,7 @@ DefineEngineMethod( PhysicsShape, findGroundPosition, Point3F, (Point3F pos),,
 DefineEngineMethod( PhysicsShape, playSeq, void, (const char *name),,
    "@brief.\n\n")
 {  
-	S32 seqID = object->mShapeInst->getShape()->findSequence(name);
+	S32 seqID = object->mShapeInstance->getShape()->findSequence(name);
 	object->setDynamic(0);
 	object->setCurrentSeq(seqID);
 }
@@ -3133,7 +3648,7 @@ DefineEngineMethod( PhysicsShape, playSeq, void, (const char *name),,
 DefineEngineMethod( PhysicsShape, showSeqs, void, (),,
    "@brief.\n\n")
 {	
-	TSShape *kShape = object->mShapeInst->getShape();
+	TSShape *kShape = object->mShapeInstance->getShape();
 
 	Con::errorf("ground Rotations: %d, translations %d",kShape->groundRotations.size(),kShape->groundTranslations.size());
 	for (U32 i=0;i<kShape->sequences.size();i++)
@@ -3169,7 +3684,7 @@ DefineEngineMethod( PhysicsShape, getSceneID, S32, (),,
 DefineEngineMethod( PhysicsShape, showNodes, void, (),,
    "@brief prints all nodes\n\n")
 {  
-	TSShape *kShape = object->mShapeInst->getShape();
+	TSShape *kShape = object->mShapeInstance->getShape();
 	QuatF q;
 	for (U32 i=0;i<kShape->nodes.size();i++)
 	{
@@ -3178,4 +3693,37 @@ DefineEngineMethod( PhysicsShape, showNodes, void, (),,
 			kShape->defaultTranslations[i].y,kShape->defaultTranslations[i].z,
 			q.x,q.y,q.z,q.w,kShape->defaultTranslations[i].len());
 	}
+}
+
+DefineEngineMethod( PhysicsShape, loadXml, void, (const char *file),,
+   "@brief \n\n")
+{  	
+	object->loadXml(file);
+}
+
+DefineEngineMethod( PhysicsShape, write, void,  (const char *filename),,
+   "@brief \n\n")
+{
+	FileStream *outstream;
+	TSShape *kShape = object->mShapeInstance->getShape();
+	if ((outstream = FileStream::createAndOpen(filename, Torque::FS::File::Write))==NULL) {
+		Con::printf("whoops, name no good!"); 
+	} else {
+		kShape->write(outstream);
+		outstream->close();
+	}	
+}
+
+DefineEngineMethod( PhysicsShape, addNodeTransform, void, (const char *nodeName, Point3F offset, Point3F rot),,
+   "@brief Sets the node rotation for (nodeName) node to (rot - degrees), around a point (offset) from the center.\n\n")
+{ 
+	TSStatic *clientShape = dynamic_cast<TSStatic *>(object->getClientObject());
+	clientShape->getShapeInstance()->addNodeTransform(nodeName,offset,EulerF(mDegToRad(rot.x),mDegToRad(rot.y),mDegToRad(rot.z)));
+}
+
+DefineEngineMethod( PhysicsShape, setNodeTransform, void, (const char *nodeName, Point3F offset, Point3F rot),,
+   "@brief Sets the node rotation for (nodeName) node to (rot - degrees), around a point (offset) from the center.\n\n")
+{ 
+	TSStatic *clientShape = dynamic_cast<TSStatic *>(object->getClientObject());
+	clientShape->getShapeInstance()->setNodeTransform(nodeName,offset,EulerF(mDegToRad(rot.x),mDegToRad(rot.y),mDegToRad(rot.z)));
 }

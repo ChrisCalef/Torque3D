@@ -591,7 +591,7 @@ void SimObject::setDeclarationLine(U32 lineNumber)
 
 bool SimObject::registerObject()
 {
-   AssertFatal( !mFlags.test( Added ), "reigsterObject - Object already registered!");
+   AssertFatal( !mFlags.test( Added ), "registerObject - Object already registered!");
 	mFlags.clear(Deleted | Removed);
 
    if(smForceId)

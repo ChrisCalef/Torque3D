@@ -69,27 +69,38 @@ enum physicsShapeType
 struct physicsPartData
 {
 	S32 jointID;
-    S32 baseNode;
-    S32 childNode;
-    S32 shapeType;
-    Point3F dimensions;
-    Point3F orientation;
-    Point3F offset;
-    F32 damageMultiplier;
-    bool isInflictor;
-    F32 density;
-    bool isKinematic;
-    bool isNoGravity;
-    S32 childVerts;
-    S32 parentVerts;
-    S32 farVerts;
-    F32 weightThreshold;
-    F32 ragdollThreshold;
-    S32 bodypartChain;
-    F32 mass;
-    F32 inflictMultiplier;
+	S32 baseNode;
+	S32 childNode;
+	S32 shapeType;
+	Point3F dimensions;
+	Point3F orientation;
+	Point3F offset;
+	F32 damageMultiplier;
+	bool isInflictor;
+	F32 density;
+	bool isKinematic;
+	bool isNoGravity;
+	S32 childVerts;
+	S32 parentVerts;
+	S32 farVerts;
+	F32 weightThreshold;
+	F32 ragdollThreshold;
+	S32 bodypartChain;
+	F32 mass;
+	F32 inflictMultiplier;
 	Point3F jointRots;
 	Point3F jointRots2;
+};
+
+struct physicsMountData
+{
+	S32 parentShape;
+	S32 childShape;
+	S32 parentNode;
+	S32 childNode;
+	Point3F offset;
+	Point3F orient;
+	S32 jointID;
 };
 
 class PhysicsShapeData : public GameBaseData
@@ -231,7 +242,7 @@ public: //protected:
    //F32 mBuildLinDrag;
 
    /// The rendered shape.
-   TSShapeInstance *mShapeInst;
+   TSShapeInstance *mShapeInstance;
    Vector <bool> mNodeBodies;//Tracks which nodes have physics.
    /// The current physics state.
    PhysicsState mState;
@@ -381,6 +392,34 @@ public:
 	
    bool mUseDataSource;
    vehicleDataSource *mDataSource;
+	S32 mPropStatus;//Silly but need a variable to record our blade/propblur/propdisc status
+
+	void loadXml(const char *file);
+
+	//openSimEarth: Aircraft-specific data, should probably move these out to a derived class.
+	F32 mRudderRange;
+	F32 mElevRange;
+	F32 mAilerRange;
+
+	Point3F mRudderOffset;
+	Point3F mElevOffset;
+	Point3F mAilerOffset;
+	Point3F mPropOffset;
+	Point3F mRotorOffsetA;
+	Point3F mRotorOffsetB;
+	Point3F mTailRotorOffset;
+
+	F32 mPropBlurSpeed;
+	F32 mPropDiscSpeed;
+
+	Vector<String> mRudderNodes;
+	Vector<String> mElevNodes;
+	Vector<String> mRightAilerNodes;
+	Vector<String> mLeftAilerNodes;
+	Vector<String> mPropNodes;
+	Vector<String> mRotorNodesA;
+	Vector<String> mRotorNodesB;
+	Vector<String> mTailRotorNodes;
 
 };
 

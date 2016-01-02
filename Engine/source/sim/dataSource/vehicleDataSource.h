@@ -11,17 +11,35 @@
 
 ///////////////////////////////////////////////////////////////////////////////////
 typedef struct
-{//HERE: I think latitude and longitude need to be doubles, but gotta work that out coming from flightgear and flipping endianness.
+{
     double latitude;
     double longitude;
     float altitude;
     int airspeed;
     float roll;
     float pitch;
-    float heading;
+    float heading;	
+    float left_aileron;
+    float right_aileron;
+    float elevator;
+    float rudder;
+    float gear;
+    float throttle;
+    float engine_rpm;
+    float rotor_rpm;
 } flightgear_packet;
 ///////////////////////////////////////////////////////////////////////////////////
 
+	 /*
+    float left_aileron;
+    float right_aileron;
+    float elevator;
+    float rudder;
+    float gear;
+    float throttle;
+    float engine_rpm;
+    float rotor_rpm;
+	 */
 
 /// Base class for various kinds of data sources, first one being worldDataSource, for terrain, sky, weather and map information.
 class vehicleDataSource : public dataSource 

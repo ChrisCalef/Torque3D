@@ -688,6 +688,10 @@ protected:
 
    bool hasAccumulation();
 
+	
+	void setNodeTransform(const char *nodeName, Point3F offset, EulerF rot);
+	void addNodeTransform(const char *nodeName, Point3F offset, EulerF rot);
+
 };
 
 
@@ -807,6 +811,7 @@ public:
    const TSSequence* getSequence() const { return &(mShapeInstance->mShape->sequences[sequence]); }
    const String& getSequenceName() const { return mShapeInstance->mShape->getSequenceName(sequence); }
    S32 operator<(const TSThread &) const;
+
 };
 
 typedef TSShapeInstance::ObjectInstance TSObjectInstance;

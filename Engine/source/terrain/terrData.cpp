@@ -1316,7 +1316,6 @@ bool TerrainBlock::loadTerrainData( const char *heightFile,const char *textureFi
 	S32 numHeightBinArgs = 5;
 
 	TerrainFile *terrFile = getFile();
-	
 
 	if (!fs.open(heightFile,Torque::FS::File::Read))
 	{ 

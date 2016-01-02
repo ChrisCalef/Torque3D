@@ -124,7 +124,7 @@ public:
 	Vector <TerrainBlock *>mTerrainGrid;//This is the sparse array in the shape of a grid centered on player.
 	Vector <loadTerrainData> mRequestTiles;//Ever changing list of tiles that need to be requested.
 	TerrainBlock *mTerrain;//This is the terrain the player or camera is currently occupying. 
-	Vector <String> terrain_materials;
+	Vector <String> mTerrainMaterials;
 
 	std::map<std::string,float> mCellGrid;//String is my lat/long tag, eg "123d015W_43d965N", float is amount of area filled by anything.
 	//std::map<int,Vector<osmNode>> mOsmWays;//REthinking: I think we need an osmWay class or struct that contains a vector of nodes, 

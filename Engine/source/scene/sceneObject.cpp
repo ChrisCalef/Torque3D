@@ -44,6 +44,7 @@
 #include "T3D/gameBase/gameProcess.h"
 #include "T3D/gameBase/gameConnection.h"
 #include "T3D/accumulationVolume.h"
+#include "T3D/tsStatic.h"
 
 IMPLEMENT_CONOBJECT(SceneObject);
 
@@ -154,6 +155,14 @@ SceneObject::~SceneObject()
       "SceneObject::~SceneObject - Object still linked in reference lists!");
    AssertFatal( !mSceneObjectLinks,
       "SceneObject::~SceneObject() - object is still linked to SceneTrackers" );
+
+	//clear shapeMount mounted objects
+	for  (U32 i=0;i<getMountedObjectCount();i++)
+	{
+		SceneObject *obj = dynamic_cast<SceneObject *>(getMountedObject(i));
+		if (obj)
+			obj->unmount();
+	}
 
    mAccuTex = NULL;
    unlink();
@@ -1189,7 +1198,7 @@ void SceneObject::getRenderMountTransform( F32 delta, S32 index, const MatrixF &
 
 void SceneObject::mountObjectEx( SceneObject *obj, S32 toNode, S32 fromNode, const MatrixF &xfm )
 {
-   if ( obj->mMount.object == this )
+	if ( obj->mMount.object == this )
    {
       // Already mounted to this
       // So update our nodes and xfm which may have changed.
@@ -1221,8 +1230,11 @@ void SceneObject::mountObjectEx( SceneObject *obj, S32 toNode, S32 fromNode, con
       }
 
       obj->onMount( this, nodeIdxToMountNum(toNode) );
+		Point3F pos = xfm.getPosition();
+		//Con::printf("Scene object class %s mounted on scene object class %s position %f %f %f",
+		//	obj->getClassName(),this->getClassName(),pos.x,pos.y,pos.z);
    }
-
+	//Con::printf("made it through mountobjectex");
    if ( isServerObject() )
       setMaskBits( MountedMask );
 }
@@ -1544,11 +1556,11 @@ DefineEngineMethod( SceneObject, mountObjectEx, bool,
    "@param txfm     (optional) mount offset transform.\n"
    "@return true if successful, false if failed (objB is not valid)" )
 {
-   if ( objB )
+	if ( objB )
    {
       S32 toIndex = object->resolveNodeIndex(toNode);
       S32 fromIndex = objB->resolveNodeIndex(fromNode);
-      object->mountObjectEx( objB, toIndex, fromIndex, txfm.getMatrix() );
+		object->mountObjectEx( objB, toIndex, fromIndex, txfm.getMatrix() );
       return true;
    }
    return false;
@@ -1573,4 +1585,156 @@ DefineEngineMethod( SceneObject, getMountedObjectNodeEx, const char *, ( S32 slo
    "@return index of the mount node used by the object mounted in this slot." )
 {
    return object->getMountedObjectNodeEx( slot );
+}
+
+void SceneObject::showPropBlades()
+{
+
+}
+
+void SceneObject::showPropBlur()
+{
+
+}
+
+void SceneObject::showPropDisc()
+{
+
+}
+
+//TEMP: we need to start deriving vehicle etc classes from PhysicsShape, it seems.
+void SceneObject::showRotorBlades()
+{//FIX: Now I need to find my mounted rotor, and then just run through all of its mounted objects, because they're all blades.
+	if (getMountedObjectCount()>0)
+	{
+		for (U32 i=0;i<getMountedObjectCount();i++)
+		{
+			TSStatic *rotor = dynamic_cast<TSStatic *>(getMountedObject(i));
+			if (rotor)
+			{
+				if (strstr(rotor->mShapeName,"MainRotor")>0)
+				{
+					for (U32 j=0;j<rotor->getMountedObjectCount();j++)
+					{
+						TSStatic *blade = dynamic_cast<TSStatic *>(rotor->getMountedObject(j));
+						if (blade)
+						{
+							for (U32 k=0;k<8;k++)
+							{
+								blade->setMeshHidden(k,1);
+							}
+							for (U32 k=8;k<12;k++)
+							{
+								blade->setMeshHidden(k,0);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+void SceneObject::showRotorBlur()
+{
+	if (getMountedObjectCount()>0)
+	{
+		for (U32 i=0;i<getMountedObjectCount();i++)
+		{
+			TSStatic *rotor = dynamic_cast<TSStatic *>(getMountedObject(i));
+			if (rotor)
+			{
+				if (strstr(rotor->mShapeName,"MainRotor")>0)
+				{
+					for (U32 j=0;j<rotor->getMountedObjectCount();j++)
+					{
+						TSStatic *blade = dynamic_cast<TSStatic *>(rotor->getMountedObject(j));
+						if (blade)
+						{
+							for (U32 k=0;k<4;k++)
+							{
+								blade->setMeshHidden(k,1);
+							}
+							for (U32 k=4;k<8;k++)
+							{
+								blade->setMeshHidden(k,0);
+							}
+							for (U32 k=8;k<12;k++)
+							{
+								blade->setMeshHidden(k,1);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+void SceneObject::showRotorDisc()
+{
+	if (getMountedObjectCount()>0)
+	{
+		for (U32 i=0;i<getMountedObjectCount();i++)
+		{
+			TSStatic *rotor = dynamic_cast<TSStatic *>(getMountedObject(i));
+			if (rotor)
+			{
+				if (strstr(rotor->mShapeName,"MainRotor")>0)
+				{
+					for (U32 j=0;j<rotor->getMountedObjectCount();j++)
+					{
+						TSStatic *blade = dynamic_cast<TSStatic *>(rotor->getMountedObject(j));
+						if (blade)
+						{
+							for (U32 k=0;k<4;k++)
+							{
+								blade->setMeshHidden(k,0);
+							}
+							for (U32 k=4;k<12;k++)
+							{
+								blade->setMeshHidden(k,1);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+DefineEngineMethod( SceneObject, showPropBlades, void, (),,
+   "@brief .\n\n")
+{  
+	object->showPropBlades();
+}
+
+DefineEngineMethod( SceneObject, showPropBlur, void, (),,
+   "@brief .\n\n")
+{  
+	object->showPropBlur();
+}
+
+DefineEngineMethod( SceneObject, showPropDisc, void, (),,
+   "@brief .\n\n")
+{  
+	object->showPropDisc();
+}
+
+DefineEngineMethod( SceneObject, showRotorBlades, void, (),,
+   "@brief .\n\n")
+{  
+	object->showRotorBlades();
+}
+
+DefineEngineMethod( SceneObject, showRotorBlur, void, (),,
+   "@brief .\n\n")
+{  
+	object->showRotorBlur();
+}
+
+DefineEngineMethod( SceneObject, showRotorDisc, void, (),,
+   "@brief .\n\n")
+{  
+	object->showRotorDisc();
 }
