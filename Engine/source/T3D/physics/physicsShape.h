@@ -44,7 +44,9 @@
 #ifndef _T3D_PHYSICS_PHYSICSJOINT_H_
    #include "T3D/physics/physicsJoint.h"
 #endif
-
+#ifndef _MATERIALDEFINITION_H_
+#include "materials/materialDefinition.h"
+#endif
 #include <string>
 #include <map>
 
@@ -409,8 +411,10 @@ public:
 	Point3F mRotorOffsetB;
 	Point3F mTailRotorOffset;
 
-	F32 mPropBlurSpeed;
-	F32 mPropDiscSpeed;
+	F32 mPropBlurSpeed;//Speed at which we switch from blades to blur.
+	F32 mPropDiscSpeed;//Speed at which we switch from blur to disc.
+	F32 mPropBlurAlpha;//Transparency of blur.
+	F32 mPropDiscAlpha;//Transparency of disc.
 
 	Vector<String> mRudderNodes;
 	Vector<String> mElevNodes;
@@ -421,6 +425,16 @@ public:
 	Vector<String> mRotorNodesB;
 	Vector<String> mTailRotorNodes;
 
+	void setRotorTransparency(F32 rpm);//Hmm, this smells like something that might also get generalized and moved 
+	void setPropTransparency(F32 rpm);// down to sceneObject.
+
+	//And, now let's try moving these up to here again, or at least redefining them here, so I can access shapeInstance.
+	void showPropBlades();//left specific but moved to a appropriate vehicle classes.
+	void showPropBlur();//Generally better to generalize. Maybe show/hideNodeSet() and then make node sets a thing.
+	void showPropDisc();
+	void showRotorBlades();
+	void showRotorBlur();
+	void showRotorDisc();
 };
 
 #endif // _PHYSICSSHAPE_H_

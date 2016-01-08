@@ -815,9 +815,9 @@ class SceneObject : public NetObject, private SceneContainer::Link, public Proce
    public:
       GFXTextureObject* mAccuTex;
 
-		//TEMP: Not sure where things like this are going to belong, either generalized and left here or 
-		void showPropBlades();//left specific but moved to a very specific vehicle class.
-		void showPropBlur();
+		//openSimEarth TEMP: Not sure where things like this are going to belong, either generalized and left here or 
+		void showPropBlades();//left specific but moved to a appropriate vehicle classes.
+		void showPropBlur();//Generally better to generalize. Maybe show/hideNodeSet() and then make node sets a thing.
 		void showPropDisc();
 		void showRotorBlades();
 		void showRotorBlur();

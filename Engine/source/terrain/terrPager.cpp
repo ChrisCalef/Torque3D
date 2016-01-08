@@ -434,8 +434,8 @@ void TerrainPager::checkForest()
 	
 	if (!mForestStarted)   	
 	{  //So, first thing we need to do is see what forest is already in the level. 
-		Con::printf("tile width: %f, cell grid size %d, total area %f cellWidth %f tree count %d",
-												mD.mTileWidth,mCellGridSize,mCellArea,mCellWidth,items.size());
+		//Con::printf("tile width: %f, cell grid size %d, total area %f cellWidth %f tree count %d",
+		//										mD.mTileWidth,mCellGridSize,mCellArea,mCellWidth,items.size());
 	
       //String osmFile( Con::getVariable( "$pref::OpenSimEarth::OSM" ) );
       //String mapDB( Con::getVariable( "$pref::OpenSimEarth::MapDB" ) );
@@ -470,11 +470,11 @@ void TerrainPager::checkForest()
 				else 
 					mCellGrid[cellName] = area;
 
-				Con::printf("cell %s area: %f, total %f radius %f  scale %f",
-					cellName,area,mCellGrid[cellName],items[i].getRadius(),items[i].getScale());
+				//Con::printf("cell %s area: %f, total %f radius %f  scale %f",
+				//	cellName,area,mCellGrid[cellName],items[i].getRadius(),items[i].getScale());
 			}
 
-			Con::printf("Before filling forest, total occupied cells %d",mCellGrid.size());
+			//Con::printf("Before filling forest, total occupied cells %d",mCellGrid.size());
 			j=0;
 			for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
 			{			
@@ -485,13 +485,13 @@ void TerrainPager::checkForest()
 
 			fillForest();
 
-			Con::printf("After filling, total cells size %d",mCellGrid.size());
+			//Con::printf("After filling, total cells size %d",mCellGrid.size());
 			j=0;
 			for (std::map<std::string,float>::iterator it=mCellGrid.begin(); it!=mCellGrid.end(); ++it)
 			{			
 				strcpy(cellName,it->first.c_str());
-				Con::printf("cellname %s cell %d  area filled %f  available %f ",
-					cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
+				//Con::printf("cellname %s cell %d  area filled %f  available %f ",
+				//	cellName,j++,mCellGrid[cellName],mCellArea-mCellGrid[cellName]);
 
 			}
 		}
