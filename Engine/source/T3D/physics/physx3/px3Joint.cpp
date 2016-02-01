@@ -209,9 +209,13 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 		d6Joint->setMotion(physx::PxD6Axis::eZ, physx::PxD6Motion::eLOCKED);
 		
 		d6Joint->setMotion(physx::PxD6Axis::eTWIST, physx::PxD6Motion::eLIMITED);
+		//HERE: if swingLimit, or swingLimit2, are equal to zero (or less than a tiny number) then lock them, else limit.
+		d6Joint->setMotion(physx::PxD6Axis::eSWING1, physx::PxD6Motion::eLIMITED);
+		
 		d6Joint->setMotion(physx::PxD6Axis::eSWING1, physx::PxD6Motion::eLIMITED);
 		d6Joint->setMotion(physx::PxD6Axis::eSWING2, physx::PxD6Motion::eLIMITED);
 
+		//HERE: is this the only way to do it? How do I set an upper and lower amount per axis??
 		d6Joint->setSwingLimit(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 1.0f));
 		d6Joint->setTwistLimit(physx::PxJointAngularLimitPair(-mJD.twistLimit,mJD.twistLimit,1.0f));
 
@@ -275,7 +279,7 @@ void Px3Joint::setMotorTarget(QuatF &target)
 
 	Con::printf("px3joint set motor target! %f %f %f %f",target.x,target.y,target.z,target.w);
 
-	physx::PxD6Joint* d6joint = dynamic_cast<physx::PxD6Joint*>(mJoint);
+	//physx::PxD6Joint* d6joint = dynamic_cast<physx::PxD6Joint*>(mJoint);
 
 	//I don't think this works... hmm
 	//d6joint->setDrivePosition(physx::PxTransform(physx::PxQuat(mMotorTarget.x,mMotorTarget.y,mMotorTarget.z,mMotorTarget.w)));

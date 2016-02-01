@@ -2617,7 +2617,12 @@ ConsoleFunction( copyFile, bool, 3, 3,
 	std::ifstream fin(infilename, std::ios::in | std::ios::binary);
 	std::ofstream fout(outfilename, std::ios::out | std::ios::binary);
 
-	if(fin == NULL || fout == NULL) {
+	if(fin.rdbuf() == NULL || fout.rdbuf() == NULL) {
+		if (fin.rdbuf() == NULL)
+			Con::printf("copyFile got a null infilename: %s",infilename);
+		if (fout.rdbuf() == NULL)
+			Con::printf("copyFile got a null outfilename: %s",outfilename);
+
 		return false;
 	}
 

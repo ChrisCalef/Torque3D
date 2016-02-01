@@ -346,7 +346,7 @@ public:
    void applyImpulseToPart( S32 partIndex, const Point3F &pos, const VectorF &vec );
    void applyRadialImpulse( const Point3F &origin, F32 radius, F32 magnitude );
    void applyRadialImpulseToPart( S32 partIndex, const Point3F &origin, F32 radius, F32 magnitude );
-   void setScale(const VectorF & scale);
+   //void setScale(const VectorF & scale);//openSimEarth getting rid of this, it is apparently here just to break setScale.
 
    // GameBase
    bool onNewDataBlock( GameBaseData *dptr, bool reload );
@@ -397,6 +397,12 @@ public:
 	S32 mPropStatus;//Silly but need a variable to record our blade/propblur/propdisc status
 
 	void loadXml(const char *file);
+
+	void updateNodesFromBodies();
+	void updateBodiesFromNodes();
+	
+	void updateBodyFromNode(S32 body);
+	void updateNodeFromBody(S32 body);
 
 	//openSimEarth: Aircraft-specific data, should probably move these out to a derived class.
 	F32 mRudderRange;

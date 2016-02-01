@@ -461,16 +461,13 @@ void Px3Body::applyCorrection( const MatrixF &transform )
 void Px3Body::applyImpulse( const Point3F &origin, const Point3F &force )
 {
    AssertFatal( mActor, "Px3Body::applyImpulse - The actor is null!" );
-
    mWorld->lockScene();
    physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
    if ( mIsEnabled && isDynamic() )
    physx::PxRigidBodyExt::addForceAtPos(*actor,px3Cast<physx::PxVec3>(force),
 												px3Cast<physx::PxVec3>(origin),
 												physx::PxForceMode::eIMPULSE);
-
    mWorld->unlockScene();
-
 }
 
 physx::PxRigidActor* Px3Body::getActor() 
@@ -483,6 +480,7 @@ void Px3Body::setHasGravity( bool hasGrav )
    const bool hasGravity = mBodyFlags & BF_GRAVITY;
    if (hasGravity!=hasGrav)
    {
+		mWorld->lockScene();
 	   if (hasGrav)
 	   {
 		   mActor->setActorFlag(physx::PxActorFlag::eDISABLE_GRAVITY,false);
@@ -491,18 +489,17 @@ void Px3Body::setHasGravity( bool hasGrav )
 		   mActor->setActorFlag(physx::PxActorFlag::eDISABLE_GRAVITY,true);
 		   mBodyFlags &= ~PhysicsBody::BF_GRAVITY;
 	   }
+		mWorld->unlockScene();
    }  
 }
 
-//This property is somewhat confusing because I chose to use the word "dynamic" over "kinematic" in order to
-//make sense to more people, but they are opposites, ie dynamic==true is the same as kinematic==false.
-//So to test whether we're changing states, if (isDynam==isKinematic) then we're changing.
 void Px3Body::setDynamic( bool isDynam )
 { 
 	bool isKinematic = mBodyFlags & BF_KINEMATIC;
-	if (isDynam==isKinematic)
+	if (isDynam==isKinematic)//Test whether we're changing states, if (isDynam==isKinematic) then we're changing.
 	{ //ie we're switching states, we were kinematic and now we want to be dynamic, or vice versa.
 		physx::PxRigidDynamic *kBody = static_cast<physx::PxRigidDynamic*>(mActor);
+		mWorld->lockScene();
 		if (isDynam)
 		{
 			kBody->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, false);
@@ -511,6 +508,7 @@ void Px3Body::setDynamic( bool isDynam )
 			kBody->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
 			mBodyFlags |= PhysicsBody::BF_KINEMATIC;
 		}
+		mWorld->unlockScene();
 	}  
 }
 

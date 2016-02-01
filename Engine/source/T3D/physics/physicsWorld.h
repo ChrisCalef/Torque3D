@@ -119,7 +119,6 @@ public:
    //virtual void unlockScenes();
    //virtual void lockScenes();
 
-   //SQLiteObject *mSQL;//Chris Calef 2015
 };
 
 
