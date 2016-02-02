@@ -137,7 +137,9 @@ public:
    /// The shared unscaled collision shape.
    PhysicsCollisionRef colShape;
 
-   bool isArticulated; //If so, create arrays of PhysicsBody and PhysicsJoint objects, instead of just one PhysicsBody.
+   //bool isArticulated; //If so, create arrays of PhysicsBody and PhysicsJoint objects, instead of just one PhysicsBody.
+								//NEW WAY: get rid of this, and make mPhysicsRep = mPhysicsBodies[0].
+
    S32 shapeID;       //Use this to find the bodypart (physicsShapePart) body and joint data in the database.
 
    F32 mass;
@@ -276,7 +278,7 @@ public: //protected:
    
    bool mHasGravity;// Disables gravity on this object if not set to true.
    bool mIsDynamic;// Sets object to kinematic if true.
-   bool mIsArticulated;// If true, shape maintains arrays of PhysicsBody and PhysicsJoint objects, instead of one PhysicsBody.
+   //bool mIsArticulated;// If true, shape maintains arrays of PhysicsBody and PhysicsJoint objects, instead of one PhysicsBody.
    bool mIsGroundMoving;//Probably not the final answer for this, but trying it out for testing. 
    S32 mShapeID;    //Database ID of the physicsShape, to find all the physicsShapePart objects with body and joint data.
    S32 mSceneShapeID;

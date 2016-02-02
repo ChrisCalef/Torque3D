@@ -184,9 +184,9 @@ void PhysicsShapeData::initPersistFields()
          "The result of the calculated buoyancy is relative to the density of the WaterObject the PhysicsShape is within.\n\n"
          "@see WaterObject::density");
 	        
-	  addField( "isArticulated", TypeBool, Offset( isArticulated, PhysicsShapeData ),
-         "@brief If true, body maintains arrays of PhysicsBody and PhysicsJoint objects,"
-         "instead of just one PhysicsBody.\n\n");
+	  //addField( "isArticulated", TypeBool, Offset( isArticulated, PhysicsShapeData ),
+      //   "@brief If true, body maintains arrays of PhysicsBody and PhysicsJoint objects,"
+      //   "instead of just one PhysicsBody.\n\n");
 	  
       addField( "shapeID", TypeS32, Offset( shapeID, PhysicsShapeData ),
          "@brief The database ID of the physicsShape, to find all the bodypart and joint data.\n\n");
@@ -220,7 +220,7 @@ void PhysicsShapeData::packData( BitStream *stream )
    stream->write( waterDampingScale );
    stream->write( buoyancyDensity );
    stream->write( ccdEnabled );
-   stream->write( isArticulated );
+   //stream->write( isArticulated );
    stream->write( shapeID );
 
    stream->writeInt( simType, SimType_Bits );
@@ -247,7 +247,7 @@ void PhysicsShapeData::unpackData( BitStream *stream )
    stream->read( &waterDampingScale );
    stream->read( &buoyancyDensity );
    stream->read( &ccdEnabled );
-   stream->read( &isArticulated );
+   //stream->read( &isArticulated );
    stream->read( &shapeID );
 
    S32 origSimType = stream->readInt( SimType_Bits );
@@ -438,7 +438,7 @@ PhysicsShape::PhysicsShape()
 		mContactBody( -1 ),
 		mHasGravity( true ),
 		mIsDynamic( true ),
-		mIsArticulated( false ),
+		//mIsArticulated( false ),
 		mIsRecording( false ),
 		mUseDataSource( false ),
 		mIsGroundMoving( false ),
@@ -703,9 +703,9 @@ bool PhysicsShape::onAdd()
       if ( mPhysicsRep )
          mPhysicsRep->setSimulationEnabled( false );
 
-	  if ( mIsArticulated )
-		  for (U32 i=0;i<mPhysicsBodies.size();i++)
-			  mPhysicsBodies[i]->setSimulationEnabled( false );
+		if (mPhysicsBodies.size()>1)//formerly mIsArticulated
+			for (U32 i=1;i<mPhysicsBodies.size();i++)
+				mPhysicsBodies[i]->setSimulationEnabled( false );
 		  
       // Stop doing tick processing for this SceneObject.
       setProcessTick( false );
@@ -824,10 +824,10 @@ bool PhysicsShape::_createShape()
 
    if (mDataBlock->mass <= 0.0f) mIsDynamic = false;
 
-   mIsArticulated = mDataBlock->isArticulated;
+   //mIsArticulated = mDataBlock->isArticulated;//Removing this, in favor of all shapes having an mPhysicsBodies[0]=mPhysicsRep.
 
-   // If we aren't dynamic we don't need to tick. 
-   setProcessTick( mIsDynamic || mPlayAmbient || mIsArticulated );
+   // If we aren't dynamic we don't need to tick. //openSimEarth - more complicated than this. Just go to processTick
+   setProcessTick( 1 );//mIsDynamic || mPlayAmbient );//|| mIsArticulated );//and decide what to do there.
 
    // If this is the client and we're a server only object then
    // we don't need any physics representation... we're done.
@@ -849,31 +849,46 @@ bool PhysicsShape::_createShape()
    else
 	  bodyFlags &= ~PhysicsBody::BF_GRAVITY;
    
-   if ((!mIsArticulated)||(isServerObject()))
-   {
-	   //Simple case, only one rigid body, no joints.
-	   mPhysicsRep = PHYSICSMGR->createBody();
-	   PhysicsCollision* colShape;
-	   colShape = PHYSICSMGR->createCollision();
-	   MatrixF localTrans = MatrixF::Identity;
 
-	   colShape->addBox(Point3F(0.03,0.02,0.015),localTrans);//FIX server physics doesn't really matter for our immediate 
-			// purposes, but depending on the application, this could be replaced with a capsule or a character controller.
+	//NOW: instead of using mIsArticulated as our main switch, we need to move the parts query up here and let the results decide.
+	S32  shapeBodyParts = 0;
+	if (shape_id>0)
+	{
+		sprintf(part_query,"SELECT * FROM physicsShapePart WHERE physicsShape_id=%d;",shape_id);
+		result = kSQL->ExecuteSQL(part_query);
+		if (result>0)
+		{
+			resultSet = kSQL->GetResultSet(result);
+			shapeBodyParts = resultSet->iNumRows;
+		}
+	}
 
+   if (isServerObject())//Now, we're just gonna say for the first pass at least, that servers don't worry about multiple bodyparts.
+   {//This could bite us later, but for initial purposes of ragdolls and other client side "eye candy" physics it should work fine.
+		PhysicsCollision* colShape;
+	   //if (shapeBodyParts==0)//And now that we mention it, I'm not going to worry about defining server side physics body shapes
+			//in the database either. Server side physics can wait. Although they will be important the second we go multiplayer and
+			//start throwing rocks and shooting arrows at each other.
+		//{//(Simple case, no bodyparts in the database, so just assign an arbitrary little box to hold us down for now.)
+		mPhysicsRep = PHYSICSMGR->createBody();//Later this could be made smarter, but not needed at the moment.	
+		colShape = PHYSICSMGR->createCollision();//At least we can check for dataBlock->colShape though.
+		MatrixF localTrans = MatrixF::Identity;
+		colShape->addBox(Point3F(0.03,0.02,0.015),localTrans);//This box could be replaced with a capsule or a character controller.
+		//}
 	   //Oops, just realized this would break everything not articulated, or at least replace it with a colshape
-	   if (mIsArticulated)
+	   if (bool(mDataBlock->colShape))
 	   {
+			mPhysicsRep->init(   mDataBlock->colShape, 
+							mDataBlock->mass, 
+							bodyFlags,  
+							this, 
+							mWorld );
+		} else {
 		   mPhysicsRep->init(   colShape, 
 							mDataBlock->mass, 
 							bodyFlags,  
 							this, 
 							mWorld );	   
-	   } else {
-	   	   mPhysicsRep->init(   mDataBlock->colShape, 
-							mDataBlock->mass, 
-							bodyFlags,  
-							this, 
-							mWorld );
 	   }
 
 	   mPhysicsRep->setMaterial( mDataBlock->restitution, mDataBlock->dynamicFriction, mDataBlock->staticFriction );
@@ -890,217 +905,248 @@ bool PhysicsShape::_createShape()
 	   
 	   mPhysicsRep->setTransform( getTransform() );
 
-   } else { //mIsArticulated == true, and we're on the client.
+		mPhysicsBodies.increment();
+		mPhysicsBodies.last() = mPhysicsRep;
 
-	   sprintf(part_query,"SELECT * FROM physicsShapePart WHERE physicsShape_id=%d;",shape_id);
-	   result = kSQL->ExecuteSQL(part_query);
-	   if (result==0)
-		   return NULL;
+   } else { //We're on the client, so now it gets real.
 
-	   resultSet = kSQL->GetResultSet(result);
-	   if (resultSet->iNumRows<=0)
-		   return NULL;
+	   //sprintf(part_query,"SELECT * FROM physicsShapePart WHERE physicsShape_id=%d;",shape_id);
+	   //result = kSQL->ExecuteSQL(part_query);
+	   //if (result==0)
+		  // return NULL;
 
-	   TSShape *kShape = mShapeInstance->getShape();
-		Con::printf("Starting an articulated shape! scale %f %f %f\n\n",mObjScale.x,mObjScale.y,mObjScale.z);
-	   for (U32 i=0;i<resultSet->iNumRows;i++)
-	   {
-		   S32 j=0;
-		   char baseNode[255],childNode[255];
+	   //resultSet = kSQL->GetResultSet(result);
+	   //if (resultSet->iNumRows<=0)
+		  // return NULL;
+		if (shapeBodyParts==0)
+		{
+			//just do the same thing as above with server, make a placeholder little box colshape.
+			mPhysicsRep = PHYSICSMGR->createBody();//Later this could be made smarter, but not needed at the moment.	
+			PhysicsCollision* colShape = PHYSICSMGR->createCollision();//At least we can check for dataBlock->colShape though.
+			MatrixF localTrans = MatrixF::Identity;
+			colShape->addBox(Point3F(0.03,0.02,0.015),localTrans);//This box could be replaced with a capsule or a character controller.
+			mPhysicsRep->init(   colShape, 
+							mDataBlock->mass, 
+							bodyFlags,  
+							this, 
+							mWorld );	
+			mPhysicsRep->setMaterial( mDataBlock->restitution, mDataBlock->dynamicFriction, mDataBlock->staticFriction );
 
-		   //////////////////////////////////////////
-		   // Part Data
-		   physicsPartData* PD = new physicsPartData;
-		   S32 ID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-		   j++;//We already know shapeID			
-		   PD->jointID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-		   j++;//We don't need to keep name.
-		   sprintf(baseNode,resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->baseNode = kShape->findNode(baseNode);
-		   sprintf(childNode,resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->childNode = kShape->findNode(childNode);
-		   PD->shapeType = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->dimensions.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.x;
-		   PD->dimensions.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.y;
-		   PD->dimensions.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.z;
-		   PD->orientation.x = mDegToRad( dAtof(resultSet->vRows[i]->vColumnValues[j++]) );
-		   PD->orientation.y = mDegToRad( dAtof(resultSet->vRows[i]->vColumnValues[j++]) );
-		   PD->orientation.z = mDegToRad( dAtof(resultSet->vRows[i]->vColumnValues[j++]) );
-		   PD->offset.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.x;
-		   PD->offset.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.y;
-		   PD->offset.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.z;
-		   PD->damageMultiplier = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->isInflictor = dAtob(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->density = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->isKinematic = dAtob(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->isNoGravity = dAtob(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->childVerts = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->parentVerts = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->farVerts = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->weightThreshold = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->ragdollThreshold = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->bodypartChain = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->mass = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->inflictMultiplier = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->jointRots.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->jointRots.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->jointRots.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->jointRots2.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->jointRots2.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
-		   PD->jointRots2.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			if ( mIsDynamic )
+			{
+				mPhysicsRep->setDamping( mDataBlock->linearDamping, mDataBlock->angularDamping );
+				mPhysicsRep->setSleepThreshold( mDataBlock->linearSleepThreshold, mDataBlock->angularSleepThreshold );
+			}
 
-		   //////////////////////////////////////////
-		   // Joint Data
-		   bool hasJoint = true;
-		   sprintf(joint_query,"SELECT * FROM px3Joint WHERE id=%d;",PD->jointID);
-		   physicsJointData* JD = new physicsJointData();
-		   result2 = kSQL->ExecuteSQL(joint_query);
-		   if (result2==0)
-			   hasJoint = false;
-		   if (hasJoint)
-			   resultSet2 = kSQL->GetResultSet(result2);
-		   if (resultSet2->iNumRows!=1)
-			   hasJoint = false;
-		   kSQL->ClearResultSet(result2);
+			MatrixF kTrans = getTransform();
+			EulerF kEuler = kTrans.toEuler();
 
-		   //////////////////////////////////////////
-		   // Create Physics Body
-		   PhysicsBody *partBody;
-		   if (mPhysicsBodies.size()==0)
-		   {
-			   mPhysicsRep = PHYSICSMGR->createBody();
-			   partBody = mPhysicsRep;
-		   } else {
-			   partBody = PHYSICSMGR->createBody();
-		   }
-		   PhysicsCollision* colShape;
-		   colShape = PHYSICSMGR->createCollision();
+			mPhysicsRep->setTransform( getTransform() );
 
-		   MatrixF localTrans,globalTrans,shapeTrans;
-		   Point3F pos = PD->offset;
-		   QuatF orient = QuatF(EulerF(PD->orientation.x,PD->orientation.y,PD->orientation.z));
-		   orient.setMatrix(&localTrans);
-		   localTrans.setPosition(pos);
-			
-		   shapeTrans = getTransform();//Main body transform.
+			mPhysicsBodies.increment();
+			mPhysicsBodies.last() = mPhysicsRep;
+		} 
+		else //else we have at least one bodypart in the database.
+		{//Using resultSet from above, already checked for numRows > 0.
+			for (U32 i=0;i<resultSet->iNumRows;i++)
+			{
+				S32 j=0;
+				char baseNode[255],childNode[255];
 
-		   Point3F halfDim = PD->dimensions * 0.5;
+				//////////////////////////////////////////
+				// Part Data
+				physicsPartData* PD = new physicsPartData;
+				S32 ID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+				j++;//We already know shapeID			
+				PD->jointID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+				j++;//We don't need to keep name.
+				sprintf(baseNode,resultSet->vRows[i]->vColumnValues[j++]);
+				PD->baseNode = kShape->findNode(baseNode);
+				sprintf(childNode,resultSet->vRows[i]->vColumnValues[j++]);
+				PD->childNode = kShape->findNode(childNode);
+				PD->shapeType = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->dimensions.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.x;
+				PD->dimensions.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.y;
+				PD->dimensions.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.z;
+				PD->orientation.x = mDegToRad( dAtof(resultSet->vRows[i]->vColumnValues[j++]) );
+				PD->orientation.y = mDegToRad( dAtof(resultSet->vRows[i]->vColumnValues[j++]) );
+				PD->orientation.z = mDegToRad( dAtof(resultSet->vRows[i]->vColumnValues[j++]) );
+				PD->offset.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.x;
+				PD->offset.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.y;
+				PD->offset.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.z;
+				PD->damageMultiplier = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->isInflictor = dAtob(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->density = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->isKinematic = dAtob(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->isNoGravity = dAtob(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->childVerts = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->parentVerts = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->farVerts = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->weightThreshold = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->ragdollThreshold = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->bodypartChain = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->mass = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->inflictMultiplier = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->jointRots.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->jointRots.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->jointRots.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->jointRots2.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->jointRots2.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+				PD->jointRots2.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
 
-		   if (PD->shapeType==physicsShapeType::PHYS_SHAPE_BOX)
-			   colShape->addBox(halfDim,localTrans);
-		   else if (PD->shapeType==physicsShapeType::PHYS_SHAPE_CAPSULE)
-			   colShape->addCapsule(halfDim.x,halfDim.z,localTrans);
-		   else if (PD->shapeType==physicsShapeType::PHYS_SHAPE_SPHERE)
-			   colShape->addSphere(halfDim.x,localTrans);
-		   else if (PD->shapeType==physicsShapeType::PHYS_SHAPE_COLLISION)
-		   {
-			   //Do more here, steal from TSShape::_buildColShape().
-			   //colShape->addTriangleMesh(...)
-			   colShape->addBox(halfDim,localTrans);//(for now hold it down with a box)
-		   } 
-		   else if (PD->shapeType==physicsShapeType::PHYS_SHAPE_CONVEX)
-		   {			   
-			   //Do more here, find verts from the mesh using weightThreshold, childVerts, parentVerts, farVerts.
-			   //colShape->addConvex(...)
-			   colShape->addBox(halfDim,localTrans);//(for now hold it down with a box)
-		   }
-		   else if (PD->shapeType==physicsShapeType::PHYS_SHAPE_TRIMESH)
-		   {
-			   //Do more here, add the actual triangle mesh.
-			   //colShape->addTriangleMesh(...)
-			   colShape->addBox(halfDim,localTrans);//(for now hold it down with a box)
-		   }
+				//////////////////////////////////////////
+				// Joint Data
+				bool hasJoint = true;
+				sprintf(joint_query,"SELECT * FROM px3Joint WHERE id=%d;",PD->jointID);
+				physicsJointData* JD = new physicsJointData();
+				result2 = kSQL->ExecuteSQL(joint_query);
+				if (result2==0)
+					hasJoint = false;
+				if (hasJoint)
+					resultSet2 = kSQL->GetResultSet(result2);
+				if (resultSet2->iNumRows!=1)
+					hasJoint = false;
+				kSQL->ClearResultSet(result2);
 
-		   MatrixF finalTrans;
-		   MatrixF nodeTrans = mShapeInstance->mNodeTransforms[PD->baseNode];
-			Point3F nodePos = nodeTrans.getPosition();
-			nodePos *= mObjScale;
-			nodeTrans.setPosition(nodePos);//Interesting, I would have thought my nodeTransforms would be scaled already, but no.
-		   finalTrans.mul(shapeTrans,nodeTrans);
-		   Point3F bodypartPos = finalTrans.getPosition();
-			
-			U32 bodyFlags;
-		   bodyFlags = (PD->isKinematic || !mIsDynamic) ?  PhysicsBody::BF_KINEMATIC : 0; 
+				//////////////////////////////////////////
+				// Create Physics Body
+				PhysicsBody *partBody;
+				if (mPhysicsBodies.size()==0)
+				{
+					mPhysicsRep = PHYSICSMGR->createBody();
+					partBody = mPhysicsRep;
+				} else {
+					partBody = PHYSICSMGR->createBody();
+				}
+				PhysicsCollision* colShape;
+				colShape = PHYSICSMGR->createCollision();
 
-		   if(mDataBlock->ccdEnabled)
-			   bodyFlags |= PhysicsBody::BF_CCD;
+				MatrixF localTrans,globalTrans,shapeTrans;
+				Point3F pos = PD->offset;
+				QuatF orient = QuatF(EulerF(PD->orientation.x,PD->orientation.y,PD->orientation.z));
+				orient.setMatrix(&localTrans);
+				localTrans.setPosition(pos);
 
-		   if(mHasGravity)
-			   bodyFlags |= PhysicsBody::BF_GRAVITY;
-		   else
-			   bodyFlags &= ~PhysicsBody::BF_GRAVITY;
+				shapeTrans = getTransform();//Main body transform.
 
-		   //MASS: get this from shapeParts in database, or better yet use density = 1.0 and make physx figure it out (?)
-		   partBody->init(   colShape, 
-			   mDataBlock->mass, 
-			   bodyFlags,  
-			   this, 
-			   mWorld );	 
+				Point3F halfDim = PD->dimensions * 0.5;
 
-		   partBody->setMaterial( mDataBlock->restitution, mDataBlock->dynamicFriction, mDataBlock->staticFriction );
-		   
-		   if ( mIsDynamic )
-		   {
-			   partBody->setDamping( mDataBlock->linearDamping, mDataBlock->angularDamping );
-			   partBody->setSleepThreshold( mDataBlock->linearSleepThreshold, mDataBlock->angularSleepThreshold );
-		   }
-		   
-		   partBody->setTransform(finalTrans);
-		   
-		   partBody->setBodyIndex(mPhysicsBodies.size());
-		   partBody->setNodeIndex(PD->baseNode); 
-		   Con::printf("Pushing back a physics body, finalPos %f %f %f",bodypartPos.x,bodypartPos.y,bodypartPos.z);
-		   mPhysicsBodies.push_back(partBody);
+				if (PD->shapeType==physicsShapeType::PHYS_SHAPE_BOX)
+					colShape->addBox(halfDim,localTrans);
+				else if (PD->shapeType==physicsShapeType::PHYS_SHAPE_CAPSULE)
+					colShape->addCapsule(halfDim.x,halfDim.z,localTrans);
+				else if (PD->shapeType==physicsShapeType::PHYS_SHAPE_SPHERE)
+					colShape->addSphere(halfDim.x,localTrans);
+				else if (PD->shapeType==physicsShapeType::PHYS_SHAPE_COLLISION)
+				{
+					//Do more here, steal from TSShape::_buildColShape().
+					//colShape->addTriangleMesh(...)
+					colShape->addBox(halfDim,localTrans);//(for now hold it down with a box)
+				} 
+				else if (PD->shapeType==physicsShapeType::PHYS_SHAPE_CONVEX)
+				{			   
+					//Do more here, find verts from the mesh using weightThreshold, childVerts, parentVerts, farVerts.
+					//colShape->addConvex(...)
+					colShape->addBox(halfDim,localTrans);//(for now hold it down with a box)
+				}
+				else if (PD->shapeType==physicsShapeType::PHYS_SHAPE_TRIMESH)
+				{
+					//Do more here, add the actual triangle mesh.
+					//colShape->addTriangleMesh(...)
+					colShape->addBox(halfDim,localTrans);//(for now hold it down with a box)
+				}
 
-		   mLastTrans.push_back(MatrixF(true));// During kinematic animation we use these
-		  
-		   mStates.increment();
-		   if (mIsDynamic) partBody->getState(&(mStates.last()));
-		
-		   mBodyNodes.push_back(PD->baseNode);//Store node index for below, when we need to define parent objects.
+				MatrixF finalTrans;
+				MatrixF nodeTrans = mShapeInstance->mNodeTransforms[PD->baseNode];
+				Point3F nodePos = nodeTrans.getPosition();
+				nodePos *= mObjScale;
+				nodeTrans.setPosition(nodePos);//Interesting, I would have thought my nodeTransforms would be scaled already, but no.
+				finalTrans.mul(shapeTrans,nodeTrans);
+				Point3F bodypartPos = finalTrans.getPosition();
 
-		   //////////////////////////////////////////
-		   // Create Joint
-		   if ((hasJoint)&&(PD->baseNode>0))
-		   {
-			   //Now, we need to find the parent physics body, which may involve skipping TSShape nodes in the hierarchy 
-			   //if they don't have physics.
-			   S32 parentNode,finalParentNode=-1;
-			   parentNode = kShape->nodes[PD->baseNode].parentIndex;
-			   int notForever=0;
-			   PhysicsBody *parentBody;
-			   while ((finalParentNode<0)&&(notForever<200))
-			   {
-				   for (int k=0;k<mBodyNodes.size();k++)
-				   {
-					   if (parentNode == mBodyNodes[k])
-					   {
-						   finalParentNode = parentNode;
-						   parentBody = mPhysicsBodies[k];
-						   mPhysicsBodies[mPhysicsBodies.size()-1]->setParentBodyIndex(k);
-					   }
-				   }
-				   parentNode = kShape->nodes[parentNode].parentIndex;
-				   mPhysicsBodies[mPhysicsBodies.size()-1]->setParentNodeIndex(parentNode);//Set parent node for body we just created.
-				   notForever++;//(Just to make sure we don't get bodypart order mixed up and wind up in forever loop.)
-			   }
-			   if (notForever==100) break;
+				U32 bodyFlags;
+				bodyFlags = (PD->isKinematic || !mIsDynamic) ?  PhysicsBody::BF_KINEMATIC : 0; 
 
-			   MatrixF partTrans,parentTrans;
-			   partBody->getTransform(&partTrans);
-			   parentBody->getTransform(&parentTrans);
-			   Point3F partPos = partTrans.getPosition();
-			   Point3F parentPos = parentTrans.getPosition();
+				if(mDataBlock->ccdEnabled)
+					bodyFlags |= PhysicsBody::BF_CCD;
 
-			   //Now, turns out all we need to do is make joint origin equal to the new part origin.
-			   PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(partBody,parentBody,PD->jointID,partPos,PD->jointRots,PD->jointRots2,shapeTransform);
-			   if (kJoint)
-			   {
-				   mPhysicsJoints.push_back(kJoint);
-			   }  else Con::printf("Create joint failed, joint %d is null!",PD->jointID);
-		   } 
+				if(mHasGravity)
+					bodyFlags |= PhysicsBody::BF_GRAVITY;
+				else
+					bodyFlags &= ~PhysicsBody::BF_GRAVITY;
 
-		   delete PD;
+				//MASS: get this from shapeParts in database, or better yet use density = 1.0 and make physx figure it out (?)
+				partBody->init(   colShape, 
+					mDataBlock->mass, 
+					bodyFlags,  
+					this, 
+					mWorld );	 
+
+				partBody->setMaterial( mDataBlock->restitution, mDataBlock->dynamicFriction, mDataBlock->staticFriction );
+
+				if ( mIsDynamic )
+				{
+					partBody->setDamping( mDataBlock->linearDamping, mDataBlock->angularDamping );
+					partBody->setSleepThreshold( mDataBlock->linearSleepThreshold, mDataBlock->angularSleepThreshold );
+				}
+
+				partBody->setTransform(finalTrans);
+
+				partBody->setBodyIndex(mPhysicsBodies.size());
+				partBody->setNodeIndex(PD->baseNode); 
+				Con::printf("Pushing back a physics body, index %d  node index %d finalPos %f %f %f",
+										i,PD->baseNode,bodypartPos.x,bodypartPos.y,bodypartPos.z);
+				mPhysicsBodies.push_back(partBody);
+
+				mLastTrans.push_back(MatrixF(true));// During kinematic animation we use these
+
+				mStates.increment();
+				if (mIsDynamic) partBody->getState(&(mStates.last()));
+
+				mBodyNodes.push_back(PD->baseNode);//Store node index for below, when we need to define parent objects.
+
+				//////////////////////////////////////////
+				// Create Joint
+				if ((hasJoint)&&(PD->baseNode>0))
+				{
+					//Now, we need to find the parent physics body, which may involve skipping TSShape nodes in the hierarchy 
+					//if they don't have physics.
+					S32 parentNode,finalParentNode=-1;
+					parentNode = kShape->nodes[PD->baseNode].parentIndex;
+					int notForever=0;
+					PhysicsBody *parentBody;
+					while ((finalParentNode<0)&&(notForever<200))
+					{
+						for (int k=0;k<mBodyNodes.size();k++)
+						{
+							if (parentNode == mBodyNodes[k])
+							{
+								finalParentNode = parentNode;
+								parentBody = mPhysicsBodies[k];
+								mPhysicsBodies[mPhysicsBodies.size()-1]->setParentBodyIndex(k);
+							}
+						}
+						parentNode = kShape->nodes[parentNode].parentIndex;
+						mPhysicsBodies[mPhysicsBodies.size()-1]->setParentNodeIndex(parentNode);//Set parent node for body we just created.
+						notForever++;//(Just to make sure we don't get bodypart order mixed up and wind up in forever loop.)
+					}
+					if (notForever==100) break;
+
+					MatrixF partTrans,parentTrans;
+					partBody->getTransform(&partTrans);
+					parentBody->getTransform(&parentTrans);
+					Point3F partPos = partTrans.getPosition();
+					Point3F parentPos = parentTrans.getPosition();
+
+					//Now, turns out all we need to do is make joint origin equal to the new part origin.
+					PhysicsJoint *kJoint =  PHYSICSMGR->createJoint(partBody,parentBody,PD->jointID,partPos,PD->jointRots,PD->jointRots2,shapeTransform);
+					if (kJoint)
+					{
+						mPhysicsJoints.push_back(kJoint);
+					}  else Con::printf("Create joint failed, joint %d is null!",PD->jointID);
+				} 
+				delete PD;
+			}
 	   }
 		   
 	   kSQL->ClearResultSet(result);
@@ -1122,7 +1168,7 @@ bool PhysicsShape::_createShape()
 	}
 
 	//And, another bit of application-specific logic that should probably go somewhere else: 
-	//  load range/offset of rudder, etc.
+	//  load range/offset of rudder, etc. Another thing that there's no point in doing on the server.
 	if (isClientObject())
 	{
 		S32 vehicle_id = 0;
@@ -1521,11 +1567,11 @@ void PhysicsShape::setTransform( const MatrixF &newMat )
 
    // This is only called to set an absolute position
    // so we discard the delta state.
-   if (  !mIsArticulated )//isServerObject() ||
+   if (  mPhysicsBodies.size() == 1 )//isServerObject() ||
 	   mState.position = getPosition();
-   else // is articulated, and is on the client... try this. Might need to rotate defTrans by newMat however.
+   else // has multiple bodies, and is on the client... try this. Might need to rotate defTrans by newMat however.
    {
-	   mState.position = getPosition() + mShapeInstance->getShape()->defaultTranslations[0];
+	   mState.position = getPosition();// + mShapeInstance->getShape()->defaultTranslations[0];
 	   //updatePhysicsBodies()??
    }
    mState.orientation.set( newMat );
@@ -1536,7 +1582,7 @@ void PhysicsShape::setTransform( const MatrixF &newMat )
    {
 	  MatrixF newNewMat = newMat;
 	  newNewMat.setPosition(mState.position);
-      mPhysicsRep->setTransform( newNewMat );	  
+	  mPhysicsRep->setTransform( newNewMat );	  
    }
 }
 
@@ -1647,7 +1693,7 @@ void PhysicsShape::recordTick()
 		}
 	}
 	//Con::printf("recording tick! mRecordCount %d, orderNodes %d",mRecordCount,mOrderNodes.size());
-	if (!(mRecordCount % mRecordSampleRate)&&(mIsArticulated))// Should make this possible for non articulated
+	if (!(mRecordCount % mRecordSampleRate))// Should make this possible for non articulated
 	{																	//shapes as well, and also for the server sim in that case.
 		mNodeTranslations.increment();
 		//nodeTranslations[nodeTranslations.size()-1] = mCurrPosition;
@@ -2470,7 +2516,7 @@ void PhysicsShape::processTick( const Move *move )
    if ( !mPhysicsRep->isDynamic() )
    {												
 		//Con::printf("mPhysicsRep is kinematic!");
-	   if ( isClientObject() && mIsArticulated ) 
+	   if ( isClientObject() )//&& mIsArticulated ) 
 	   {
 			updateBodiesFromNodes();
 	   }
@@ -2488,10 +2534,10 @@ void PhysicsShape::processTick( const Move *move )
 	//	  mRenderState[0] = servObj->mRenderState[0];
 	//	  mRenderState[1] = servObj->mRenderState[1];
 	  //}
-	  if (mIsArticulated)
-	  {//need to do nodeTransform (ragdoll) work on client side, unless we can get them passed over from the server?
-		  updateNodesFromBodies();
-	  } 
+	  //if (mIsArticulated)
+	  //{//need to do nodeTransform (ragdoll) work on client side, unless we can get them passed over from the server?
+		updateNodesFromBodies();
+	  //} 
       return;
    }
 
@@ -2537,8 +2583,8 @@ void PhysicsShape::processTick( const Move *move )
 	   if ( !wasSleeping || !mState.sleeping )//TEMP
 	   {
 		   // Set the transform on the parent so that
-		   // the physics object isn't moved.
-		   if ((!mIsArticulated)||isServerObject())
+		   // the physics object isn't moved. //Hmm, is this distinction necessary anymore? Test later.
+		   if (isServerObject())
 			{
 			   Parent::setTransform( mState.getTransform() );
 				//Con::printf("setting parent transform!");
@@ -2796,11 +2842,11 @@ void PhysicsShape::destroy()
    const Point3F lastLinVel = mPhysicsRep->isDynamic() ? mPhysicsRep->getLinVelocity() : Point3F::Zero;
 
    // Disable all simulation of the body... no collision or dynamics.
-   mPhysicsRep->setSimulationEnabled( false );
+  // mPhysicsRep->setSimulationEnabled( false );//This should now be taken care of below, as mPhysicsBodies[0]
 
-   if ( mIsArticulated )
-	   for (U32 i=0;i<mPhysicsBodies.size();i++)
-		   mPhysicsBodies[i]->setSimulationEnabled( false );
+   //if ( mIsArticulated )
+	for (U32 i=0;i<mPhysicsBodies.size();i++)
+		mPhysicsBodies[i]->setSimulationEnabled( false );
 
    // On the client side we remove it from the scene graph
    // to disable rendering and volume queries.
@@ -2889,20 +2935,16 @@ void PhysicsShape::setHasGravity(bool hasGrav)
 		return;
 	}
 
-	if (!mIsArticulated)
+	for (U32 i=0;i<mPhysicsBodies.size();i++)
 	{
-		mPhysicsRep->setHasGravity(hasGrav);
-	} else {
-		for (U32 i=0;i<mPhysicsBodies.size();i++)
-		{
-			mPhysicsBodies[i]->setHasGravity(hasGrav);
-		}
+		mPhysicsBodies[i]->setHasGravity(hasGrav);
 	}
+	
 }
 
 void PhysicsShape::setPartHasGravity(S32 partID,bool hasGrav)
 {
-	if ( (!mIsArticulated) || (partID<0) )
+	if ( (partID<0) )
 		return;
 	
 	if (isServerObject())
@@ -2911,8 +2953,7 @@ void PhysicsShape::setPartHasGravity(S32 partID,bool hasGrav)
 		clientShape->setPartHasGravity(partID,hasGrav);
 		return;
 	}
-		
-	if (partID<=mPhysicsBodies.size()-1)
+	if (partID < mPhysicsBodies.size())//Note: can't do this check above, because the server will only have one bodypart, for now.
 		mPhysicsBodies[partID]->setHasGravity(hasGrav);
 }
 
@@ -2929,41 +2970,41 @@ void PhysicsShape::setDynamic(bool isDynamic)
 			return;
 		}
 		//Con::printf("Client object setting dynamic, articulated %d",mIsArticulated);
-		if (!mIsArticulated)
-		{
-			mPhysicsRep->setDynamic(isDynamic);
+		//if (!mIsArticulated)
+		//{
+		//	mPhysicsRep->setDynamic(isDynamic);
 			//HERE: add linear/angular velocity if (isDynamic==true) and we were animating/moving before.
-		} else {
-			for (U32 i=0;i<mPhysicsBodies.size();i++)
-			{
-				mPhysicsBodies[i]->setDynamic(isDynamic);
-				if (isDynamic)
-				{//Add linear/angular velocity
-					Point3F posVel;
-					MatrixF curTrans,diffTrans,invLastTrans;
-					mPhysicsBodies[i]->getTransform(&curTrans);
-					posVel = curTrans.getPosition() - mLastTrans[i].getPosition();
+		//} else { //Now mPhysicsBodies[0] == mPhysicsRep, so skip above.
+		for (U32 i=0;i<mPhysicsBodies.size();i++)
+		{
+			mPhysicsBodies[i]->setDynamic(isDynamic);
+			if (isDynamic)
+			{//Add linear/angular velocity
+				Point3F posVel;
+				MatrixF curTrans,diffTrans,invLastTrans;
+				mPhysicsBodies[i]->getTransform(&curTrans);
+				posVel = curTrans.getPosition() - mLastTrans[i].getPosition();
 
-					posVel *= 32;//Times tick rate per second
-					mPhysicsBodies[i]->setLinVelocity(posVel);
-					//Con::printf("setting body %d with linVel %f %f %f",i,posVel.x,posVel.y,posVel.z);
-					
-					//if (0)//hmm, did I even finish this? where is curTrans coming from?
-					//{
-					//	EulerF angVel;
-					//	mLastTrans[i].invertTo(&invLastTrans);
-					//	diffTrans = curTrans * invLastTrans;
-					//	angVel = diffTrans.toEuler();
+				posVel *= 32;//Times tick rate per second
+				mPhysicsBodies[i]->setLinVelocity(posVel);
+				//Con::printf("setting body %d with linVel %f %f %f",i,posVel.x,posVel.y,posVel.z);
 
-					//	//angVel *= 180.0/M_PI;//Maybe?
-					//	angVel *= 32;//Times tick rate per second.
-					//	mPhysicsBodies[i]->setAngVelocity(angVel);
-					//	Con::printf("setting velocities: lin %f %f %f  ang %f %f %f",posVel.x,posVel.y,posVel.z,angVel.x,angVel.y,angVel.z);
-					//	//Very difficult to see effect, but setAngVelocity does work. Not sure how to turn it up.
-					//}
-				}
+				//if (0)//hmm, did I even finish this? where is curTrans coming from?
+				//{
+				//	EulerF angVel;
+				//	mLastTrans[i].invertTo(&invLastTrans);
+				//	diffTrans = curTrans * invLastTrans;
+				//	angVel = diffTrans.toEuler();
+
+				//	//angVel *= 180.0/M_PI;//Maybe?
+				//	angVel *= 32;//Times tick rate per second.
+				//	mPhysicsBodies[i]->setAngVelocity(angVel);
+				//	Con::printf("setting velocities: lin %f %f %f  ang %f %f %f",posVel.x,posVel.y,posVel.z,angVel.x,angVel.y,angVel.z);
+				//	//Very difficult to see effect, but setAngVelocity does work. Not sure how to turn it up.
+				//}
 			}
 		}
+		//}
 	}
 }
 
@@ -2976,7 +3017,7 @@ bool PhysicsShape::getDynamic()
 void PhysicsShape::setPartDynamic(S32 partID,bool isDynamic)
 {
 	//set or clear dynamic for partID bodypart, NOTE this is NOT database partID, it is index into this shape's bodies.
-	if ( (!mIsArticulated) || (partID<0) || (partID > mPhysicsBodies.size()-1) )
+	if ( partID<0 )
 		return;
 
 	if (mPhysicsBodies[partID]->isDynamic() != isDynamic)
@@ -2989,14 +3030,20 @@ void PhysicsShape::setPartDynamic(S32 partID,bool isDynamic)
 			return;
 		}
 
-		if (partID<=mPhysicsBodies.size()-1)
+		if (partID<mPhysicsBodies.size())
 			mPhysicsBodies[partID]->setDynamic(isDynamic);
 	}
 }
 
 bool PhysicsShape::getPartDynamic(S32 partID)
 {
-	if (partID<=mPhysicsBodies.size()-1)
+	if (isServerObject())
+	{        //SINGLE PLAYER HACK
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		return clientShape->getPartDynamic(partID);
+	}
+
+	if (partID<mPhysicsBodies.size())
 		return mPhysicsBodies[partID]->isDynamic();
 	else
 		return false;	 
