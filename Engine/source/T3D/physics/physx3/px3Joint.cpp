@@ -131,6 +131,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	physx::PxQuat localQuat(1.0,0.0,0.0,0.0);
 	physx::PxQuat localQuat2(1.0,0.0,0.0,0.0);
+
 	if (jointRots.len()>0)
 	{
 		EulerF rots(mDegToRad(jointRots.x),mDegToRad(jointRots.y),mDegToRad(jointRots.z));
@@ -138,7 +139,6 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 		localQuat = physx::PxQuat(localRot.x,localRot.y,localRot.z,localRot.w);
 	}
 
-	
 	if (jointRots2.len()>0)
 	{
 		EulerF rots(mDegToRad(jointRots2.x),mDegToRad(jointRots2.y),mDegToRad(jointRots2.z));
@@ -157,15 +157,15 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	if (mJD.jointType==PHYS_JOINT_SPHERICAL) {	
 
-		physx::PxSphericalJoint* sphericalJoint = physx::PxSphericalJointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);
+		physx::PxSphericalJoint* sphericalJoint = physx::PxSphericalJointCreate(*gPhysics3SDK,A,localTrans0,B,localTrans1);
 		mJoint = dynamic_cast<physx::PxJoint*>(sphericalJoint);
 
-		sphericalJoint->setLimitCone(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 0.01f));
+		sphericalJoint->setLimitCone(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 0.1f));
 		sphericalJoint->setSphericalJointFlag(physx::PxSphericalJointFlag::eLIMIT_ENABLED, true);
 
 	} else if  (mJD.jointType==PHYS_JOINT_REVOLUTE) {
 		
-		physx::PxRevoluteJoint* revoluteJoint = physx::PxRevoluteJointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);
+		physx::PxRevoluteJoint* revoluteJoint = physx::PxRevoluteJointCreate(*gPhysics3SDK,A,localTrans0,B,localTrans1);
 		mJoint = dynamic_cast<physx::PxJoint*>(revoluteJoint);
 
 		revoluteJoint->setLimit(physx::PxJointAngularLimitPair(-mJD.swingLimit/2.0f, mJD.swingLimit/2.0f, 0.1f)); 
@@ -173,21 +173,21 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	} else if  (mJD.jointType==PHYS_JOINT_PRISMATIC) {
 		
-		physx::PxPrismaticJoint* prismaticJoint = physx::PxPrismaticJointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);
+		physx::PxPrismaticJoint* prismaticJoint = physx::PxPrismaticJointCreate(*gPhysics3SDK,A,localTrans0,B,localTrans1);
 		mJoint = dynamic_cast<physx::PxJoint*>(prismaticJoint);
 
 		//prismaticJoint->setLimit(physx::PxJointLimitPair(-mXLimit, mXLimit));//Hm, nvidia example is wrong...
 
 	} else if  (mJD.jointType==PHYS_JOINT_FIXED) {
 
-		physx::PxFixedJoint* fixedJoint = physx::PxFixedJointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);
+		physx::PxFixedJoint* fixedJoint = physx::PxFixedJointCreate(*gPhysics3SDK,A,localTrans0,B,localTrans1);
 		mJoint = dynamic_cast<physx::PxJoint*>(fixedJoint);
 
 		//Nothing else to do, it's fixed.
 
 	} else if  (mJD.jointType==PHYS_JOINT_DISTANCE) {
 
-		physx::PxDistanceJoint* distanceJoint = physx::PxDistanceJointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);
+		physx::PxDistanceJoint* distanceJoint = physx::PxDistanceJointCreate(*gPhysics3SDK,A,localTrans0,B,localTrans1);
 		mJoint = dynamic_cast<physx::PxJoint*>(distanceJoint);
 
 		distanceJoint->setMaxDistance(mJD.XLimit);
@@ -195,7 +195,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	} else if  (mJD.jointType==PHYS_JOINT_D6) {
 
-		physx::PxD6Joint* d6Joint = physx::PxD6JointCreate(*gPhysics3SDK,B,localTrans1,A,localTrans0);//dynamic_cast<physx::PxD6Joint*>(mJoint);
+		physx::PxD6Joint* d6Joint = physx::PxD6JointCreate(*gPhysics3SDK,A,localTrans0,B,localTrans1);//dynamic_cast<physx::PxD6Joint*>(mJoint);
 		mJoint = dynamic_cast<physx::PxJoint*>(d6Joint);
 
 		//if (jD->xLimit<=0) d6Joint->setMotion(physx::PxD6Axis::eX, physx::PxD6Motion::eLOCKED);
@@ -211,13 +211,24 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 		d6Joint->setMotion(physx::PxD6Axis::eTWIST, physx::PxD6Motion::eLIMITED);
 		//HERE: if swingLimit, or swingLimit2, are equal to zero (or less than a tiny number) then lock them, else limit.
 		d6Joint->setMotion(physx::PxD6Axis::eSWING1, physx::PxD6Motion::eLIMITED);
-		
-		d6Joint->setMotion(physx::PxD6Axis::eSWING1, physx::PxD6Motion::eLIMITED);
 		d6Joint->setMotion(physx::PxD6Axis::eSWING2, physx::PxD6Motion::eLIMITED);
 
+		//d6Joint->set
+
 		//HERE: is this the only way to do it? How do I set an upper and lower amount per axis??
-		d6Joint->setSwingLimit(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 1.0f));
+	   const physx::PxJointLimitCone cone(mJD.swingLimit, mJD.swingLimit2,physx::PxSpring(mJD.swingSpring,mJD.springDamper));
+		Con::printf("limit cone, soft=%d swingLimit %f yAngle %f  swing2 %f zAngle %f",cone.isSoft(),mJD.swingLimit,cone.yAngle,mJD.swingLimit2,cone.zAngle);
+		//d6Joint->setSwingLimit(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 0.1f));
+		//d6Joint->setSwingLimit(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, physx::PxSpring(mJD.swingSpring,mJD.springDamper)));
+		d6Joint->setSwingLimit(cone);
 		d6Joint->setTwistLimit(physx::PxJointAngularLimitPair(-mJD.twistLimit,mJD.twistLimit,1.0f));
+		mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::ePROJECTION ,true);
+		mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::ePROJECT_TO_ACTOR0 ,true);
+	
+		//d6Joint->setProjectionAngularTolerance(M_PI/360.0f);//This property has no visible effect on my joint instability problem.
+		//float angTol = d6Joint->getProjectionAngularTolerance();
+		//float linTol = d6Joint->getProjectionLinearTolerance();
+		//Con::printf("D6 joint Projection Linear Tolerance: %f  Angular %f",linTol,angTol);
 
 	} else {
 
@@ -228,7 +239,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 	mJoint->setBreakForce(mJD.maxForce,mJD.maxTorque);
 
 	mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::eVISUALIZATION,true);
-
+	
 }
 
 Px3Joint::~Px3Joint()

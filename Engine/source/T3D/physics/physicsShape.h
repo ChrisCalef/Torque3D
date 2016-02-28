@@ -400,9 +400,6 @@ public:
 
 	void loadXml(const char *file);
 
-	void updateNodesFromBodies();
-	void updateBodiesFromNodes();
-	
 	void updateBodyFromNode(S32 body);
 	void updateNodeFromBody(S32 body);
 

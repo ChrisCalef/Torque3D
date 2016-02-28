@@ -109,7 +109,7 @@ bool Px3Body::init(   PhysicsCollision *shape,
 	   if ( isKinematic )
 	   {		
 		   actor->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
-		   actor->setMass(getMax( mass, 1.0f ));//wait, shouldn't even matter with kinematic?
+		   actor->setMass(getMax( mass, 0.001f ));//? Locking mass at a minimal stable value, not sure if this is it or not.
 	   }
    } else {
 	   mActor = gPhysics3SDK->createRigidStatic(physx::PxTransform(physx::PxIDENTITY()));

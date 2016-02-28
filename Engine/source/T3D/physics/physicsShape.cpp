@@ -1077,7 +1077,7 @@ bool PhysicsShape::_createShape()
 
 				//MASS: get this from shapeParts in database, or better yet use density = 1.0 and make physx figure it out (?)
 				partBody->init(   colShape, 
-					mDataBlock->mass, 
+					PD->mass, 
 					bodyFlags,  
 					this, 
 					mWorld );	 
@@ -2211,9 +2211,10 @@ void PhysicsShape::interpolateTick( F32 delta )
 		dsQuat.setMatrix(&trans);
 		trans.setPosition(dsPos);
 
-		//TEMP: this is for initial FG models, off on Z by ninety degrees. FIX THE MODELS
+		/////// TEMP: this is for initial FG models, off on Z by ninety degrees. FIX THE MODELS //////////////////
 		MatrixF ninetyFix(EulerF(0,0,M_PI/2));
 		trans *= ninetyFix;
+		////////////// TEMP ////////////////////
 
 		//mRenderState[1].position = dsPos;
 		//mRenderState[1].orientation = dsQuat;//??? I have no idea how renderStates work
@@ -2321,8 +2322,8 @@ void PhysicsShape::interpolateTick( F32 delta )
 			showRotorDisc();
 			mPropStatus = 2;
 		}
-		/*//OOOPS. Great idea, except this would affect _every_ user of this material, like other ka50s on the runway.
-		if (mPropMaterials.size()>0)
+		/*//OOOPS. Great idea, except this would affect _every_ user of this material, like other ka50s on the runway. However, 
+		if (mPropMaterials.size()>0) // it would still work for single player, one helicopter game, if a better way isn't found.
 		{
 		for (U32 i=0;i<mPropMaterials.size();i++)
 		{
@@ -2435,12 +2436,14 @@ void PhysicsShape::interpolateTick( F32 delta )
 	// Set the transform to the interpolated transform.
 	setRenderTransform( state.getTransform() );
 
-
 }
 
 void PhysicsShape::processTick( const Move *move )
 {
    AssertFatal( mPhysicsRep && !mDestroyed, "PhysicsShape::processTick - Shouldn't be processing a destroyed shape!" );
+
+	if ((mBodyNodes.size()==0)||(mNodeBodies.size()==0))
+		return;//I think we're calling this before we've created the shape...
 
    // Note that unlike TSStatic, the serverside PhysicsShape does not
    // need to play the ambient animation because even if the animation were
@@ -2511,6 +2514,40 @@ void PhysicsShape::processTick( const Move *move )
    } 
 
 
+	//HERE: NOW. We need to banish forever the switch between "isDynamic" and "not isDynamic", as a whole body property.
+	//Instead, bodyparts are going to be dynamic or not, and in terms of the whole body, if we need to know our state, it
+	//will be one of three states, not two:  1) fully kinematic   2) mixed dynamic/kinematic   3) fully dynamic
+	//But this distinction may not turn out to be useful, trial and error will decide.
+	for (U32 i=0;i<mPhysicsBodies.size();i++)
+	{
+		if (mPhysicsBodies[i]->isDynamic())
+			updateNodeFromBody(i);
+		else
+			updateBodyFromNode(i);
+	}//And, that should really be all there is to it...?
+
+	
+	//Except, we still need to deal with fingers/toes/etc, anything that isn't a physics body needs to be set according to its parent.
+	Point3F defTrans,newPos;
+	MatrixF m1,m2;
+	m1.identity();
+	for (U32 i=0;i<kShape->nodes.size();i++)
+	{
+		if (!mNodeBodies[i])
+		{				  
+			S32 parentIndex = kShape->nodes[i].parentIndex;
+			if (parentIndex>=0)
+			{
+				defTrans = kShape->defaultTranslations[i];
+				m2 = mShapeInstance->mNodeTransforms[parentIndex];
+				m2.mulP(defTrans,&newPos);//There, that sets up our position, but now we need to grab our orientation
+				m1 = m2;                       //directly from the parent node.
+				m1.setPosition(newPos);
+				mShapeInstance->mNodeTransforms[i] = m1;
+			}
+		}
+	}
+	/*
    ///////////////////////////////////////////////////////////////////
    //If kinematic, we need to drive physics bodyparts with nodeTransforms data.
    if ( !mPhysicsRep->isDynamic() )
@@ -2540,7 +2577,7 @@ void PhysicsShape::processTick( const Move *move )
 	  //} 
       return;
    }
-
+	*/
 	//NOW, what the hell are we doing here? It would seem that whether we're dynamic or not, we will have returned before
 	//now, unless we're A) dynamic, and B) on the server.
 
@@ -2555,7 +2592,8 @@ void PhysicsShape::processTick( const Move *move )
    const bool wasSleeping = mState.sleeping;
 
    //TODO: handle all this for articulated bodies.
-   if (1)//(!mIsArticulated)
+	//TEMP: getting assert in here about non dynamic body calling getState 
+   if (mPhysicsRep->isDynamic())//(!mIsArticulated)
    {
 	   // Get the new physics state.
 	   if (1)//(!mIsArticulated)
@@ -2608,126 +2646,107 @@ void PhysicsShape::processTick( const Move *move )
    }   
 }
 
+void PhysicsShape::updateBodyFromNode(S32 i)
+{
+	if (mBodyNodes.size()==0)
+		return;
 
-void PhysicsShape::updateNodesFromBodies()
+   TSShape *kShape = mShapeInstance->getShape();
+	MatrixF m1,m2;
+	if (i==0) //Here: we need to store our initial world position for purposes of recording sequences, 
+	{  // and possibly other reasons.
+		Point3F defTrans,mulDefTrans;
+		defTrans = kShape->defaultTranslations[0];
+		mStartMat = getTransform();		
+		mStartMat.setPosition(Point3F(0,0,0));
+		mStartMat.mulP(defTrans,&mulDefTrans);
+		//Con::printf("bodypart 0 updating node   ");
+		mStartPos = getPosition();// + mulDefTrans;//World ground position plus offset of hip node, multiplied by transform.
+	}  // Ah, except below, we are adding this again. Just remember that it is not the hip node, later, it is the ground position.
+
+	Point3F defTrans,rotPos,newPos;
+	defTrans = kShape->defaultTranslations[mBodyNodes[i]];
+	defTrans *= mObjScale;
+	S32 parentInd = kShape->nodes[mBodyNodes[i]].parentIndex;
+	if (parentInd>=0)
+		m2 = mShapeInstance->mNodeTransforms[parentInd];
+	else
+	{
+		m2.identity();
+	}
+	Point3F nodePos = m2.getPosition();
+	nodePos *= mObjScale;
+	m2.setPosition(nodePos);
+	m2.mulP(defTrans,&rotPos);
+	mStartMat.mulP(rotPos,&newPos);
+	//newPos += ( mStartPos - kShape->defaultTranslations[0] );
+	newPos += ( mStartPos );
+	//newPos +=  mStartPos;
+
+	m1 = mShapeInstance->mNodeTransforms[mBodyNodes[i]];
+	m1 = mStartMat * m1;
+
+	if (i==0) {
+		Point3F nodePos = mShapeInstance->mNodeTransforms[mBodyNodes[i]].getPosition();
+		nodePos *= mObjScale;
+		Point3F mulPos;
+		mStartMat.mulP(nodePos,&mulPos);
+		//Con::printf("base node pos %f %f %f, mulPos %f %f %f m1pos %f %f %f m1Quat %f %f %f %f",
+		//	nodePos.x,nodePos.y,nodePos.z,mulPos.x,mulPos.y,mulPos.z,m1Pos.x,m1Pos.y,m1Pos.z,m1Quat.x,m1Quat.y,m1Quat.z,m1Quat.w);
+		//m1.setPosition((mStartPos-defTrans)+nodePos);//Well this is awkward, but mStartPos already has defTrans[0] in it.
+		m1.setPosition(mStartPos + mulPos);
+
+	}
+	//if (i==0) // + mShapeInstance->mNodeTransforms[mBodyNodes[i]].getPosition() //NOPE!
+	else m1.setPosition(newPos);
+
+	mPhysicsBodies[i]->getTransform(&mLastTrans[i]);//store transform for when we go dynamic.
+	mPhysicsBodies[i]->setTransform(m1);
+	//}
+
+}
+
+void PhysicsShape::updateNodeFromBody(S32 i)
 {	
+	if (mBodyNodes.size()==0)
+		return;
+	
+	Point3F defTrans,newPos,globalPos,mulPos;
+	MatrixF m1,m2;
+
    TSShape *kShape = mShapeInstance->getShape();
 	MatrixF shapeTransform = getTransform();
 	Point3F shapePos = shapeTransform.getPosition();
 	shapeTransform.setPosition(Point3F(0,0,0));
 	MatrixF invShapeTransform = shapeTransform;
 	invShapeTransform.inverse();
-	//mShapeInstance is our TSShapeInstance pointer.
-	Point3F defTrans,newPos,globalPos,mulPos;
-	MatrixF m1,m2;
-	for (U32 i=0;i<mPhysicsBodies.size();i++)
-	{
-		mPhysicsBodies[i]->getState(&mStates[i]);
-		F32 mass = mPhysicsBodies[i]->getMass();
-		m1 = mStates[i].getTransform();
-		globalPos = m1.getPosition();
-		if (i==0) //hip node, or base node on non biped model, the only node with no joint.
-		{
-			mStartMat = m1;
-			defTrans = kShape->defaultTranslations[0];
-			Point3F mulDefTrans;
-			newPos =  globalPos - mStartPos;
-			invShapeTransform.mulP(newPos,&mulPos);
-			invShapeTransform.mulP(defTrans,&mulDefTrans);
-			m1 = invShapeTransform * m1;
-			Point3F finalPos = mulPos - mulDefTrans;
-			m1.setPosition(finalPos);
-			mShapeInstance->mNodeTransforms[mBodyNodes[i]] = m1;
-		} else { //all other nodes, position is relative to parent
-			defTrans = kShape->defaultTranslations[mBodyNodes[i]];
-			m2 = mShapeInstance->mNodeTransforms[kShape->nodes[mBodyNodes[i]].parentIndex];
-			m2.mulP(defTrans,&newPos);
-			m1 = invShapeTransform * m1;
-			m1.setPosition(newPos);
-			mShapeInstance->mNodeTransforms[mBodyNodes[i]] = m1;
-		}
-	}
 
-	//NOW, we need to deal with fingers/toes/etc, anything that isn't a physics body needs to be set according to its parent.
-	m1.identity();
-	for (U32 i=0;i<kShape->nodes.size();i++)
+	mPhysicsBodies[i]->getState(&mStates[i]);
+	m1 = mStates[i].getTransform();
+	globalPos = m1.getPosition();
+	if (i==0) //hip node, or base node on non biped model, the only node with no joint.
 	{
-		if (!mNodeBodies[i])
-		{				  
-			S32 parentIndex = kShape->nodes[i].parentIndex;
-			if (parentIndex>=0)
-			{
-				defTrans = kShape->defaultTranslations[i];
-				m2 = mShapeInstance->mNodeTransforms[parentIndex];
-				m2.mulP(defTrans,&newPos);//There, that sets up our position, but now we need to grab our orientation
-				m1 = m2;                       //directly from the parent node.
-				m1.setPosition(newPos);
-				mShapeInstance->mNodeTransforms[i] = m1;
-			}
-		}
-	}
-}
+		//Point3F mulDefTrans;
+		////mStartMat = m1;//Wait, why? I thought mStartMat was our stored initial orientation...?
+		//defTrans = kShape->defaultTranslations[0];
+		//newPos =  globalPos - mStartPos;
+		//invShapeTransform.mulP(newPos,&mulPos);
+		//invShapeTransform.mulP(defTrans,&mulDefTrans);
+		m1 = invShapeTransform * m1;
+		Point3F finalPos;// = mulPos - mulDefTrans;
+		finalPos.zero();
+		m1.setPosition(finalPos);
+		mShapeInstance->mNodeTransforms[mBodyNodes[i]] = m1;
 
-void PhysicsShape::updateBodiesFromNodes()
-{
-   TSShape *kShape = mShapeInstance->getShape();
-	MatrixF m1,m2;
-	Point3F globalPos = getPosition();
-	mStartMat = getTransform();
-	mStartMat.setPosition(Point3F(0,0,0));
-	mStartPos = globalPos;
-	for (U32 i=0;i<mPhysicsBodies.size();i++)
-	{
-		Point3F defTrans,rotPos,newPos;
+	} else { //all other nodes, position is relative to parent
+
 		defTrans = kShape->defaultTranslations[mBodyNodes[i]];
-		defTrans *= mObjScale;
-		S32 parentInd = kShape->nodes[mBodyNodes[i]].parentIndex;
-		if (parentInd>=0)
-			m2 = mShapeInstance->mNodeTransforms[parentInd];
-		else
-		{
-			m2.identity();
-		}
-		Point3F nodePos = m2.getPosition();
-		nodePos *= mObjScale;
-		m2.setPosition(nodePos);
-		m2.mulP(defTrans,&rotPos);
-		mStartMat.mulP(rotPos,&newPos);
-		//newPos += ( mStartPos - kShape->defaultTranslations[0] );
-		newPos += ( mStartPos );
-		//newPos +=  mStartPos;
-
-		m1 = mShapeInstance->mNodeTransforms[mBodyNodes[i]];
-		m1 = mStartMat * m1;
-
-		if (i==0) {
-			Point3F nodePos = mShapeInstance->mNodeTransforms[mBodyNodes[i]].getPosition();
-			nodePos *= mObjScale;
-			Point3F mulPos;
-			mStartMat.mulP(nodePos,&mulPos);
-			//Con::printf("base node pos %f %f %f, mulPos %f %f %f m1pos %f %f %f m1Quat %f %f %f %f",
-			//	nodePos.x,nodePos.y,nodePos.z,mulPos.x,mulPos.y,mulPos.z,m1Pos.x,m1Pos.y,m1Pos.z,m1Quat.x,m1Quat.y,m1Quat.z,m1Quat.w);
-			//m1.setPosition((mStartPos-defTrans)+nodePos);//Well this is awkward, but mStartPos already has defTrans[0] in it.
-			m1.setPosition(mStartPos + mulPos);
-
-		}
-		//if (i==0) // + mShapeInstance->mNodeTransforms[mBodyNodes[i]].getPosition() //NOPE!
-		else m1.setPosition(newPos);
-
-		mPhysicsBodies[i]->getTransform(&mLastTrans[i]);//store transform for when we go dynamic.
-		mPhysicsBodies[i]->setTransform(m1);
-		//}
+		m2 = mShapeInstance->mNodeTransforms[kShape->nodes[mBodyNodes[i]].parentIndex];
+		m2.mulP(defTrans,&newPos);
+		m1 = invShapeTransform * m1;
+		m1.setPosition(newPos);
+		mShapeInstance->mNodeTransforms[mBodyNodes[i]] = m1;
 	}
-}
-	
-void PhysicsShape::updateBodyFromNode(S32 body)
-{
-
-}
-
-void PhysicsShape::updateNodeFromBody(S32 body)
-{
-
 }
 
 
@@ -3002,6 +3021,15 @@ void PhysicsShape::setDynamic(bool isDynamic)
 				//	Con::printf("setting velocities: lin %f %f %f  ang %f %f %f",posVel.x,posVel.y,posVel.z,angVel.x,angVel.y,angVel.z);
 				//	//Very difficult to see effect, but setAngVelocity does work. Not sure how to turn it up.
 				//}
+
+				mShapeInstance->mDynamicNodes.set(mPhysicsBodies[i]->getNodeIndex());
+				QuatF q;  q.identity();//Just to initialize them...
+				mShapeInstance->mDynamicNodeRotations[mPhysicsBodies[i]->getNodeIndex()] = q;
+
+			} else {
+				
+				mShapeInstance->mDynamicNodes.clear(mPhysicsBodies[i]->getNodeIndex());
+
 			}
 		}
 		//}
@@ -3020,18 +3048,30 @@ void PhysicsShape::setPartDynamic(S32 partID,bool isDynamic)
 	if ( partID<0 )
 		return;
 
+	if (isServerObject())
+	{     //SINGLE PLAYER HACK
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+		clientShape->setPartDynamic(partID,isDynamic);
+		return;
+	}
+
+	if (partID >= mPhysicsBodies.size())
+		return;
+
 	if (mPhysicsBodies[partID]->isDynamic() != isDynamic)
 	{
+		mPhysicsBodies[partID]->setDynamic(isDynamic);
 
-		if (isServerObject())
-		{        //SINGLE PLAYER HACK
-			PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
-			clientShape->setPartDynamic(partID,isDynamic);
-			return;
+		if (isDynamic)
+		{
+			mShapeInstance->mDynamicNodes.set(mPhysicsBodies[partID]->getNodeIndex());
+			QuatF q;  q.identity();
+			mShapeInstance->mDynamicNodeRotations[mPhysicsBodies[partID]->getNodeIndex()] = q;
 		}
-
-		if (partID<mPhysicsBodies.size())
-			mPhysicsBodies[partID]->setDynamic(isDynamic);
+		else
+		{
+			mShapeInstance->mDynamicNodes.clear(mPhysicsBodies[partID]->getNodeIndex());
+		}
 	}
 }
 

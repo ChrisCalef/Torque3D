@@ -103,6 +103,8 @@ class TSShapeInstance
    friend class TSLastDetail;
    friend class TSPartInstance;
 
+	friend class physicsShape;
+
    /// Base class for all renderable objects, including mesh objects and decal objects.
    ///
    /// An ObjectInstance points to the renderable items in the shape...
@@ -243,6 +245,10 @@ class TSShapeInstance
    static Vector<TSThread*> smTranslationThreads;
    static Vector<TSThread*> smScaleThreads;
    /// @}
+	
+	TSIntegerSet mDynamicNodes;        ///< Nodes that are being driven by physics bodies, so don't animate normally.
+   Vector<QuatF>   mDynamicNodeRotations;// openSimEarth
+   //physicsShape *mPhysicsShape;//??? (from EM) Need a pointer back down the chain... ?? Seek advice. Or think harder.
 	
 	TSMaterialList* mMaterialList;    ///< by default, points to hShape material list
 

@@ -196,7 +196,7 @@ void TSShapeInstance::animateNodes(S32 ss)
    // compute transforms
    for (i=a; i<b; i++)
    {
-      if (!mHandsOffNodes.test(i))
+      if ((!mHandsOffNodes.test(i)))//&&(!mDynamicNodes.test(i)))
          TSTransform::setMatrix(smNodeCurrentRotations[i],smNodeCurrentTranslations[i],&smNodeLocalTransforms[i]);
       else
          smNodeLocalTransforms[i] = mNodeTransforms[i];     // in case mNodeTransform was changed externally

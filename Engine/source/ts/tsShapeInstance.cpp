@@ -202,6 +202,7 @@ void TSShapeInstance::initNodeTransforms()
    // set up node data
    S32 numNodes = mShape->nodes.size();
    mNodeTransforms.setSize(numNodes);
+   mDynamicNodeRotations.setSize(numNodes);
 }
 
 void TSShapeInstance::initMeshObjects()
