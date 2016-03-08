@@ -80,6 +80,7 @@ public:
    QuatF& extrapolate( const QuatF & q1, const QuatF & q2, F32 t );
    QuatF& interpolate( const QuatF & q1, const QuatF & q2, F32 t );
    F32  angleBetween( const QuatF & q );
+   QuatF& rotationArc( const Point3F& a, const Point3F& b);
 
    Point3F& mulP(const Point3F& a, Point3F* r) const;   // r = p * this
    QuatF& mul(const QuatF& a, const QuatF& b);    // This = a * b
@@ -231,4 +232,26 @@ inline F32 QuatF::angleBetween( const QuatF & q )
    return mAcos(x * q.x + y * q.y + z * q.z + w * q.w);
 }
 
-#endif // _MQUAT_H_
+inline QuatF& QuatF::rotationArc( const Point3F& a, const Point3F& b)
+{
+   F32 d,s;
+   Point3F kA,kB,kC;
+
+   kA = a; kA.normalize();
+   kB = b; kB.normalize();
+   mCross(kA,kB,&kC);
+   d = mDot(kA,kB);
+   s = (F32)mSqrt((1.0+d)*2.0);
+   if (s>0)
+   {
+	   x = kC.x/s;
+	   y = kC.y/s;
+	   z = kC.z/s;
+	   w = s/2.0f;
+   } else {
+	   identity();
+   }
+   return *this;
+}
+
+#endif  // _MQUAT_H_

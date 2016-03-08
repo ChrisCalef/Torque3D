@@ -194,7 +194,17 @@ class TSShape
 
       void read(Stream *, bool readNameIndex = true);
       void write(Stream *, bool writeNameIndex = true) const;
+	  void write(Stream *, bool writeNameIndex, int rotMatters);//openSimEarth
+      
       /// @}
+   };
+
+   //openSimEarth
+   struct sequenceBackup
+   {
+	   String name;
+	   Vector<Quat16>  nodeRotations;
+	   Vector<Point3F> nodeTranslations;
    };
 
    /// Describes state of an individual object.  Includes everything in an object that can be
@@ -648,6 +658,39 @@ class TSShape
 
    bool setSequenceBlend(const String& seqName, bool blend, const String& blendRefSeqName, S32 blendRefFrame);
    bool setSequenceGroundSpeed(const String& seqName, const Point3F& trans, const Point3F& rot);
+   
+   //// openSimEarth //// functions defined in tsShapeSequenceConversion.cpp ////////
+   String mShapePath;  
+   const char* getPath() { return mShapePath.c_str(); }
+
+   Vector<sequenceBackup>  sequenceBackups;
+
+   void sequenceUp(U32 seq);
+   void sequenceDown(U32 seq);
+   void moveSequence(U32,U32);
+   void dropSequence(U32);
+   void dropAllSequences();
+   void dropAllButOneSeq(U32);
+   void cropSequence(U32,F32,F32,const char *seqname);
+   F32  findStop(U32 slot,F32 start);
+   void convertSequence(TSShape *,const char *,S32,const char *);
+   void convertDefaultPose(TSShape *,char *);
+   void loadDSQ(char *);//U32 seq_to_move_in_front_of
+   void saveSequence(Stream *outstream,S32 seq);
+   //void saveSequences(U32 start_seq,U32 end_seq,char *);
+   S32 getNumMattersNodes(S32);
+   S32 getMattersNodeIndex(S32,S32);
+   S32 getNodeMattersIndex(S32,S32);
+   void addMattersNode(S32,S32);
+   void dropMattersNode(S32,S32);
+   void groundCaptureSeq(S32 seq);
+   void unGroundCaptureSeq(S32 seq);
+   void examineShape();
+
+   //Another approach to the Collada import right-handed/left-handed problem.  We're
+   //converting the node positions and mesh verts instead of just rotating the figure from 
+   void fixUpAxis(S32 axis);//the base.  0=X,1=Y, Z is unnecessary, converting X- or Y- to Z-up.
+
    /// @}
 };
 

@@ -197,10 +197,24 @@ void TSShape::exportSequences(Stream * s)
 
    // write node names
    // -- this is how we will map imported sequence nodes to shape nodes
-   sz = nodes.size();
-   s->write(sz);
-   for (i=0;i<nodes.size();i++)
-      writeName(s,nodes[i].nameIndex);
+   //openSimEarth: need to include only nodes that matter to the sequence, when we are 
+   //saving only one sequence.
+
+   S32 rotMatters;
+   if (sequences.size()==1)
+   {
+	   rotMatters = getNumMattersNodes(0);
+	   s->write(rotMatters);
+	   for (i=0;i<rotMatters;i++)
+		   writeName(s,nodes[getMattersNodeIndex(0,i)].nameIndex);
+   } else {
+	   sz = nodes.size();
+	   s->write(sz);
+	   for (i=0;i<nodes.size();i++)
+	      writeName(s,nodes[i].nameIndex);
+   }
+
+
 
    // legacy write -- write zero objects, don't pretend to support object export anymore
    s->write(0);
@@ -278,6 +292,10 @@ void TSShape::exportSequences(Stream * s)
       writeName(s,seq.nameIndex);
 
       // now write the sequence itself
+	  //if (sequences.size()==1)
+	  //	  seq.write(s,false,rotMatters);//Ecstasy - special version of write which assumes only rotationMatters
+								//nodes are being written, so rotationMatters are all true.
+	  //else
       seq.write(s,false); // false --> don't write name index
    }
 
