@@ -474,7 +474,10 @@ void MatInstance::setTextureStages(SceneRenderState * state, const SceneData &sg
 
 bool MatInstance::isInstanced() const 
 {
-   return mProcessedMaterial->getFeatures().hasFeature( MFT_UseInstancing );
+	if (mProcessedMaterial)
+		return mProcessedMaterial->getFeatures().hasFeature( MFT_UseInstancing );
+	else
+		return false;
 }
 
 bool MatInstance::stepInstance()
