@@ -73,6 +73,7 @@ function initServer()
    // Load up game server support scripts
    exec("./commands.cs");
    exec("./game.cs");
+   exec("./uiForms.cs");
 }
 
 

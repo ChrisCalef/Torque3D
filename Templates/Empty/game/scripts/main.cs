@@ -106,6 +106,8 @@ function onStart()
    // can host in-game servers.
    initServer();
 
+   startSQL("uiForms.db");
+
    // Start up in either client, or dedicated server mode
    if ($Server::Dedicated)
       initDedicated();
@@ -133,6 +135,8 @@ function onExit()
    export("$Pref::Server::*", "./server/prefs.cs", False);
    BanList::Export("./server/banlist.cs");
 
+   stopSQL();
+   
    Parent::onExit();
 }
 
