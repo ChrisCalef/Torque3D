@@ -82,6 +82,7 @@ class SQLiteObject : public SimObject
       int ExecuteSQL(const char* sql);
       void NextRow(int resultSet);
       bool EndOfResult(int resultSet);
+		void escapeSingleQuotes(const char* source, char *dest);
 
       // support functions
       void ClearErrorString();
@@ -90,6 +91,8 @@ class SQLiteObject : public SimObject
       bool SaveResultSet(sqlite_resultset* pResultSet);
       int GetResultSetIndex(int iResultSet);
       int GetColumnIndex(int iResult, const char* columnName);
+	  int numResultSets();
+
    private:
       sqlite3*                       m_pDatabase;
       char*                         m_szErrorString;
@@ -104,6 +107,7 @@ class SQLiteObject : public SimObject
    //--------------------------------------------------------------------------
    public:
    DECLARE_CONOBJECT(SQLiteObject);
+	int getLastRowId() { return sqlite3_last_insert_rowid(m_pDatabase); };
    //--------------------------------------------------------------------------
 };
 

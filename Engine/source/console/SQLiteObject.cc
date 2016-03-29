@@ -20,6 +20,8 @@
 #include "console/SQLiteObject.h"
 
 #include "console/simBase.h"
+#include "console/engineAPI.h"
+
 #include "console/consoleInternal.h"
 #include <STDLIB.H>
 
@@ -88,7 +90,6 @@ bool SQLiteObject::onAdd()
       Namespace *parent = getClassRep()->getNameSpace();
       Con::linkNamespaces(parent->mName, name);
       mNameSpace = Con::lookupNamespace(name);
-   
    }
 
    return true;
@@ -190,9 +191,6 @@ bool SQLiteObject::OpenDatabase(const char* filename)
   }  
    else
    {
-	  //sqlite3_activate_cerod("!THIS$IS$NOT$YOUR$DATABASE!");
-	  //int res1=sqlite3_key(m_pDatabase,"ASD",1);
-	  //int res2=sqlite3_rekey(m_pDatabase,"ASD",1);
       // database was opened without error
       Con::executef(this, "1", "onOpened()");
    }
@@ -234,6 +232,7 @@ int SQLiteObject::ExecuteSQL(const char* sql)
    {
       // error occured
       Con::executef(this, "2", "onQueryFailed", m_szErrorString);
+	  Con::errorf("SQLite failed to execute query, error %s",m_szErrorString);
       delete pResultSet;
       return 0;
    }
@@ -284,6 +283,8 @@ void SQLiteObject::ClearErrorString()
 
 void SQLiteObject::ClearResultSet(int index)
 {
+	return; //errors here...
+
    sqlite_resultset* resultSet;
    sqlite_resultrow* resultRow;
    S32 rows, cols, iResultSet;
@@ -389,6 +390,18 @@ int SQLiteObject::GetColumnIndex(int iResult, const char* columnName)
    }
 
    return 0;
+}
+
+int SQLiteObject::numResultSets()
+{
+	return m_vResultSets.size();
+}
+
+void SQLiteObject::escapeSingleQuotes(const char* source, char *dest)
+{
+	//To Do: This function needs to step through the source string and insert another single quote  
+	//immediately after every single quote it finds.
+
 }
 
 //-----------------------------------------------------------------------
@@ -665,6 +678,46 @@ ConsoleMethod(SQLiteObject, getColumn, const char *, 4, 4, "(resultSet column) R
       return "invalid_result_set";
 }
 
+ConsoleMethod(SQLiteObject, getColumnNumeric, F32, 4, 4, "(resultSet column) Returns the value of the specified column (Column can be specified by name or index) in the current row of the specified result set. If the call fails, the returned string will indicate the error.")
+{
+   sqlite_resultset* pResultSet;
+   sqlite_resultrow* pRow;
+   VectorPtr<char*>::iterator iName;
+   VectorPtr<char*>::iterator iValue;
+   S32 iColumn;
+
+   pResultSet = object->GetResultSet(dAtoi(argv[2]));
+   if (pResultSet)
+   {
+      pRow = pResultSet->vRows[pResultSet->iCurrentRow];
+      if (!pRow)
+         return -1;//"invalid_row";
+      
+      // Is column specified by a name or an index?
+      iColumn = dAtoi(argv[3]);
+      if (iColumn == 0)
+      {
+         // column was specified by a name
+         iColumn = object->GetColumnIndex(dAtoi(argv[2]), argv[3]);
+         // if this is still 0 then we have some error
+         if (iColumn == 0)
+            return -1;//"invalid_column";
+      }
+
+      // We temporarily padded the index in GetColumnIndex() so we could return a 
+      // 0 for error.  So now we need to drop it back down.
+      iColumn--;
+
+      // now we should have an index for our column data
+      if (pRow->vColumnValues[iColumn])
+         return dAtof(pRow->vColumnValues[iColumn]);
+      else
+         return 0;
+   }
+   else
+      return -1;//"invalid_result_set";
+}
+
 ConsoleMethod(SQLiteObject, escapeString, const char *, 3, 3, "(string) Escapes the given string, making it safer to pass into a query.")
 {
    // essentially what we need to do here is scan the string for any occurances of: ', ", and \
@@ -720,4 +773,14 @@ ConsoleMethod(SQLiteObject, escapeString, const char *, 3, 3, "(string) Escapes 
 //   Con::printf("Old String: %s\nNew String: %s", argv[2], szNew);
 
    return szNew;
+}
+
+ConsoleMethod(SQLiteObject, numResultSets, S32, 2, 2, "numResultSets()")
+{
+   return object->numResultSets();
+}
+
+ConsoleMethod(SQLiteObject, getLastRowId, S32, 2, 2, "getLastRowId()")
+{
+   return object->getLastRowId();
 }
