@@ -132,6 +132,7 @@ function reallyAddUIForm()
    {
       %form_id = sqlite.getColumn(%resultSet, "id");
       $formList.setSelected(%form_id);
+      sqlite.clearResult(%resultSet);
    }
    
    addFormWindow.delete();
@@ -276,6 +277,7 @@ function setupUIFormWindow()
          $formList.add(%name,%id);
          sqlite.nextRow(%resultSet);
       }
+      sqlite.clearResult(%resultSet);
    }
    sqlite.clearResult(%resultSet);
    
@@ -293,8 +295,8 @@ function setupUIFormWindow()
          $bitmapList.add(%path,%id);
          sqlite.nextRow(%resultSet);
       }
+      sqlite.clearResult(%resultSet);
    }
-   sqlite.clearResult(%resultSet);
    
    
    $horizAlignList.add("",0);
@@ -351,8 +353,8 @@ function selectUIForm()
          
          sqlite.nextRow(%resultSet);
       }
+      sqlite.clearResult(%resultSet);
    }
-   sqlite.clearResult(%resultSet);
    
    $elementList.setSelected(%firstID);   
    echo("trying to open window " @ %form_name);
@@ -427,6 +429,7 @@ function reallyAddUIElement()
    {
       %elem_id = sqlite.getColumn(%resultSet, "id");
       $elementList.setSelected(%elem_id);
+      sqlite.clearResult(%resultSet);
    }   
    
    echo("really added UI Element name " @ $addUIElementName @ "  type " @ $addUIElementType);
@@ -560,8 +563,8 @@ function selectUIElement()
          if (%resultSet[%c] $= "NULL")
             %resultSet[%c] = "";
       }      
+      sqlite.clearResult(%resultSet);
    }
-   sqlite.clearResult(%resultSet);
    
    if (%resultSet[7]<0) { $anchor_left_align = true; %resultSet[7] *= -1; }
    else $anchor_left_align = false;
@@ -808,8 +811,8 @@ function saveSqlGuiXML(%form_id,%xml_file)
          %count++;
          sqlite.nextRow(%resultSet);
       }
+      sqlite.clearResult(%resultSet);
    }
-   sqlite.clearResult(%resultSet);
    
    if ((strlen(%results[0,2])==0)||(strlen(%results[0,5])==0))
    {
@@ -1075,8 +1078,8 @@ function makeSqlGuiForm(%form_id)
          %count++;
          sqlite.nextRow(%resultSet);
       }
+      sqlite.clearResult(%resultSet);
    }
-   sqlite.clearResult(%resultSet);
    
    //////////////////////////////////////////////////////////////////////
    //////////////////////////////////////////////////////////////////////
@@ -1238,7 +1241,7 @@ function makeSqlGuiForm(%form_id)
                %i++;
             }               
          }
-         else if (%left_anchor > %parent_id)
+         else if (%left_anchor > 0 ) //%parent_id)
          {
             %i = 0;
             %found = false;
@@ -1277,7 +1280,7 @@ function makeSqlGuiForm(%form_id)
                %i++;
             }
          } 
-         else if (%right_anchor > %parent_id)
+         else if (%right_anchor > 0 ) //%parent_id)
          {
             %i = 0;
             %found = false;
@@ -1329,7 +1332,7 @@ function makeSqlGuiForm(%form_id)
                %i++;
             }      
          }
-         else if (%top_anchor > %parent_id)
+         else if (%top_anchor > 0 ) //%parent_id)
          {
             %i = 0;
             %found = false;
@@ -1368,7 +1371,7 @@ function makeSqlGuiForm(%form_id)
                %i++;
             }             
          } 
-         else if (%bottom_anchor > %parent_id)
+         else if (%bottom_anchor > 0 ) //%parent_id)
          {
             %i = 0;
             %found = false;
@@ -1571,7 +1574,7 @@ function makeSqlGuiForm(%form_id)
                %i++;
             }               
          }
-         else if (%left_anchor > %parent_id)
+         else if (%left_anchor > 0 ) //%parent_id)
          {
             %i = 0;
             %found = false;
@@ -1610,7 +1613,7 @@ function makeSqlGuiForm(%form_id)
                %i++;
             }
          } 
-         else if (%right_anchor > %parent_id)
+         else if (%right_anchor > 0 ) //%parent_id)
          {
             %i = 0;
             %found = false;
@@ -1662,7 +1665,7 @@ function makeSqlGuiForm(%form_id)
                %i++;
             }      
          }
-         else if (%top_anchor > %parent_id)
+         else if (%top_anchor > 0 ) //%parent_id)
          {
             %i = 0;
             %found = false;
@@ -1701,7 +1704,7 @@ function makeSqlGuiForm(%form_id)
                %i++;
             }             
          } 
-         else if (%bottom_anchor > %parent_id)
+         else if (%bottom_anchor > 0 ) //%parent_id)
          {
             %i = 0;
             %found = false;
@@ -1915,7 +1918,6 @@ function getSaveXmlName()
    %dlg.delete();
    return "";   
 }
-
 
 function makeXmlGuiForm(%filename)
 {
