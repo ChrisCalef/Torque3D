@@ -217,7 +217,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 		//HERE: is this the only way to do it? How do I set an upper and lower amount per axis??
 	   const physx::PxJointLimitCone cone(mJD.swingLimit, mJD.swingLimit2,physx::PxSpring(mJD.swingSpring,mJD.springDamper));
-		Con::printf("limit cone, soft=%d swingLimit %f yAngle %f  swing2 %f zAngle %f",cone.isSoft(),mJD.swingLimit,cone.yAngle,mJD.swingLimit2,cone.zAngle);
+		//Con::printf("limit cone, soft=%d swingLimit %f yAngle %f  swing2 %f zAngle %f",cone.isSoft(),mJD.swingLimit,cone.yAngle,mJD.swingLimit2,cone.zAngle);
 		//d6Joint->setSwingLimit(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 0.1f));
 		//d6Joint->setSwingLimit(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, physx::PxSpring(mJD.swingSpring,mJD.springDamper)));
 		d6Joint->setSwingLimit(cone);
@@ -234,6 +234,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 		Con::printf("Couldn't find joint type: %d",mJD.jointType);
 		return;
+
 	}
 
 	mJoint->setBreakForce(mJD.maxForce,mJD.maxTorque);

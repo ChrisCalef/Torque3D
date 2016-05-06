@@ -1094,8 +1094,8 @@ bool PhysicsShape::_createShape()
 
 				partBody->setBodyIndex(mPhysicsBodies.size());
 				partBody->setNodeIndex(PD->baseNode); 
-				Con::printf("Pushing back a physics body, index %d  node index %d finalPos %f %f %f",
-										i,PD->baseNode,bodypartPos.x,bodypartPos.y,bodypartPos.z);
+				//Con::printf("Pushing back a physics body, index %d  node index %d finalPos %f %f %f",
+				//						i,PD->baseNode,bodypartPos.x,bodypartPos.y,bodypartPos.z);
 				mPhysicsBodies.push_back(partBody);
 
 				mLastTrans.push_back(MatrixF(true));// During kinematic animation we use these

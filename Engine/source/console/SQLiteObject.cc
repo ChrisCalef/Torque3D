@@ -291,7 +291,8 @@ void SQLiteObject::ClearErrorString()
 
 void SQLiteObject::ClearResultSet(int index)
 {
-	return; //errors here...
+	if (index<=0)
+		return;
 
    sqlite_resultset* resultSet;
    sqlite_resultrow* resultRow;

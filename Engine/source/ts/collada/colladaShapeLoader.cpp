@@ -328,6 +328,11 @@ void ColladaShapeLoader::enumerateScene()
    }
 }
 
+void ColladaShapeLoader::postEnumerateScene()
+{
+	//Not needed for Collada, needed this for FBX Clusters, but being virtual means everybody needs one.
+}
+
 bool ColladaShapeLoader::ignoreNode(const String& name)
 {
    if (FindMatch::isMatchMultipleExprs(ColladaUtils::getOptions().alwaysImport, name, false))

@@ -39,7 +39,7 @@ class AppNode
 
    // add attached meshes and child nodes to app node
    // the reason these are tracked by AppNode is that
-   // AppNode is responsible for deleting all it's children
+   // AppNode is responsible for deleting all its children
    // and attached meshes.
    virtual void buildMeshList() = 0;
    virtual void buildChildList() = 0;
@@ -53,6 +53,11 @@ protected:
    char* mParentName;
 
 public:
+
+	//MegaMotion
+	F32		mScaleFactor;//This is scale factor to convert the incoming file to meters, for Torque.  
+								//(*Not* the same thing as FBX unit scale factor, which is in centimeters.) 
+								//(Unless it's in INCHES,  UnitScaleFactor = 2.54!!)
 
    AppNode();
    virtual ~AppNode();

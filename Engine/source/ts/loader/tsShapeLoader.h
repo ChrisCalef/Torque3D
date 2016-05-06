@@ -98,6 +98,7 @@ public:
    static const F64 MinFrameRate;
    static const F64 MaxFrameRate;
    static const F64 AppGroundFrameRate;
+	bool mHasSequences;//MegaMotion, appSequences.size() crashes if none.
 
 protected:
    // Variables used during loading that must be held until the shape is deleted
@@ -124,6 +125,8 @@ protected:
 
    // Collect the nodes, objects and sequences for the scene
    virtual void enumerateScene() = 0;
+   virtual void postEnumerateScene() = 0;
+
    bool processNode(AppNode* node);
    virtual bool ignoreNode(const String& name) { return false; }
    virtual bool ignoreMesh(const String& name) { return false; }

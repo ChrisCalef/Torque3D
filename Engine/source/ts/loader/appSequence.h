@@ -37,6 +37,7 @@ class AppSequence
 {
 public:
    S32 fps;
+   F32 delta;
 
 public:
    AppSequence() { }

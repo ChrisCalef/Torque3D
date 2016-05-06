@@ -61,15 +61,19 @@ void AppMesh::computeBounds(Box3F& bounds)
          const S32& vertIndex = vertexIndex[iWeight];
          const MatrixF& deltaTransform = boneTransforms[ boneIndex[iWeight] ];
 
+		if (vertIndex<initialVerts.size())//Temp, MegaMotion, crash on
+		{ //FBX import, getting wrong vertexIndex list, apparently.
          Point3F v;
          deltaTransform.mulP( initialVerts[vertIndex], &v );
          v *= weight[iWeight];
 
          points[vertIndex] += v;
       }
+      }
 
       // compute bounds for the skinned mesh
-      for (S32 iVert = 0; iVert < initialVerts.size(); iVert++)
+      //for (S32 iVert = 0; iVert < initialVerts.size(); iVert++)
+		for (S32 iVert = 0; iVert < points.size(); iVert++)
          bounds.extend( points[iVert] );
    }
    else
@@ -140,6 +144,17 @@ TSMesh* AppMesh::constructTSMesh()
       tsskin->batchData.initialTransforms = initialTransforms;
       tsskin->batchData.initialVerts = initialVerts;
       tsskin->batchData.initialNorms = initialNorms;
+		for (U32 i=0;i<tsskin->batchData.initialTransforms.size();i++)
+		{//MegaMotion - fix the handedness.
+			Point3F in = tsskin->batchData.initialTransforms[i].getPosition();
+			Point3F out;
+			out.x = -in.x;
+			out.y = in.z;
+			out.z = in.y;
+			tsskin->batchData.initialTransforms[i].setPosition(out);
+			//Con::printf("intialTransforms  %f %f %f  nodeIndex %d boneIndex %d vertIndex %d initialTransforms %d",
+			//	out.x,out.y,out.z,nodeIndex.size(),boneIndex.size(),vertexIndex.size(),initialTransforms.size());
+		}
    }
    else
    {
@@ -161,6 +176,7 @@ TSMesh* AppMesh::constructTSMesh()
    tsmesh->numFrames = numFrames;
    tsmesh->numMatFrames = numMatFrames;
    tsmesh->vertsPerFrame = vertsPerFrame;
+	if ((tsmesh->norms.size()==tsmesh->verts.size())&&(tsmesh->tverts.size()==tsmesh->verts.size()))
    tsmesh->createTangents(tsmesh->verts, tsmesh->norms);
    tsmesh->encodedNorms.set(NULL,0);
 
