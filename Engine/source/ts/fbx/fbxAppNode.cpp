@@ -17,6 +17,8 @@
 
 #include "core/stringTable.h"
 
+#include "math/util/EulerAngles.h"
+
 extern KFbxPose *gBindPose;//TEMP, until we figure out how to pass this from fbxShapeLoader.
 /*
 // Trim leading and trailing whitespace from the first word in the string
@@ -479,8 +481,11 @@ void FbxAppNode::buildMesh(FbxAppMesh *appMesh)
 		//HMMM..   Taking this out entirely is the only way to make the bird line up with the skeleton.  Maybe the whole 
 		//         thing including the skeleton needs to be rotated by the Mesh preRotMat???  Hmmm...
 		//appMesh->mOrientation.set(EulerF(mDegToRad(preRotSrc[0]),mDegToRad(-postRotSrc[2]),mDegToRad(-preRotSrc[1])));
-		appMesh->mOrientation.set(EulerF(mDegToRad(preRotSrc[0]),mDegToRad(postRotSrc[1]),mDegToRad(preRotSrc[2])));
 		
+		//TEMP: had this before, but crashing, try for identity for now 04/07/16
+		//appMesh->mOrientation.set(EulerF(mDegToRad(preRotSrc[0]),mDegToRad(postRotSrc[1]),mDegToRad(preRotSrc[2])));
+		appMesh->mOrientation.identity();
+
 		//World = ParentWorld * T * Roff * Rp * Rpre * R * Rpost * Rp-1 * Soff * Sp * S * Sp-1 
 	}
 

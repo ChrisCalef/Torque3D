@@ -41,6 +41,8 @@
 extern TSShape* loadColladaShape(const Torque::Path &path);
 #endif
 
+extern TSShape* loadFbxShape(const Torque::Path &path);
+
 /// most recent version -- this is the version we write
 S32 TSShape::smVersion = 26;
 /// the version currently being read...valid only during a read
@@ -2025,6 +2027,12 @@ template<> void *Resource<TSShape>::create(const Torque::Path &path)
       ret = new TSShape;
       readSuccess = ret->read(&stream);
 #endif
+   } else if ( extension.equal( "fbx", String::NoCase ) )
+   {
+      // Attempt to load the FBX file
+      ret = loadFbxShape(path);
+      readSuccess = (ret != NULL);
+		Con::errorf( "Resource<TSShape>::create - reading FBX %s, success %d", path.getFullPath().c_str(), readSuccess );
    }
    else
    {
@@ -2038,6 +2046,8 @@ template<> void *Resource<TSShape>::create(const Torque::Path &path)
       Con::errorf( "Resource<TSShape>::create - Error reading '%s'", path.getFullPath().c_str() );
       delete ret;
       ret = NULL;
+	} else { //MegaMotion, remember shape path for later, hard to retrieve otherwise.
+		ret->mShapePath = path.getFullPath();
    }
 
    return ret;

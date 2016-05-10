@@ -21,6 +21,8 @@
 
 #include <fbxfilesdk/kfbxio/kfbxiosettings.h>
 
+#include "math/util/EulerANgles.h"
+
 #include "core/util/tVector.h"
 #include "core/strings/findMatch.h"
 #include "core/stream/fileStream.h"
@@ -40,6 +42,15 @@
 #endif
 
 KFbxPose *gBindPose;//Damn, passing things to the appNodes doesn't seem to work (mScaleFactor), so can't trust mBindPose either.
+
+
+MODULE_BEGIN( FbxShapeLoader )
+   MODULE_INIT_AFTER( ColladaShapeLoader )
+   MODULE_INIT
+   {
+      TSShapeLoader::addFormat("FBX", "fbx");
+   }
+MODULE_END;
 
 //-----------------------------------------------------------------------------
 /// This function is invoked by the resource manager based on file extension.
@@ -1055,12 +1066,13 @@ void FbxShapeLoader::postEnumerateScene()
 									//EulerF eul(lKeyX * (M_PI/180.0),lKeyZ * (M_PI/180.0),-lKeyY * (M_PI/180.0));
 									//EulerF eul(-lKeyX * (M_PI/180.0),-lKeyZ * (M_PI/180.0),-lKeyY * (M_PI/180.0));
 									//appNode->nodeRotates.last().set(eul);
-
+									/*
 									EulerAngles ea;
 									HMatrix	hMatrix;
 									MatrixF m1;
 									Point4F row0,row1,row2;
 
+									
 									//ea = Eul_(eul.x,eul.y,eul.z,EulOrdXYZs);
 									//ea = Eul_(eul.x,eul.z,eul.y,EulOrdXZYs);
 									ea = Eul_(eul.y,eul.z,eul.x,EulOrdYZXs);
@@ -1080,6 +1092,10 @@ void FbxShapeLoader::postEnumerateScene()
 									//appNode->nodeRotates.last().set(m0);
 									appNode->nodeRotates.last() = m1;//.set(eul);
 									//Con::printf("    key %d:  value %f  %f  %f",i,lKeyX,lKeyY,lKeyZ);
+									*/
+									MatrixF m1;
+									m1.identity();
+									appNode->nodeRotates.last() = m1;
 								}
 							}
 						}
