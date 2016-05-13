@@ -953,7 +953,7 @@ DefineConsoleFunction( MatrixMulVector, VectorF, ( TransformF transform, VectorF
 
 DefineConsoleFunction( MatrixMulPoint, Point3F, ( TransformF transform, Point3F point ),,
    "@brief Multiply the given point by the given transform assuming that w=1.\n\n"
-   "This function will multiply the given vector such that translation with take effect.\n"
+   "This function will multiply the given vector such that translation will take effect.\n"
    "@param transform A transform.\n"
    "@param point A vector.\n"
    "@return The transformed vector.\n"

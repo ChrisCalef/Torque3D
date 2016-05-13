@@ -39,6 +39,13 @@
 #include "platform/platformInput.h"
 #include "core/util/journal/journal.h"
 #include "core/util/uuid.h"
+//openSimEarth/MegaMotion
+#include <time.h>
+#include "console/SQLiteObject.h"
+#include "T3D/physics/physicsPlugin.h"
+#include "gui/containers/guiWindowCtrl.h"
+#include "gui/controls/guiTextEditCtrl.h"
+#include <sstream>
 
 // This is a temporary hack to get tools using the library to
 // link in this module which contains no other references.
@@ -2642,3 +2649,219 @@ DefineEngineFunction( createDirectory, bool, (String dirPath),,
 		return true;
 	else return false;
 }
+
+DefineEngineFunction( getClock, S32, (),,
+   "Returns system clock time in milliseconds." )
+{
+	return clock();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+//Okay, now, this stuff REALLY needs to go into a new code file for MegaMotion/openSimEarth.
+DefineEngineFunction( addSceneShapeBlock, bool, (S32 sceneId,S32 shapeId,S32 groupId),,
+   "MegaMotion: adds a block of scene shapes to the database." )
+{
+	Con::printf("found addSceneShapeBlock, engine side!!!!!!!!!!!!!");
+	
+	GuiWindowCtrl* window = NULL;
+	GuiTextEditCtrl* textedit = NULL;
+	window = dynamic_cast<GuiWindowCtrl*>(Sim::findObject("addMMSceneShapeWindow"));
+	Con::printf("found my window: %s",window->getClassName());
+	if (window)
+	{
+		//Well, this is ugly, but apparently the only way.
+		char behaviorTree[512],temp[48];
+		GuiTextEditCtrl *txt;
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("behaviorTree")));
+		txt->getText(behaviorTree);
+
+		F32 pos_x,pos_y,pos_z;
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapePositionX")));
+		txt->getText(temp); pos_x = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapePositionY")));
+		txt->getText(temp); pos_y = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapePositionZ")));
+		txt->getText(temp); pos_z = dAtof(temp);
+
+		F32 ori_x,ori_y,ori_z,ori_a;		
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapeOrientationX")));
+		txt->getText(temp); ori_x = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapeOrientationY")));
+		txt->getText(temp); ori_y = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapeOrientationZ")));
+		txt->getText(temp); ori_z = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapeOrientationAngle")));
+		txt->getText(temp); ori_a = dAtof(temp);
+
+		F32 scale_x,scale_y,scale_z;
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapeScaleX")));
+		txt->getText(temp); scale_x = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapeScaleY")));
+		txt->getText(temp); scale_y = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapeScaleZ")));
+		txt->getText(temp); scale_z = dAtof(temp);
+
+		S32 blockX,blockY;
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("blockCountX")));
+		txt->getText(temp); blockX = dAtoi(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("blockCountY")));
+		txt->getText(temp); blockY = dAtoi(temp);
+
+		F32 blockPaddingX,blockPaddingY,blockVariationX,blockVariationY;
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("blockPaddingX")));
+		txt->getText(temp); blockPaddingX = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("blockPaddingY")));
+		txt->getText(temp); blockPaddingY = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("blockVariationX")));
+		txt->getText(temp); blockVariationX = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("blockVariationY")));
+		txt->getText(temp); blockVariationY = dAtof(temp);
+
+
+		SQLiteObject *kSQL = PHYSICSMGR->mSQL;//openSimEarth
+		std::ostringstream query,posQuery,rotQuery,scaleQuery,shapeQuery;
+		char name[255];
+	
+		S32 result,ss_id,firstPosId,firstRotId,firstScaleId;
+		sqlite_resultset *resultSet;
+		MRandom random;
+		MatrixF rot;
+		AngAxisF angAx(Point3F(ori_x,ori_y,ori_z),mDegToRad(ori_a));
+		angAx.setMatrix(&rot);
+		Con::printf("starting loop, block x %d, block y %d",blockX,blockY);
+		for (U32 i=0;i<blockX;i++)
+		{
+			for (U32 j=0;j<blockY;j++)
+			{		
+				Point3F fPos;
+				F32 px,py;
+				px = (pos_x + ((F32)i*blockPaddingX) + ((random.randF()*blockVariationX) - (blockVariationX/2.0)));
+				py = (pos_y + (-(F32)j*blockPaddingY) + ((random.randF()*blockVariationY) - (blockVariationY/2.0)));      
+				Point3F inPos(px,py,pos_z);				
+				rot.mulV(inPos,&fPos);
+				Con::printf("inPos %f %f %f, outPos %f %f %f",inPos.x,inPos.y,inPos.z,fPos.x,fPos.y,fPos.z);
+				if ((i==0)&&(j==0))
+				{
+					query.str("");
+					query << "INSERT INTO vector3 (x,y,z) VALUES (" << fPos.x << "," << fPos.y << "," << fPos.z << ");";
+					kSQL->ExecuteSQL(query.str().c_str());
+					query.str("");
+					query << "SELECT last_insert_rowid() AS id;";
+					result = kSQL->ExecuteSQL(query.str().c_str());
+					if (result)
+					{
+						resultSet = kSQL->GetResultSet(result);
+						firstPosId = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+						kSQL->ClearResultSet(result);
+					}
+				} else {
+					posQuery << "INSERT INTO vector3 (x,y,z) VALUES (" << fPos.x << "," << fPos.y << "," << fPos.z << ");\n";
+				}
+			}
+		}
+		kSQL->ExecuteSQL(posQuery.str().c_str());
+		posQuery.str("");
+
+		for (U32 i=0;i<blockX;i++)
+		{
+			for (U32 j=0;j<blockY;j++)
+			{		
+				if ((i==0)&&(j==0))
+				{
+					query.str("");
+					query << "INSERT INTO rotation (x,y,z,angle) VALUES (" << ori_x << "," << ori_y << "," << 
+						ori_z << "," << ori_a << ");";
+					kSQL->ExecuteSQL(query.str().c_str());
+					query.str("");
+					query << "SELECT last_insert_rowid() AS id;";
+					result = kSQL->ExecuteSQL(query.str().c_str());
+					if (result)
+					{
+						resultSet = kSQL->GetResultSet(result);
+						firstRotId = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+						kSQL->ClearResultSet(result);
+					}
+				} else {
+					rotQuery << "INSERT INTO rotation (x,y,z,angle) VALUES (" << ori_x << "," << ori_y << "," << 
+						ori_z << "," << ori_a << ");";
+				}
+			}
+		}		
+		kSQL->ExecuteSQL(rotQuery.str().c_str());
+		rotQuery.str("");
+
+		for (U32 i=0;i<blockX;i++)
+		{
+			for (U32 j=0;j<blockY;j++)
+			{
+				if ((i==0)&&(j==0))
+				{			
+					query.str("");
+					query << "INSERT INTO vector3 (x,y,z) VALUES (" << scale_x << "," << scale_y << "," << scale_z << ");";
+					kSQL->ExecuteSQL(query.str().c_str());
+					query.str("");
+					query << "SELECT last_insert_rowid() AS id;";
+					result = kSQL->ExecuteSQL(query.str().c_str());
+					if (result)
+					{
+						resultSet = kSQL->GetResultSet(result);
+						firstScaleId = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+						kSQL->ClearResultSet(result);
+					}
+				} else {
+					scaleQuery << "INSERT INTO vector3 (x,y,z) VALUES (" << scale_x << "," << scale_y << "," << scale_z << ");";
+				}
+			}
+		}
+		kSQL->ExecuteSQL(scaleQuery.str().c_str());
+		scaleQuery.str("");
+
+		Con::printf("first pos id %d, rot id %d, scale id %d",firstPosId,firstRotId,firstScaleId);
+		for (U32 i=0;i<blockX;i++)
+		{
+			for (U32 j=0;j<blockY;j++)
+			{
+				sprintf(name,"%s_%d_%d",behaviorTree,i,j);
+				S32 count = (i*blockY)+j;
+				shapeQuery << "INSERT INTO sceneShape (name,scene_id,shape_id,shapeGroup_id,behavior_tree,pos_id,rot_id,scale_id) " << 
+					"VALUES ('" << name << "'," << sceneId << "," << shapeId << "," << groupId << ",'" << behaviorTree <<
+					"'," << (firstPosId+count) << "," << (firstRotId+count) << "," <<(firstScaleId+count) << ");";
+			}
+		}		
+		kSQL->ExecuteSQL(shapeQuery.str().c_str());
+		shapeQuery.str("");
+	}
+
+	return true;
+}
+
+/*
+//This is the old way, doing each query independently. It is unknown whether changing to the above method really 
+//improved the time, if so it wasn't hugely dramatic. However the above way is probably much more efficient in 
+//other situations, such as involving a remote DB connection, so keep it and maybe make it general practice.
+query.str("");
+				query << "SELECT id FROM sceneShape WHERE name='" << name << "' AND scene_id=" <<
+							sceneId << ";";
+				result = kSQL->ExecuteSQL(query.str().c_str());
+				if (result)
+				{
+					resultSet = kSQL->GetResultSet(result);
+					ss_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+					kSQL->ClearResultSet(result);
+				}
+				if (ss_id<=0)
+					return false;
+					
+				query.str("");
+				query << "UPDATE sceneShape SET pos_id=last_insert_rowid() WHERE id=" << ss_id << ";\n";
+				kSQL->ExecuteSQL(query.str().c_str());
+	
+				query.str("");
+				query << "UPDATE sceneShape SET rot_id=last_insert_rowid() WHERE id=" << ss_id << ";";
+				kSQL->ExecuteSQL(query.str().c_str());
+
+				query.str("");
+				query << "UPDATE sceneShape SET scale_id=last_insert_rowid() WHERE id=" << ss_id << ";";
+				kSQL->ExecuteSQL(query.str().c_str());
+
+*/
