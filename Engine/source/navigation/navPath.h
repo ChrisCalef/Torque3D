@@ -178,6 +178,12 @@ private:
    static const char *getProtectedFrom(void *obj, const char *data);
    static const char *getProtectedTo(void *obj, const char *data);
    /// @}
+	
+	//MegaMotion
+   public:
+	  F32 findDistanceToWall(Point3F pos,F32 radius);
+	  Point3F mHitPos;
+	  Point3F mHitNormal;
 };
 
 #endif

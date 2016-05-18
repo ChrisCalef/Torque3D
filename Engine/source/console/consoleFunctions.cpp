@@ -2692,6 +2692,16 @@ DefineEngineFunction( addSceneShapeBlock, bool, (S32 sceneId,S32 shapeId,S32 gro
 		txt->getText(temp); ori_z = dAtof(temp);
 		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapeOrientationAngle")));
 		txt->getText(temp); ori_a = dAtof(temp);
+		
+		F32 rot_x,rot_y,rot_z,rot_a;		
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("blockRotationX")));
+		txt->getText(temp); rot_x = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("blockRotationY")));
+		txt->getText(temp); rot_y = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("blockRotationZ")));
+		txt->getText(temp); rot_z = dAtof(temp);
+		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("blockRotationAngle")));
+		txt->getText(temp); rot_a = dAtof(temp);
 
 		F32 scale_x,scale_y,scale_z;
 		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("shapeScaleX")));
@@ -2717,8 +2727,7 @@ DefineEngineFunction( addSceneShapeBlock, bool, (S32 sceneId,S32 shapeId,S32 gro
 		txt = dynamic_cast<GuiTextEditCtrl*>(window->findObjectByInternalName(StringTable->insert("blockVariationY")));
 		txt->getText(temp); blockVariationY = dAtof(temp);
 
-
-		SQLiteObject *kSQL = PHYSICSMGR->mSQL;//openSimEarth
+		SQLiteObject *kSQL = PHYSICSMGR->mSQL;//openSimEarth/MegaMotion
 		std::ostringstream query,posQuery,rotQuery,scaleQuery,shapeQuery;
 		char name[255];
 	
@@ -2726,9 +2735,9 @@ DefineEngineFunction( addSceneShapeBlock, bool, (S32 sceneId,S32 shapeId,S32 gro
 		sqlite_resultset *resultSet;
 		MRandom random;
 		MatrixF rot;
-		AngAxisF angAx(Point3F(ori_x,ori_y,ori_z),mDegToRad(ori_a));
+		AngAxisF angAx(Point3F(rot_x,rot_y,rot_z),mDegToRad(rot_a));
 		angAx.setMatrix(&rot);
-		Con::printf("starting loop, block x %d, block y %d",blockX,blockY);
+		Con::printf("starting addSceneShapeBlock, block x %d, block y %d rotation %f %f %f %f",blockX,blockY,rot_x,rot_y,rot_z,rot_a);
 		for (U32 i=0;i<blockX;i++)
 		{
 			for (U32 j=0;j<blockY;j++)

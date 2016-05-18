@@ -256,7 +256,7 @@ void RigidPhysicsShapeData::onRemove()
 
 void RigidPhysicsShapeData::_onResourceChanged( const Torque::Path &path )
 {
-	if ( path != Path( shapeName ) )
+	if ( path != Torque::Path( shapeName ) )
       return;
 
    // Reload the changed shape.

@@ -50,6 +50,13 @@
 	#include "sim/dataSource/vehicleDataSource.h"
 #endif
 
+#ifndef OPENSTEER_OPENSTEERDEMO_H
+	#include "T3D/OpenSteer/include/OpenSteerDemo.h"
+#endif
+#ifndef _NAV_CLIENT_H_
+	#include "T3D/OpenSteer/Plugins/NavClient.h"
+#endif
+
 using namespace Torque;
 
 Point3F gPlanePos = Point3F(0,0,0);
@@ -451,13 +458,18 @@ PhysicsShape::PhysicsShape()
 		mRecordCount( 0 ),
 		mShapeID( -1 ),
 		mSceneID( -1 ),
-		mSceneShapeID( -1 )	   
+		mSceneShapeID( -1 ),
+		mNavMesh( NULL ),
+		mNavPath( NULL ),
+		mVehicle( NULL ),
+		mPedId( 0 )
 {
    mNetFlags.set( Ghostable | ScopeAlways );
    mTypeMask |= DynamicShapeObjectType;
    mLastGroundTrans = Point3F::Zero;
    mLastGroundRot = QuatF::Identity;
 	mDataSource = NULL;
+   mLinkTypes = LinkData(AllFlags);
 }
 
 PhysicsShape::~PhysicsShape()
@@ -1517,7 +1529,7 @@ void PhysicsShape::_setCurrent()
       return;
 
    bool willPlay = (mCurrentSeq >= 0) && (mCurrentSeq < mShapeInstance->getShape()->sequences.size());
-
+	
    if ( willPlay )
    {
       // Create thread if we dont already have.
@@ -2449,6 +2461,72 @@ void PhysicsShape::processTick( const Move *move )
    // need to play the ambient animation because even if the animation were
    // to move collision shapes it would not affect the physx representation.
 	Point3F pos = getPosition();
+
+	//TEMP! TESTING! Hope this works out. OpenSteer.
+	if (mVehicle)
+	{
+		Point3F steerPos,steerVel;
+
+		OpenSteer::Vec3 vec = mVehicle->position();
+		OpenSteer::Vec3 vel = mVehicle->velocity();
+
+		steerPos.set(Point3F(-vec.x,vec.z,vec.y));
+		steerVel.set(Point3F(-vel.x,vel.z,vel.y));
+
+		MatrixF pedMat,currMat;
+
+		QuatF pedQuat,currQuat;
+		Point3F pedVelNorm = steerVel;
+		pedVelNorm.normalize();
+		F32 pedVelLen = steerVel.len();
+		//Con::printf("ped vel: %f  %f  %f  speed %f",gPedVel[0].x,gPedVel[0].y,gPedVel[0].z,pedVelLen);
+		pedQuat.rotationArc(pedVelNorm,Point3F(0,1,0));
+		pedQuat.setMatrix(&pedMat);
+		setTransform(pedMat);
+		setPosition(steerPos);
+
+		//NOW: deal with walking.  First, turn on walk anim, make it cyclic, turn off ground animate. 
+		//Second, adjust anim playback speed to the ratio of:
+		//   OpenSteer velocity  ? (ground animate distance / sequence duration)
+		//ground animate distance is the key point.  If we always start our ground animation 
+		//locally at (0,0,0), which we should, then the length of the last ground frame 
+		//translation should be all we need.
+		//const TSShape *kShape = getShape();
+
+		//FIX: Decide between "walk", "jog", and "run" based on pedVel.
+		//String moveSeq;
+		//if (mFlexBody->mMoveSequence.length()>0) 
+		//{
+		//	moveSeq = mFlexBody->mMoveSequence;
+		//} else {
+		//Con::printf("trying to pick an anim, pedVelLen %f server %d action walk %d action run %d",
+		//				pedVelLen,isServerObject(),mActionSeqs["walk"],mActionSeqs["run"]);
+		if ((pedVelLen < 2.0)&&(mCurrentSeq!=mActionSeqs["walk"]))
+			setCurrentSeq(mActionSeqs["walk"]);
+				//moveSeq = "walk";
+		else if (mCurrentSeq!=mActionSeqs["run"])
+			setCurrentSeq(mActionSeqs["run"]);
+				//moveSeq = "run";
+		//}
+		//mFlexBody->mMoveSequence = moveSeq;
+		//Con::printf("move seq: %s, pedVel %f",moveSeq.c_str(),pedVelLen);
+		//setSeqCyclic(kShape->findSequence(moveSeq.c_str()),true);
+		//mIsGroundAnimating = false;
+		//mFlexBody->playThread(0,moveSeq.c_str());
+		//mFlexBody->setThreadPos(0,gRandom.randF(0.0,1.0));//random staggering of anims.
+
+		//const TSShape::Sequence *kSeq = &(kShape->sequences[kShape->findSequence(moveSeq.c_str())]);
+		//FIX: add shape scale to groundTranslations!!
+		//Point3F gfPos = kShape->groundTranslations[kSeq->firstGroundFrame + (kSeq->numGroundFrames-1)];
+		//F32 groundSpeed = gfPos.len() / kSeq->duration ;//Or gfPos.y, should be more or less the same.
+		//F32 speedRatio = pedVelLen / groundSpeed;
+		F32 speedRatio = 1.0;
+		TSThread *th = mShapeInstance->getThread(0);
+		mShapeInstance->setTimeScale(th,speedRatio);
+	}
+
+
+
 	//if (isServerObject())
 	//	Con::printf("Server physics shape ticking! datablock %s position %f %f %f",mDataBlock->getName(),pos.x,pos.y,pos.z);
 	//if (mCurrentTick==0)
@@ -2512,6 +2590,14 @@ void PhysicsShape::processTick( const Move *move )
 	   mLastGroundTrans = mulGroundTrans;
 		mLastThreadPos = mAmbientThread->getPos();
    } 
+
+	// OpenSteer - don't know where to put this, just testing...  //////
+	//if (mVehicle)
+	//{
+	//	OpenSteer::Vec3 vec = mVehicle->position();
+	//	pos = Point3F(-vec.x,vec.z,vec.y);
+	//	Con::printf("PhysicsShape OpenSteer Vehicle Pos: %f %f %f",pos.x,pos.y,pos.z);
+	//}
 
 
 	//HERE: NOW. We need to banish forever the switch between "isDynamic" and "not isDynamic", as a whole body property.
@@ -3133,10 +3219,14 @@ bool PhysicsShape::setCurrentSeq(S32 seq)
 
 bool PhysicsShape::setActionSeq(const char *name,S32 seq)
 {
-	Con::printf("Calling physicsShape setActionSeq: %s, %d !!!!!!!!!!!!!!!!!!!",name,seq);
 	if ((seq >= 0)&&(seq < mShapeInstance->getShape()->sequences.size())&&(dStrlen(name)>0))
 	{
 		mActionSeqs[name] = seq;
+		if (isServerObject())
+		{
+			PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
+			clientShape->setActionSeq(name,seq);
+		}
 		return true;
 	} else return false;
 }
@@ -3241,14 +3331,14 @@ Point3F PhysicsShape::getClientPosition()
 Point3F PhysicsShape::findGroundPosition(Point3F pos)
 {
 	RayInfo ri;
-	bool raySuccess = mWorld->castGroundRay(pos,pos + Point3F(0,0,-100000),&ri);
+	bool raySuccess = mWorld->castGroundRay(pos + Point3F(0,0,3),pos + Point3F(0,0,-1000),&ri);
 
 	if (raySuccess)
 		return ri.point;
 	else 
 	{
 		Con::printf("ground raycast failed from %f %f %f",pos.x,pos.y,pos.z);
-		return Point3F(0,0,0);
+		return pos;
 	}
 }
 
@@ -3846,3 +3936,553 @@ DefineEngineMethod( PhysicsShape, setUseDataSource, void, (bool useDataSource),,
 	if (clientShape)
 		clientShape->mUseDataSource = useDataSource;
 }
+
+bool PhysicsShape::setNavMesh()
+{
+	Sim::findObject(mNavMeshName.c_str(),mNavMesh);
+
+	//SimObject *healthKit = Sim::findObject("myHealthKit");
+	//SceneObject *myHealthKit = dynamic_cast<SceneObject*>(healthKit);
+
+	if (mNavMesh)
+	{ 
+		if (mNavPath)
+			delete mNavPath;//Is this at all safe?
+
+		mNavPath = new NavPath();
+		mNavPath->mMesh = mNavMesh;//This is not the normal way, supposed to use SetProtectedMesh...
+		//mNavPath->setProtectedMesh(this,"NavMeshOne",data?)//Hm, why private? and what does protected mean here? Hmm
+
+
+		//mNavPath->mFrom = getPosition();
+		//mNavPath->mTo = myHealthKit->getPosition();
+		//mNavPath->mFromSet = mNavPath->mToSet = true;
+		mNavPath->mAlwaysRender = true;
+		mNavPath->mLinkTypes = mLinkTypes;
+		mNavPath->mXray = true;
+		// Paths plan automatically upon being registered.
+		if(!mNavPath->registerObject())
+		{
+			delete mNavPath;
+			return false;
+		}
+
+		//mNavPath->plan();
+
+		//Con::printf("Navpath apparently successful! from %f %f %f, to %f %f %f, length %f  nodes %d",
+		//	mNavPath->mFrom.x,mNavPath->mFrom.y,mNavPath->mFrom.z,mNavPath->mTo.x,mNavPath->mTo.y,mNavPath->mTo.z,
+		//	mNavPath->getLength(),mNavPath->size());
+
+		return true;
+	}
+	return false;
+}
+
+DefineEngineMethod(PhysicsShape,setNavMesh,void, (const char *meshName),,"")
+{
+	object->mNavMeshName = meshName;
+	if (!object->setNavMesh())
+		Con::printf("PhysicsShape failed to load navmesh: %s",meshName);
+	else
+		Con::printf("PhysicsShape successfully loaded navmesh %s!!!!!",meshName);
+}
+
+DefineEngineMethod(PhysicsShape,getNavPathSize,S32, (),,"")
+{
+	if (object->mNavPath)
+		return object->mNavPath->size();
+	else
+		return -1;
+}
+
+DefineEngineMethod(PhysicsShape,getNavPathLength,F32, (),,"")
+{
+	if (object->mNavPath)
+		return object->mNavPath->getLength();
+	else
+		return -1.0f;
+}
+
+DefineEngineMethod(PhysicsShape,getNavPathNode,Point3F, (S32 node),,"")
+{
+	if (object->mNavPath)
+		return object->mNavPath->getNode(node);
+	else
+		return Point3F(0,0,0);
+}
+
+bool PhysicsShape::setNavPathTo(Point3F toPos)
+{
+	//Con::printf("Setting Nav Path To: %f %f %f",toPos.x,toPos.y,toPos.z);
+
+	if (mNavPath==NULL)
+		return false;
+
+	mNavPath->mFrom = getClientPosition();
+	mNavPath->mTo = toPos;
+	mNavPath->mFromSet = mNavPath->mToSet = true;		
+	mNavPath->mAlwaysRender = true;
+	mNavPath->mLinkTypes = mLinkTypes;
+	mNavPath->mXray = true;
+
+	mNavPath->plan();
+	
+	//Con::printf("Navpath apparently successful! from %f %f %f, to %f %f %f, length %f  nodes %d",
+	//		mNavPath->mFrom.x,mNavPath->mFrom.y,mNavPath->mFrom.z,mNavPath->mTo.x,mNavPath->mTo.y,mNavPath->mTo.z,
+	//		mNavPath->getLength(),mNavPath->size());
+
+	return true;
+}
+DefineEngineMethod(PhysicsShape,setNavPathTo,bool, (Point3F toPos),,"")
+{
+	return object->setNavPathTo(toPos);
+}
+
+
+/////////////////////////////////////////////////////////////////////
+//OpenSteer
+
+DefineEngineMethod(PhysicsShape,getPedID,S32, (),,"")
+{
+	return object->mPedId;
+}
+
+DefineEngineMethod(PhysicsShape,createVehicle,bool, (Point3F pos,float rot),,"")
+{
+	if (object->mVehicle)
+		return false;
+
+	OpenSteer::Vec3 vec(-pos.x,pos.z,pos.y);
+	OpenSteer::OpenSteerDemo::createVehicle(vec,rot);
+	object->assignLastVehicle();
+	Con::printf("engine, created vehicle %f %f %f",vec.x,vec.y,vec.z);
+	return true;
+}
+
+void PhysicsShape::assignLastVehicle()
+{
+	if (mVehicle)
+		return;
+
+	const OpenSteer::AVGroup& vehicles = OpenSteer::OpenSteerDemo::allVehiclesOfSelectedPlugIn();
+	mVehicle = dynamic_cast<NavClient*>(vehicles[vehicles.size()-1]);
+	mVehicle->setThinking(1);
+	if ((mVehicle)&&(mNavPath))
+		mVehicle->mDetourNavPath = mNavPath;
+}
+
+DefineEngineMethod(PhysicsShape,assignVehicle,bool, (),,"")
+{
+	if (object->mVehicle)
+		return false;
+
+	const OpenSteer::AVGroup& vehicles = OpenSteer::OpenSteerDemo::allVehiclesOfSelectedPlugIn();
+	if ((vehicles.size() > 0) && (object->mPedId < vehicles.size()))
+	{
+		object->mVehicle = dynamic_cast<NavClient*>(vehicles[object->mPedId]);
+		return true;
+	}
+	return false;
+}
+
+
+void PhysicsShape::assignVehicleNavPath()
+{//OBSOLETE, use recast navpath instead.
+	if ((mVehicle)&&(mNavPath))
+	{
+		float pathRadius = 3.0;//2.0;//FIX: get from opensteerProfile
+		int pathPointCount = mNavPath->size();
+
+		//const Vec3 pathPoints[pathPointCount] = { Vec3 (0,0,0), Vec3 (40,40,0) };
+		//if (mVehicle->path)
+		//	delete mVehicle->path;
+		//MEGAMOTION: Fix this, declaration of NavPoints was breaking due to inability to predeclare inside the
+		//OpenSteer namespace, and including openSteerDemo.h in physicsShape.h causes all kinds of winsock conflicts
+		//and other weird behavior, due probably to inclusion of windows.h too early or something. Bypassing for now.
+		/*
+		for (U32 i=0;i<mNavPath->size();i++)
+		{
+			Point3F pos = mNavPath->getNode(i);
+			mNavPoints[i].x = -pos.x;  
+			mNavPoints[i].y =  pos.z;  
+			mNavPoints[i].z =  pos.y;  
+			Con::printf("nav points %d: %f %f %f",i,-pos.x,pos.z,pos.y);
+		}
+		mVehicle->path = new PolylinePathway (pathPointCount,
+			mNavPoints,
+			pathRadius,
+			false);
+			*/
+	}
+}
+
+DefineEngineMethod(PhysicsShape,getOpenSteerMaxSpeed,F32, (),,"")
+{
+	if (object->mVehicle)
+		return object->mVehicle->maxSpeed();
+	else 
+		return 0.0;
+}
+
+DefineEngineMethod(PhysicsShape,setOpenSteerMaxSpeed,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+	{
+		//object->mVehicle->mMaxSpeed = dAtof(argv[2]);//Any reason at all to have these variables?
+		object->mVehicle->setMaxSpeed(value);//This is how you change the real value.
+		//Con::printf("setting opensteer max speed: %f",object->mVehicle->mMaxSpeed);
+	}
+}
+
+DefineEngineMethod(PhysicsShape,getOpenSteerMaxForce,F32, (),,"")
+{
+	if (object->mVehicle)
+		return object->mVehicle->maxForce();
+	else 
+		return 0.0;
+}
+
+DefineEngineMethod(PhysicsShape,setOpenSteerMaxForce,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->setMaxForce(value);
+}
+
+DefineEngineMethod(PhysicsShape,getOpenSteerRadius,F32, (),,"")
+{
+	if (object->mVehicle)
+		return object->mVehicle->radius();
+	else 
+		return 0.0;
+}
+
+DefineEngineMethod(PhysicsShape,setOpenSteerRadius,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->setRadius(value);
+}
+
+
+/*
+
+	float mSeekTargetWeight;
+	float mAvoidTargetWeight;
+	float mSeekNeighborWeight;
+	float mAvoidNeighborWeight;
+	float mAvoidNavMeshEdgeWeight;
+	float mWanderWeight;
+
+	float mWanderChance;
+	float mWallRange;
+	*/
+
+DefineEngineMethod(PhysicsShape,setSeekTargetWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mSeekTargetWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setAvoidTargetWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mAvoidTargetWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setSeekNeighborWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mSeekNeighborWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setAvoidNeighborWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mAvoidNeighborWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setAvoidNavMeshEdgeWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mAvoidNavMeshEdgeWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setWanderWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mWanderWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setWanderChance,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mWanderChance = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setWallRange,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mWallRange = value;//Warning, might want to sanity check.
+}
+
+
+
+
+DefineEngineMethod(PhysicsShape,assignVehicleNavPath,void, (),,"")
+{
+	if (object->mVehicle)
+		return;
+
+	object->assignVehicleNavPath();
+
+	return;
+}
+
+DefineEngineMethod(PhysicsShape,getVehiclePos,Point3F, (),,"")
+{
+	Point3F pos;
+	if (object->mVehicle)
+	{
+		OpenSteer::Vec3 vec;
+		vec = object->mVehicle->position();
+		pos = Point3F(-vec.x,vec.z,vec.y);
+	}
+	return pos;
+}
+
+DefineEngineMethod(PhysicsShape,setVehiclePos,void, (Point3F pos),,"")
+{
+	if (object->mVehicle)
+	{
+		OpenSteer::Vec3 vec(-pos.x,pos.z,pos.y);
+		object->mVehicle->setPosition(vec);
+	}
+	return;
+}
+
+DefineEngineMethod(PhysicsShape,getVehicleVel,Point3F, (),,"")
+{
+	Point3F pos;
+	if (object->mVehicle)
+	{
+		OpenSteer::Vec3 vel;
+		vel = object->mVehicle->velocity();
+		pos = Point3F(-vel.x,vel.z,vel.y);
+	}
+	return pos;
+}
+
+
+DefineEngineMethod(PhysicsShape,setOpenSteerMoveTarget,void, (Point3F pos),,"")
+{
+	if (object->mVehicle)
+	{
+		OpenSteer::Vec3 vec(-pos.x,pos.z,pos.y);
+		object->mVehicle->setMoveTarget(vec);
+	}
+	return;
+}
+
+/*
+
+PolylinePathway* getNavPath (void)
+{
+    if (gNavPath == NULL)
+    {
+        const float pathRadius = 2;
+
+        const int pathPointCount = 7;
+        const float size = 20;
+        const float top = 2 * size;
+        const float gap = 1.2f * size;
+        const float out = 2 * size;
+        const float h = 0.5;
+        const Vec3 pathPoints[pathPointCount] =
+            {Vec3 (h+gap-out,     0,  h+top-out),  // 0 a
+             Vec3 (h+gap,         0,  h+top),      // 1 b
+             Vec3 (h+gap+(top/2), 0,  h+top/2),    // 2 c
+             Vec3 (h+gap,         0,  h),          // 3 d
+             Vec3 (h,             0,  h),          // 4 e
+             Vec3 (h,             0,  h+top),      // 5 f
+             Vec3 (h+gap,         0,  h+top/2)};   // 6 g
+
+        //gObstacle1.center = interpolate (0.2f, pathPoints[0], pathPoints[1]);
+        //gObstacle2.center = interpolate (0.5f, pathPoints[2], pathPoints[3]);
+        //gObstacle1.radius = 3;
+        //gObstacle2.radius = 5;
+        //gObstacles.push_back (&gObstacle1);
+        //gObstacles.push_back (&gObstacle2);
+
+        gEndpoint0 = pathPoints[0];
+        gEndpoint1 = pathPoints[pathPointCount-1];
+
+        gNavPath = new PolylinePathway (pathPointCount,
+                                         pathPoints,
+                                         pathRadius,
+                                         false);
+    }
+    return gNavPath;
+}
+
+*/
+
+/*
+/////////////////////////////////////////////////////////////////////
+//NavMesh
+
+bool fxFlexBody::setNavMesh()
+{
+	SimObject *navMeshObj = NULL;
+	navMeshObj = Sim::findObject(mNavMeshName.c_str());
+	
+	if (navMeshObj)
+	//if (0)//TEMP: NavMesh code not ready for release yet, but leaving it in the build, shouldn't
+	{ // hurt anything since everything checks if (mNavPath) first before doing anything.
+		Nav::NavMesh *kNavMesh = dynamic_cast<Nav::NavMesh*>(navMeshObj);
+
+		if (mNavPath)
+			delete mNavPath;//Is this at all safe?
+
+		mNavPath = new Nav::NavPath();
+		mNavPath->mMesh = kNavMesh;//This is not the normal way, supposed to use SetProtectedMesh...
+		//mNavPath->setProtectedMesh(this,"NavMeshOne",data?)
+		return true;
+	}
+	return false;
+}
+
+ConsoleMethod(fxFlexBody,setNavMesh,void,3,3,"setNavMesh(const char *)")
+{
+	object->mNavMeshName = argv[2];
+	if (!object->setNavMesh())
+		Con::printf("Flexbody failed to load navmesh: %s",argv[2]);
+}
+
+ConsoleMethod(fxFlexBody,getNavMesh,const char*,2,2,"getNavMesh()")
+{
+	char* buff = Con::getReturnBuffer(100);
+
+	if (object->mNavMeshName.length()>0)
+		sprintf(buff,"%s",object->mNavMeshName.c_str());
+
+	return buff;
+}
+
+void fxFlexBody::setNavPathTo(Point3F pos)
+{
+	if (mNavPath)
+	{
+		mNavPath->mTo = pos;
+		mNavPath->mFrom = getPosition();
+		mNavPath->mToSet = true;
+		mNavPath->mFromSet = true;
+		mNavPath->plan();
+		Con::printf("path is planned!  nodes: %d, length: %f  pos %f %f %f  from %f %f %f",mNavPath->getCount(),mNavPath->getLength(),
+			pos.x,pos.y,pos.z,mNavPath->mFrom.x,mNavPath->mFrom.y,mNavPath->mFrom.z);
+		for (U32 i=0;i<mNavPath->getCount();i++)
+		{
+			Con::printf("pathnode %d: ? ? ?",i);
+		}
+		if (mVehicle)
+			assignVehicleNavPath();
+	}
+}
+
+ConsoleMethod(fxFlexBody,setNavPathTo,void,3,3,"setNavPathTo(Point3F)")
+{
+	Point3F pos;
+	dSscanf( argv[2], "%f %f %f", &pos.x, &pos.y, &pos.z );
+	Con::printf("setting nav path to: %f %f %f",pos.x,pos.y,pos.z);
+	object->setNavPathTo(pos);
+	return;
+}
+
+ConsoleMethod(fxFlexBody,getNavPathTo,const char*,2,2,"getNavPathTo()")
+{
+	char* buff = Con::getReturnBuffer(100);
+	if (object->mNavPath)
+	{
+		Point3F pos = object->mNavPath->mTo;
+		dSprintf(buff,100,"%g %g %g",pos.x,pos.y,pos.z);
+	}
+	return buff;
+}
+
+void fxFlexBody::setNavPathFrom(Point3F pos)
+{
+	if (mNavPath)
+	{
+		mNavPath->mFrom = pos;
+	}
+}
+
+ConsoleMethod(fxFlexBody,setNavPathFrom,void,3,3,"setNavPathFrom(Point3F)")
+{
+	Point3F pos;
+	dSscanf( argv[2], "%f %f %f", &pos.x, &pos.y, &pos.z );
+	object->setNavPathFrom(pos);
+	return;
+}
+
+ConsoleMethod(fxFlexBody,getNavPathFrom,const char*,2,2,"getNavPathFrom()")
+{
+	char* buff = Con::getReturnBuffer(100);
+	if (object->mNavPath)
+	{
+		Point3F pos = object->mNavPath->mFrom;
+		dSprintf(buff,100,"%g %g %g",pos.x,pos.y,pos.z);
+	}
+	return buff;
+}
+
+
+ConsoleMethod(fxFlexBody,getNavPathLength,F32,2,2,"getNavPathLength()")
+{
+	F32 len = 0.0;
+	if (object->mNavPath)
+	{
+		len = object->mNavPath->getLength();
+	}
+	return len;
+}
+
+ConsoleMethod(fxFlexBody,getNavPathCount,F32,2,2,"getNavPathCount()")
+{
+	S32 cnt = 0;
+	if (object->mNavPath)
+	{
+		cnt = object->mNavPath->getCount();
+	}
+	return cnt;
+}
+
+ConsoleMethod(fxFlexBody,getNavPathNodePos,const char*,3,3,"getNavPathNodePos(S32 index)")
+{
+	char* buff = Con::getReturnBuffer(100);
+	if (object->mNavPath)
+	{
+		Point3F pos = object->mNavPath->getNode(dAtoi(argv[2]));
+		dSprintf(buff,100,"%g %g %g",pos.x,pos.y,pos.z);
+	}
+	return buff;
+}
+
+ConsoleMethod(fxFlexBody,getNavPathNode,S32,2,2,"getNavPathNode()")
+{
+	return object->mNavPathNode;
+}
+
+ConsoleMethod(fxFlexBody,setNavPathNode,void,3,3,"setNavPathNode(S32)")
+{
+	object->mNavPathNode = dAtoi(argv[2]);
+	return;
+}
+
+ConsoleMethod(fxFlexBody,hasNavPath,bool,2,2,"bool hasNavPath()")
+{
+	if (object->mNavPath)
+		return true;
+	else
+		return false;
+}
+
+*/

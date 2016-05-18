@@ -50,12 +50,31 @@
 #include <string>
 #include <map>
 
+#ifdef TORQUE_NAVIGATION_ENABLED
+#ifndef _NAVPATH_H_
+#include "navigation/navPath.h"
+#endif
+#ifndef _NAVMESH_H_
+#include "navigation/navMesh.h"
+#endif
+#ifndef _COVERPOINT_H_
+#include "navigation/coverPoint.h"
+#endif
+#endif // TORQUE_NAVIGATION_ENABLED
+
+
+//#define MAX_NAV_NODES 80 //Max nodes in one navpath, needs a limit for opensteer 
+                          //to have a Vec3 * to an array.
+
+
 class TSShapeInstance;
 class PhysicsBody;
 class PhysicsWorld;
 class PhysicsDebrisData;
 class ExplosionData;
 class vehicleDataSource;
+
+class NavClient;
 
 enum physicsShapeType
 {
@@ -324,6 +343,7 @@ public: //protected:
    /// This is only ment for debugging.
    ///
    static bool smNoSmoothing;
+	
 
 public:
 	
@@ -440,6 +460,121 @@ public:
 	void showRotorBlades();
 	void showRotorBlur();
 	void showRotorDisc();
+	
+   /// NavMesh we pathfind on.
+   //SimObjectPtr<NavMesh> mNavMesh;
+	NavMesh *mNavMesh;
+	NavPath *mNavPath;
+   LinkData mLinkTypes;
+
+	String mNavMeshName;
+	S32 mNavPathNode;
+
+	bool setNavMesh();
+	bool setNavPathTo(Point3F);
+
+	//////OpenSteer////////////
+	S32 mPedId;
+	//OpenSteer::Vec3 mNavPoints[MAX_NAV_NODES];//wasteful?  better way?//OBSOLETE? use navPaths?
+	NavClient *mVehicle;
+
+	void assignVehicleNavPath();
+	void assignLastVehicle();
+	void updateToVehicle();
+	//////OpenSteer////////////
+
+//#endif // TORQUE_NAVIGATION_ENABLED
 };
 
 #endif // _PHYSICSSHAPE_H_
+
+	/*
+	//NavMesh *mNavMesh;
+
+	//grabbed from EM flexbody
+	bool setNavMesh();
+	void setNavPathTo(Point3F);
+	void setNavPathFrom(Point3F);
+	*/
+
+	/*
+//#ifdef TORQUE_NAVIGATION_ENABLED
+
+	//MegaMotion - in the continuing (temporary?) bloat of PhysicsShape, grabbing entire navmesh 
+	//section from AIPlayer. But, testing it out piece by piece. First thing we need to do is find
+	//the existing navmesh from the mission.
+
+	
+   /// Should we jump?
+   enum JumpStates {
+      None,  ///< No, don't jump.
+      Now,   ///< Jump immediately.
+      Ledge, ///< Jump when we walk off a ledge.
+   } mJump;
+
+   /// Stores information about a path.
+   struct PathData {
+      /// Pointer to path object.
+      SimObjectPtr<NavPath> path;
+      /// Do we own our path? If so, we will delete it when finished.
+      bool owned;
+      /// Path node we're at.
+      U32 index;
+      /// Default constructor.
+      PathData() : path(NULL)
+      {
+         owned = false;
+         index = 0;
+      }
+   };
+
+   /// Path we are currently following.
+   PathData mPathData;
+
+   /// Clear out the current path.
+   void clearPath();
+
+   /// Get the current path we're following.
+   NavPath *getPath() { return mPathData.path; }
+
+   /// Stores information about our cover.
+   struct CoverData {
+      /// Pointer to a cover point.
+      SimObjectPtr<CoverPoint> cover;
+      /// Default constructor.
+      CoverData() : cover(NULL) {}
+   };
+
+   /// Current cover we're trying to get to.
+   CoverData mCoverData;
+
+   /// Stop searching for cover.
+   void clearCover();
+
+   /// Information about a target we're following.
+   struct FollowData {
+      /// Object to follow.
+      SimObjectPtr<SceneObject> object;
+      /// Distance at whcih to follow.
+      F32 radius;
+      Point3F lastPos;
+      /// Default constructor.
+      FollowData() : object(NULL)
+      {
+         radius = 5.0f;
+         lastPos = Point3F::Zero;
+      }
+   };
+
+   /// Current object we're following.
+   FollowData mFollowData;
+
+   /// Stop following me!
+   void clearFollow();
+
+   /// NavMesh we pathfind on.
+   SimObjectPtr<NavMesh> mNavMesh;
+
+   /// Move to the specified node in the current path.
+   void moveToNode(S32 node);
+	*/

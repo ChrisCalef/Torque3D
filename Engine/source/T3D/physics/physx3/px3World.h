@@ -105,6 +105,11 @@ public:
     static void lockScenes();
 	static physx::PxCooking *getCooking();
    static void setTiming(F32 stepTime,U32 maxIterations);
+
+	//MegaMotion - where should these go? MegaMotion.cpp? Leaving them here for now.
+	void initOpenSteer();
+	void updateOpenSteer();
+	void shutdownOpenSteer();
 };
 
 #endif // _PX3WORLD_H_

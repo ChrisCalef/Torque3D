@@ -602,7 +602,7 @@ void TSStatic::onRemove()
 
 void TSStatic::_onResourceChanged( const Torque::Path &path )
 {
-   if ( path != Path( mShapeName ) )
+   if ( path != Torque::Path( mShapeName ) )
       return;
    
    _createShape();

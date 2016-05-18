@@ -46,7 +46,7 @@ namespace FS
    bool MountDefaults();
    bool MountZips(const String &root);
    
-   bool Touch( const Path &path );
+   bool Touch( const Torque::Path &path );
 
 } // Namespace FS
 } // Namespace Platform

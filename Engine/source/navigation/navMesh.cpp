@@ -1581,6 +1581,8 @@ DefineEngineMethod(NavMesh, load, bool, (),,
 
 bool NavMesh::save()
 {
+	Con::printf("Trying to save navmesh: %s",mFileName);
+
    if(!dStrlen(mFileName) || !nm)
       return false;
    

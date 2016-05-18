@@ -50,6 +50,10 @@
 #include <physxvisualdebuggersdk\PvdConnectionManager.h>
 #include <foundation\PxFoundation.h>
 
+#ifndef OPENSTEER_OPENSTEERDEMO_H
+	#include "T3D/OpenSteer/include/OpenSteerDemo.h"
+#endif
+
 physx::PxPhysics* gPhysics3SDK = NULL;
 physx::PxCooking* Px3World::smCooking = NULL;
 physx::PxFoundation* Px3World::smFoundation = NULL;
@@ -279,7 +283,7 @@ bool Px3World::initWorld( bool isServer, ProcessList *processList )
 // Most of this borrowed from bullet physics library, see btDiscreteDynamicsWorld.cpp
 bool Px3World::_simulate(const F32 dt)
 {
-   int numSimulationSubSteps = 0;
+	int numSimulationSubSteps = 0;
    //fixed timestep with interpolation
    mAccumulator += dt;
    if (mAccumulator >= smPhysicsStepTime)
@@ -300,6 +304,11 @@ bool Px3World::_simulate(const F32 dt)
 	}
 	
 	mIsSimulating = true;
+		
+	//MegaMotion
+	PROFILE_START(px3World_updateOpenSteer);
+	updateOpenSteer();
+	PROFILE_END();
 
 	return true;
 }
@@ -760,6 +769,36 @@ DefineEngineFunction( physx3CastGroundRay, Point3F, ( Point3F start ),, "Cast a 
    kWorld->castGroundRay(start,start + Point3F(0,0,-100000),&ri);
 
    return ri.point; 
+}
+
+
+///////////////////////////////////////////////////////////////////////
+///  OpenSteer ////////////////////////////////////////////////////
+
+void Px3World::initOpenSteer()
+{
+	 OpenSteer::OpenSteerDemo::initialize();
+}
+
+DefineEngineFunction( initOpenSteer, void, (),, "" )
+{
+	Px3World *kWorld = static_cast<Px3World *>(PHYSICSMGR->getWorld( "client" ));
+   kWorld->initOpenSteer();
+	return;
+}
+
+void Px3World::updateOpenSteer()
+{
+	if (1)//(OpenSteer::OpenSteerDemo::selectedPlugIn)
+	{
+		OpenSteer::OpenSteerDemo::updateSimulationAndRedraw();
+		//Con::printf("updateOpenSteer, clock=%f",OpenSteer::OpenSteerDemo::clock.realTimeSinceFirstClockUpdate());
+	}
+}
+
+void Px3World::shutdownOpenSteer()
+{
+	OpenSteer::OpenSteerDemo::exit(1);
 }
 
 /*
