@@ -123,17 +123,15 @@ public:
 	//float cohesionWeight = 9.0f;
 
 	bool isThinking;
-
+	
+	float mWanderChance;
+	float mWanderWeight;
 	float mSeekTargetWeight;
 	float mAvoidTargetWeight;
 	float mSeekNeighborWeight;
 	float mAvoidNeighborWeight;
 	float mAvoidNavMeshEdgeWeight;
-	float mWanderWeight;
-
-	float mWanderChance;
-	//float - other chances?
-	float mWallRange;
+	float mDetectNavMeshEdgeRange;
 
     // a pointer to this boid's interface object for the proximity database
     ProximityToken* proximityToken;

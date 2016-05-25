@@ -105,12 +105,12 @@ void NavClient::reset (void)
 	
 	mSeekTargetWeight = 1.0;
 	mAvoidTargetWeight = 3.0;
-	mSeekNeighborWeight = 1.0;//1.0;//TEMP, testing
+	mSeekNeighborWeight = 1.0;
 	mAvoidNeighborWeight = 6.0;
 	mAvoidNavMeshEdgeWeight = 1.0;
 	mWanderWeight = 1.0;
 	mWanderChance = 0.1;
-	mWallRange = 3.0;
+	mDetectNavMeshEdgeRange = 2.0;
 
 	//more to follow...
 	mDetourNavPath = NULL;
@@ -172,12 +172,18 @@ void NavClient::update (const float currentTime, const float elapsedTime)
 	applySteeringForce (determineCombinedSteering (elapsedTime),
 		elapsedTime);
 	
-
+	
 	//HERE: I believe this function, or one like it, is going to be the key to steering away from the edge of the navmesh.
 	//This logic should go into another steering function in determineCombinedSteering, parallel to steerForSeek etc 
-	
-	//mDetourNavPath->mQuery->findDistanceToWall(...);
-	
+	if (mDetourNavPath)
+	{
+		Vec3 vec = position();
+		Point3F pos(-vec.x,vec.z,vec.y);
+		F32 wallDist = mDetourNavPath->findDistanceToWall(pos,mDetectNavMeshEdgeRange);
+		//Con::printf("returned from wallDist: %f",wallDist);
+	} else {
+		Con::printf("mDetourNavPath is null!");
+	}
 	//But, WAIT, the BETTER WAY to do this would be to define a new friendly function for the NavPath interface, which 
 	//calls its own mQuery but doesn't involve us in any of the details of that here. We just want to give it a vector
 	//and get back a distance, and maybe a position and normal, here.

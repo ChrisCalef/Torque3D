@@ -756,10 +756,12 @@ DefineEngineMethod(NavPath, getLength, F32, (),,
 }
 
 F32 NavPath::findDistanceToWall(Point3F pos,F32 radius)
-{/*
-	if ((mMesh!=NULL))//&&(mQuery->hasValidNavMesh()))
+{
+	//Con::printf("trying to find Wall Hit distance!!");
+	if ((mMesh!=NULL))//&&(mQuery->getAttachedNavMesh()))
 	{
 		// Convert to Detour-friendly coordinates and data structures.
+		//Con::printf("got into the function!");
 		F32 from[] = {pos.x, pos.y, pos.z};//{pos.x, pos.z, -pos.y};
 		F32 extents[] = {1.0f, 1.0f, 1.0f};
 		dtPolyRef startRef;
@@ -769,13 +771,13 @@ F32 NavPath::findDistanceToWall(Point3F pos,F32 radius)
 		mQuery->findNearestPoly(from,extents,&mFilter,&startRef,polycenter);//find startRef, I hope...
 		//Con::printf("got a navmesh, startref %d, polycenter %f %f %f",startRef,polycenter[0],polycenter[1],polycenter[2]);
 		mQuery->findDistanceToWall(startRef, from, radius,&mFilter,&hitdist,hitpos,hitnorm);
-		//Con::printf("Hit distance: %f, hitpos %f %f %f, normal %f %f %f from %f %f %f",hitdist,hitpos[0],
+		//Con::printf("Wall Hit distance: %f, hitpos %f %f %f, normal %f %f %f from %f %f %f",hitdist,hitpos[0],
 		//		hitpos[1],hitpos[2],hitnorm[0],hitnorm[1],hitnorm[2],pos.x,pos.y,pos.z);
 		mHitPos.set(hitpos[0],hitpos[1],hitpos[2]);
 		mHitNormal.set(hitnorm[0],hitnorm[1],hitnorm[2]);
 		return hitdist;
 	} else {
 		return -1.0;
-	}*/
+	}
 	return -1.0;
 }

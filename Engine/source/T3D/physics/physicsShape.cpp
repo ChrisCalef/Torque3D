@@ -3969,6 +3969,11 @@ bool PhysicsShape::setNavMesh()
 
 		//mNavPath->plan();
 
+		if (mVehicle)
+		{
+			mVehicle->mDetourNavPath = mNavPath;
+		} else 
+			Con::printf("setNavMesh: we don't have a vehicle yet!");
 		//Con::printf("Navpath apparently successful! from %f %f %f, to %f %f %f, length %f  nodes %d",
 		//	mNavPath->mFrom.x,mNavPath->mFrom.y,mNavPath->mFrom.z,mNavPath->mTo.x,mNavPath->mTo.y,mNavPath->mTo.z,
 		//	mNavPath->getLength(),mNavPath->size());
@@ -4014,7 +4019,7 @@ DefineEngineMethod(PhysicsShape,getNavPathNode,Point3F, (S32 node),,"")
 bool PhysicsShape::setNavPathTo(Point3F toPos)
 {
 	//Con::printf("Setting Nav Path To: %f %f %f",toPos.x,toPos.y,toPos.z);
-
+	//HERE: we are on server, this should be client, since everything else is.
 	if (mNavPath==NULL)
 		return false;
 
@@ -4026,15 +4031,20 @@ bool PhysicsShape::setNavPathTo(Point3F toPos)
 	mNavPath->mXray = true;
 
 	mNavPath->plan();
-	
-	//Con::printf("Navpath apparently successful! from %f %f %f, to %f %f %f, length %f  nodes %d",
+
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());//SINGLE PLAYER HACK
+		clientShape->mNavPath = mNavPath;
+		clientShape->mVehicle->mDetourNavPath = mNavPath;
+	} //Con::printf("Navpath apparently successful! from %f %f %f, to %f %f %f, length %f  nodes %d",
 	//		mNavPath->mFrom.x,mNavPath->mFrom.y,mNavPath->mFrom.z,mNavPath->mTo.x,mNavPath->mTo.y,mNavPath->mTo.z,
 	//		mNavPath->getLength(),mNavPath->size());
 
 	return true;
 }
 DefineEngineMethod(PhysicsShape,setNavPathTo,bool, (Point3F toPos),,"")
-{
+{//HERE: this should be calling the client object.
 	return object->setNavPathTo(toPos);
 }
 
@@ -4069,6 +4079,8 @@ void PhysicsShape::assignLastVehicle()
 	mVehicle->setThinking(1);
 	if ((mVehicle)&&(mNavPath))
 		mVehicle->mDetourNavPath = mNavPath;
+	else if (mNavPath==NULL)
+		Con::printf("whoops, we don't have a navpath yet! server %d",isServerObject());
 }
 
 DefineEngineMethod(PhysicsShape,assignVehicle,bool, (),,"")
@@ -4116,117 +4128,7 @@ void PhysicsShape::assignVehicleNavPath()
 	}
 }
 
-DefineEngineMethod(PhysicsShape,getOpenSteerMaxSpeed,F32, (),,"")
-{
-	if (object->mVehicle)
-		return object->mVehicle->maxSpeed();
-	else 
-		return 0.0;
-}
-
-DefineEngineMethod(PhysicsShape,setOpenSteerMaxSpeed,void, (F32 value),,"")
-{
-	if (object->mVehicle)
-	{
-		//object->mVehicle->mMaxSpeed = dAtof(argv[2]);//Any reason at all to have these variables?
-		object->mVehicle->setMaxSpeed(value);//This is how you change the real value.
-		//Con::printf("setting opensteer max speed: %f",object->mVehicle->mMaxSpeed);
-	}
-}
-
-DefineEngineMethod(PhysicsShape,getOpenSteerMaxForce,F32, (),,"")
-{
-	if (object->mVehicle)
-		return object->mVehicle->maxForce();
-	else 
-		return 0.0;
-}
-
-DefineEngineMethod(PhysicsShape,setOpenSteerMaxForce,void, (F32 value),,"")
-{
-	if (object->mVehicle)
-		object->mVehicle->setMaxForce(value);
-}
-
-DefineEngineMethod(PhysicsShape,getOpenSteerRadius,F32, (),,"")
-{
-	if (object->mVehicle)
-		return object->mVehicle->radius();
-	else 
-		return 0.0;
-}
-
-DefineEngineMethod(PhysicsShape,setOpenSteerRadius,void, (F32 value),,"")
-{
-	if (object->mVehicle)
-		object->mVehicle->setRadius(value);
-}
-
-
-/*
-
-	float mSeekTargetWeight;
-	float mAvoidTargetWeight;
-	float mSeekNeighborWeight;
-	float mAvoidNeighborWeight;
-	float mAvoidNavMeshEdgeWeight;
-	float mWanderWeight;
-
-	float mWanderChance;
-	float mWallRange;
-	*/
-
-DefineEngineMethod(PhysicsShape,setSeekTargetWeight,void, (F32 value),,"")
-{
-	if (object->mVehicle)
-		object->mVehicle->mSeekTargetWeight = value;//Warning, might want to sanity check.
-}
-
-DefineEngineMethod(PhysicsShape,setAvoidTargetWeight,void, (F32 value),,"")
-{
-	if (object->mVehicle)
-		object->mVehicle->mAvoidTargetWeight = value;//Warning, might want to sanity check.
-}
-
-DefineEngineMethod(PhysicsShape,setSeekNeighborWeight,void, (F32 value),,"")
-{
-	if (object->mVehicle)
-		object->mVehicle->mSeekNeighborWeight = value;//Warning, might want to sanity check.
-}
-
-DefineEngineMethod(PhysicsShape,setAvoidNeighborWeight,void, (F32 value),,"")
-{
-	if (object->mVehicle)
-		object->mVehicle->mAvoidNeighborWeight = value;//Warning, might want to sanity check.
-}
-
-DefineEngineMethod(PhysicsShape,setAvoidNavMeshEdgeWeight,void, (F32 value),,"")
-{
-	if (object->mVehicle)
-		object->mVehicle->mAvoidNavMeshEdgeWeight = value;//Warning, might want to sanity check.
-}
-
-DefineEngineMethod(PhysicsShape,setWanderWeight,void, (F32 value),,"")
-{
-	if (object->mVehicle)
-		object->mVehicle->mWanderWeight = value;//Warning, might want to sanity check.
-}
-
-DefineEngineMethod(PhysicsShape,setWanderChance,void, (F32 value),,"")
-{
-	if (object->mVehicle)
-		object->mVehicle->mWanderChance = value;//Warning, might want to sanity check.
-}
-
-DefineEngineMethod(PhysicsShape,setWallRange,void, (F32 value),,"")
-{
-	if (object->mVehicle)
-		object->mVehicle->mWallRange = value;//Warning, might want to sanity check.
-}
-
-
-
-
+//WAIT... Do all of these need to be client instead of server???
 DefineEngineMethod(PhysicsShape,assignVehicleNavPath,void, (),,"")
 {
 	if (object->mVehicle)
@@ -4271,7 +4173,6 @@ DefineEngineMethod(PhysicsShape,getVehicleVel,Point3F, (),,"")
 	return pos;
 }
 
-
 DefineEngineMethod(PhysicsShape,setOpenSteerMoveTarget,void, (Point3F pos),,"")
 {
 	if (object->mVehicle)
@@ -4281,6 +4182,131 @@ DefineEngineMethod(PhysicsShape,setOpenSteerMoveTarget,void, (Point3F pos),,"")
 	}
 	return;
 }
+
+DefineEngineMethod(PhysicsShape,getOpenSteerMass,F32, (),,"")
+{
+	if (object->mVehicle)
+		return object->mVehicle->mass();
+	else 
+		return 0.0;
+}
+
+DefineEngineMethod(PhysicsShape,setOpenSteerMass,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->setMass(value);
+}
+
+DefineEngineMethod(PhysicsShape,getOpenSteerRadius,F32, (),,"")
+{
+	if (object->mVehicle)
+		return object->mVehicle->radius();
+	else 
+		return 0.0;
+}
+
+DefineEngineMethod(PhysicsShape,setOpenSteerRadius,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->setRadius(value);
+}
+
+DefineEngineMethod(PhysicsShape,getOpenSteerMaxSpeed,F32, (),,"")
+{
+	if (object->mVehicle)
+		return object->mVehicle->maxSpeed();
+	else 
+		return 0.0;
+}
+
+DefineEngineMethod(PhysicsShape,setOpenSteerMaxSpeed,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+	{
+		//object->mVehicle->mMaxSpeed = dAtof(argv[2]);//Any reason at all to have these variables?
+		object->mVehicle->setMaxSpeed(value);//This is how you change the real value.
+		//Con::printf("setting opensteer max speed: %f",object->mVehicle->mMaxSpeed);
+	}
+}
+
+DefineEngineMethod(PhysicsShape,getOpenSteerMaxForce,F32, (),,"")
+{
+	if (object->mVehicle)
+		return object->mVehicle->maxForce();
+	else 
+		return 0.0;
+}
+
+DefineEngineMethod(PhysicsShape,setOpenSteerMaxForce,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->setMaxForce(value);
+}
+
+
+
+/*
+
+	float mSeekTargetWeight;
+	float mAvoidTargetWeight;
+	float mSeekNeighborWeight;
+	float mAvoidNeighborWeight;
+	float mAvoidNavMeshEdgeWeight;
+	float mWanderWeight;
+
+	float mWanderChance;
+	float mWallRange;
+	*/
+
+DefineEngineMethod(PhysicsShape,setWanderChance,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mWanderChance = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setWanderWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mWanderWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setSeekTargetWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mSeekTargetWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setAvoidTargetWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mAvoidTargetWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setSeekNeighborWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mSeekNeighborWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setAvoidNeighborWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mAvoidNeighborWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setAvoidNavMeshEdgeWeight,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mAvoidNavMeshEdgeWeight = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setDetectNavMeshEdgeRange,void, (F32 value),,"")
+{
+	if (object->mVehicle)
+		object->mVehicle->mDetectNavMeshEdgeRange = value;//Warning, might want to sanity check.
+}
+
+
 
 /*
 
