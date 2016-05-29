@@ -175,15 +175,15 @@ void NavClient::update (const float currentTime, const float elapsedTime)
 	
 	//HERE: I believe this function, or one like it, is going to be the key to steering away from the edge of the navmesh.
 	//This logic should go into another steering function in determineCombinedSteering, parallel to steerForSeek etc 
-	if (mDetourNavPath)
-	{
-		Vec3 vec = position();
-		Point3F pos(-vec.x,vec.z,vec.y);
-		F32 wallDist = mDetourNavPath->findDistanceToWall(pos,mDetectNavMeshEdgeRange);
+	//if (mDetourNavPath)
+	//{
+	//	Vec3 vec = position();
+	//	Point3F pos(-vec.x,vec.z,vec.y);
+	//	F32 wallDist = mDetourNavPath->findDistanceToWall(pos,mDetectNavMeshEdgeRange);
 		//Con::printf("returned from wallDist: %f",wallDist);
-	} else {
-		Con::printf("mDetourNavPath is null!");
-	}
+	//} else {
+	//	Con::printf("mDetourNavPath is null!");
+	//}
 	//But, WAIT, the BETTER WAY to do this would be to define a new friendly function for the NavPath interface, which 
 	//calls its own mQuery but doesn't involve us in any of the details of that here. We just want to give it a vector
 	//and get back a distance, and maybe a position and normal, here.
@@ -222,28 +222,33 @@ void NavClient::update (const float currentTime, const float elapsedTime)
 
 Vec3 NavClient::steerForNavMesh(F32 wallRange)
 {
-	Point3F pos(position().x,position().y,position().z);//Now, do we have to translate this back to T3D coordinates?
-	//NOTE: need to double check between opensteer, recast, and T3D to make sure right/left handed conversions are all solid.
-	
-	//F32 wallDist = mDetourNavPath->findDistanceToWall(pos,wallRange);
-	//if (wallDist<0.0)//No valid navmesh returns -1.0
-	//	return Vec3(0.0f,0.0f,0.0f);
+	Point3F pos(-position().x,position().z,position().y);//AHA: we have to translate this back to T3D coordinates from OpenSteer handedness.
+	//Con::printf("steering for navmesh, openSteer position %f %f %f",pos.x,pos.y,pos.z);
+
+	F32 wallDist = mDetourNavPath->findDistanceToWall(pos,wallRange);
+	if (wallDist==-1.0)//No valid navmesh returns -1.0
+		return Vec3(0.0f,0.0f,0.0f);
 
 	Point3F hitpos = mDetourNavPath->mHitPos;
 	Point3F hitnorm = mDetourNavPath->mHitNormal;
-	//if (id==11) 
-	//	Con::printf("steering for navmesh, id %d distToWall %f hitpos %f %f %f",id,wallDist,hitpos.x,hitpos.y,hitpos.z);
+	bool onMesh = mDetourNavPath->mOnMesh;
 
-	if (0)//(wallDist < wallRange) //if no wall found, findDistanceToWall returns the search radius you gave it.
+	if (wallDist < wallRange) //if no wall found, findDistanceToWall returns the search radius you gave it.
 	{
-		//Point3F diff = hitpos - pos;
-		Point3F diff = pos - hitpos;//This is from hitpos to my position, ie the other way from the wall
+		Point3F diff;
+		if (onMesh)
+			diff = pos - hitpos;
+		else //Now, if we're offmesh, then head TOWARD nearest edge instead of away.
+			diff = hitpos - pos;
 		//Here, subtract my position from hitpos, or opposite, and return it (vector away from hitpos). If necessary scale it up.
-		//Con::printf("agent is steering away from the navmesh wall: %f %f %f",diff.x,diff.y,diff.z);
+		//Con::printf("wallDist: %f  hitpos %f %f %f  pos %f %f %f diff %f %f %f",wallDist,
+		//	hitpos.x,hitpos.y,hitpos.z,pos.x,pos.y,pos.z,diff.x,diff.y,diff.z);
+		diff.z = 0.0;//Project it to XY plane.
+		float scale = (wallRange-diff.len())/wallRange;//Decrease the force the farther away from the wall you get.
 		diff.normalize();
-		diff *= (wallRange-diff.len())/wallRange;//There, scale it so the closer we are, the bigger the repulsion force.
-		diff *= 2.0;//Now that we have it going the right way, let's make it double the regular movement scale to make sure.
-		return Vec3(diff.x,diff.y,diff.z);
+		diff *= scale * mAvoidNavMeshEdgeWeight;
+		//Con::printf("wallDist: %f  scale %f vector: %f %f  ",wallDist,scale,diff.x,diff.y);
+		return Vec3(-diff.x,diff.z,diff.y);
 	} else {
 		return Vec3(0.0f,0.0f,0.0f);
 	}
@@ -278,7 +283,7 @@ Vec3 NavClient::determineCombinedSteering (const float elapsedTime)
 	//else
 	//{
 	// otherwise consider avoiding collisions with others
-	Vec3 neighborAvoid,navmeshEdgeAvoid,neighborSeek,targetSeek,wanderSeek;
+	Vec3 neighborAvoid,navMeshEdgeAvoid,neighborSeek,targetSeek,wanderSeek;
 	const float caLeadTime = 3;
 
 	// find all neighbors within maxRadius using proximity database
@@ -330,10 +335,8 @@ Vec3 NavClient::determineCombinedSteering (const float elapsedTime)
 			steeringForce += targetSeek;
 		}
 	}
-	//Con::printf("seeking target: %f %f %f",mMoveTarget.x,mMoveTarget.y,mMoveTarget.z);
-	//JUST TESTING... would like to experiment with other opensteer behaviors here.
+	//Hm, does targetAvoid exist? If so, is it being used?
 	
-
 	//neighborSeek = steerForCohesion(40.0,90.0,neighbors);
 	//if (neighborSeek != Vec3::zero)
 	//{
@@ -353,11 +356,11 @@ Vec3 NavClient::determineCombinedSteering (const float elapsedTime)
 	}
 
 
-	navmeshEdgeAvoid = steerForNavMesh(5.0);//wall range, ignore past this distance.
-	if (navmeshEdgeAvoid != Vec3::zero)
+	navMeshEdgeAvoid = steerForNavMesh(mDetectNavMeshEdgeRange);//wall range, ignore past this distance.
+	if (navMeshEdgeAvoid != Vec3::zero)
 	{
-		navmeshEdgeAvoid *= mAvoidNavMeshEdgeWeight;
-		steeringForce += navmeshEdgeAvoid;
+		navMeshEdgeAvoid *= mAvoidNavMeshEdgeWeight;
+		steeringForce += navMeshEdgeAvoid;
 	}
 	/*
 	if (id==1)
@@ -370,9 +373,12 @@ Vec3 NavClient::determineCombinedSteering (const float elapsedTime)
 	}*/
 
 	//if (id==11)
-	//	Con::printf("bot 11: collisionAvoid %f %f %f seekTarget %f %f %f avoidNavmesh %f %f %f",neighborAvoid.x,
-	//	neighborAvoid.y,neighborAvoid.z,targetSeek.x,targetSeek.y,targetSeek.z,navmeshEdgeAvoid.x,
-	//	navmeshEdgeAvoid.y,navmeshEdgeAvoid.z);
+	//	Con::printf("avoidNeighbor %f %f %f seekTarget %f %f %f  ",
+	//		neighborAvoid.x,neighborAvoid.y,neighborAvoid.z,
+	//		targetSeek.x,targetSeek.y,targetSeek.z);
+			//neighborSeek.x,neighborSeek.y,neighborSeek.z,
+			//navmeshEdgeAvoid.x,navmeshEdgeAvoid.y,navmeshEdgeAvoid.z);
+
 	//Con::printf("bot %d: vehicle position: %f %f %f  steeringForce: %f %f %f",id,position().x,position().y,position().z,
 	//			steeringForce.x,steeringForce.y,steeringForce.z);
 	//HERE: temporarily removing the path following too, for testing.

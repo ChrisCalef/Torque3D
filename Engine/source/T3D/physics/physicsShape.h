@@ -478,6 +478,11 @@ public:
 	//OpenSteer::Vec3 mNavPoints[MAX_NAV_NODES];//wasteful?  better way?//OBSOLETE? use navPaths?
 	NavClient *mVehicle;
 
+	F32 mWalkSpeed;
+	F32 mJogSpeed;
+	F32 mRunSpeed;
+	F32 mSprintSpeed;
+
 	void assignVehicleNavPath();
 	void assignLastVehicle();
 	void updateToVehicle();

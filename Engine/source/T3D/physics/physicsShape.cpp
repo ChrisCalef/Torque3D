@@ -462,7 +462,11 @@ PhysicsShape::PhysicsShape()
 		mNavMesh( NULL ),
 		mNavPath( NULL ),
 		mVehicle( NULL ),
-		mPedId( 0 )
+		mPedId( 0 ),
+		mWalkSpeed( 0.05 ),
+		mJogSpeed( 1.5 ),
+		mRunSpeed( 3.0 ),
+		mSprintSpeed( 4.0 )
 {
    mNetFlags.set( Ghostable | ScopeAlways );
    mTypeMask |= DynamicShapeObjectType;
@@ -2457,6 +2461,7 @@ void PhysicsShape::processTick( const Move *move )
 	if ((mBodyNodes.size()==0)||(mNodeBodies.size()==0))
 		return;//I think we're calling this before we've created the shape...
 
+
    // Note that unlike TSStatic, the serverside PhysicsShape does not
    // need to play the ambient animation because even if the animation were
    // to move collision shapes it would not affect the physx representation.
@@ -2479,7 +2484,8 @@ void PhysicsShape::processTick( const Move *move )
 		Point3F pedVelNorm = steerVel;
 		pedVelNorm.normalize();
 		F32 pedVelLen = steerVel.len();
-		//Con::printf("ped vel: %f  %f  %f  speed %f",gPedVel[0].x,gPedVel[0].y,gPedVel[0].z,pedVelLen);
+		//Con::printf("sceneShape %d  vector: %f  %f  %f   speed %f",
+		//		mSceneShapeID,steerVel.x,steerVel.y,steerVel.z,pedVelLen);
 		pedQuat.rotationArc(pedVelNorm,Point3F(0,1,0));
 		pedQuat.setMatrix(&pedMat);
 		setTransform(pedMat);
@@ -2493,21 +2499,69 @@ void PhysicsShape::processTick( const Move *move )
 		//translation should be all we need.
 		//const TSShape *kShape = getShape();
 
-		//FIX: Decide between "walk", "jog", and "run" based on pedVel.
-		//String moveSeq;
+		//FIX: DB-ize gait velocities (per PhysicsShape?) 
+		// Decide between "walk", "jog", and "run" based on pedVel.	
+		F32 walkThreshold = 0.02;
+		F32 runThreshold = 0.3;
+		if ((pedVelLen <= mWalkSpeed - walkThreshold)&&(mCurrentSeq!=mActionSeqs["ambient"]))
+		{
+			//Con::printf("setting current sequence to idle!  pedVel %f",pedVelLen);
+			setCurrentSeq(mActionSeqs["ambient"]);	//moveSeq = "walk";
+		}
+		else if ((pedVelLen > mWalkSpeed + walkThreshold)&&
+					(pedVelLen <= mRunSpeed - runThreshold)&&
+					(mCurrentSeq!=mActionSeqs["walk"]))
+		{
+			F32 threadPos = 0.0f;
+			if (mCurrentSeq==mActionSeqs["run"])
+				threadPos = mAmbientThread->getPos();
+
+			//Con::printf("setting current sequence walk! currentSeq %d pedVel %f server %d theadPos %f",
+			//	mCurrentSeq,pedVelLen,isServerObject(),threadPos);
+
+			setCurrentSeq(mActionSeqs["walk"]);	//moveSeq = "walk";
+
+			if (threadPos>0.0)
+				mAmbientThread->setPos(threadPos);
+
+		}
+		else if ((pedVelLen > mRunSpeed + runThreshold)&&(mCurrentSeq!=mActionSeqs["run"]))
+		{
+			//Con::printf("setting current sequence run!  currentSeq %d pedVel %f server %d",
+			//	mCurrentSeq,pedVelLen,isServerObject());
+			F32 threadPos = 0.0f;
+			if (mCurrentSeq==mActionSeqs["walk"])
+				threadPos = mAmbientThread->getPos();
+
+			setCurrentSeq(mActionSeqs["run"]);	//moveSeq = "run";
+						
+			if (threadPos>0.0)
+				mAmbientThread->setPos(threadPos);
+
+		}
+		//Con::printf("PedVelLen: %f",pedVelLen);
+		TSShape *kShape = mDataBlock->shape;
+		const TSShape::Sequence *kSeq = &(kShape->sequences[mCurrentSeq]);
+		//FIX: add shape scale to groundTranslations!!
+		
+		Point3F gfPos = kShape->groundTranslations[kSeq->firstGroundFrame + (kSeq->numGroundFrames-1)];
+		F32 groundSpeed = (gfPos.len() * mObjScale.z) / kSeq->duration ;//Scaling groundSpeed by object scale.
+		F32 speedRatio = pedVelLen / groundSpeed;
+		//F32 speedRatio = 1.0;
+		TSThread *th = mShapeInstance->getThread(0);
+		mShapeInstance->setTimeScale(th,speedRatio);
+
+	}
+
+	////// From EM  //////
+	//String moveSeq;
 		//if (mFlexBody->mMoveSequence.length()>0) 
 		//{
 		//	moveSeq = mFlexBody->mMoveSequence;
 		//} else {
 		//Con::printf("trying to pick an anim, pedVelLen %f server %d action walk %d action run %d",
 		//				pedVelLen,isServerObject(),mActionSeqs["walk"],mActionSeqs["run"]);
-		if ((pedVelLen < 2.0)&&(mCurrentSeq!=mActionSeqs["walk"]))
-			setCurrentSeq(mActionSeqs["walk"]);
-				//moveSeq = "walk";
-		else if (mCurrentSeq!=mActionSeqs["run"])
-			setCurrentSeq(mActionSeqs["run"]);
-				//moveSeq = "run";
-		//}
+			//}
 		//mFlexBody->mMoveSequence = moveSeq;
 		//Con::printf("move seq: %s, pedVel %f",moveSeq.c_str(),pedVelLen);
 		//setSeqCyclic(kShape->findSequence(moveSeq.c_str()),true);
@@ -2515,18 +2569,7 @@ void PhysicsShape::processTick( const Move *move )
 		//mFlexBody->playThread(0,moveSeq.c_str());
 		//mFlexBody->setThreadPos(0,gRandom.randF(0.0,1.0));//random staggering of anims.
 
-		//const TSShape::Sequence *kSeq = &(kShape->sequences[kShape->findSequence(moveSeq.c_str())]);
-		//FIX: add shape scale to groundTranslations!!
-		//Point3F gfPos = kShape->groundTranslations[kSeq->firstGroundFrame + (kSeq->numGroundFrames-1)];
-		//F32 groundSpeed = gfPos.len() / kSeq->duration ;//Or gfPos.y, should be more or less the same.
-		//F32 speedRatio = pedVelLen / groundSpeed;
-		F32 speedRatio = 1.0;
-		TSThread *th = mShapeInstance->getThread(0);
-		mShapeInstance->setTimeScale(th,speedRatio);
-	}
-
-
-
+	/////
 	//if (isServerObject())
 	//	Con::printf("Server physics shape ticking! datablock %s position %f %f %f",mDataBlock->getName(),pos.x,pos.y,pos.z);
 	//if (mCurrentTick==0)
@@ -3331,7 +3374,7 @@ Point3F PhysicsShape::getClientPosition()
 Point3F PhysicsShape::findGroundPosition(Point3F pos)
 {
 	RayInfo ri;
-	bool raySuccess = mWorld->castGroundRay(pos + Point3F(0,0,3),pos + Point3F(0,0,-1000),&ri);
+	bool raySuccess = mWorld->castGroundRay(pos + Point3F(0,0,30),pos + Point3F(0,0,-1000),&ri);
 
 	if (raySuccess)
 		return ri.point;
@@ -3861,6 +3904,83 @@ DefineEngineMethod( PhysicsShape, showSeqs, void, (),,
 	}
 }
 
+DefineEngineMethod( PhysicsShape, getNumSeqs, S32, (),,
+   "@brief.\n\n")
+{  
+	TSShape *kShape = object->mShapeInstance->getShape();
+	return kShape->sequences.size();
+}
+
+
+DefineEngineMethod( PhysicsShape, getSeqName, const char*, (S32 index),,
+   "@brief.\n\n")
+{  
+	TSShape *kShape = object->mShapeInstance->getShape();
+	TSShape::Sequence & seq = kShape->sequences[index];
+	return kShape->getName(seq.nameIndex).c_str();
+}
+
+DefineEngineMethod( PhysicsShape, getSeqNum, S32, (const char *name),,
+   "@brief.\n\n")
+{  
+	TSShape *kShape = object->mShapeInstance->getShape();
+	return kShape->findSequence(name);
+}
+
+
+DefineEngineMethod( PhysicsShape, getSeqFilename, const char*, (S32 index),,
+   "@brief.\n\n")
+{  
+	TSShape *kShape = object->mShapeInstance->getShape();
+	TSShape::Sequence & seq = kShape->sequences[index];
+
+	char filename[512];
+	String fromStr(seq.sourceData.from.c_str()); 
+	Vector<String> justFilename;//(throwing away the second half of the split)
+	fromStr.split("\t",justFilename);
+	dSprintf(filename,256,"%s",justFilename[0].c_str());
+
+	if (dStrlen(filename)>0)
+		return filename;
+}
+
+DefineEngineMethod( PhysicsShape, getSeqPath, const char*, (S32 index),,
+   "@brief.\n\n")
+{  
+	TSShape *kShape = object->mShapeInstance->getShape();
+	TSShape::Sequence & seq = kShape->sequences[index];
+
+	char filename[512];
+	String fromStr(seq.sourceData.from.c_str()); 
+	
+	dSprintf(filename,256,"%s",fromStr.c_str());
+
+	if (dStrlen(filename)>0)
+		return filename;
+}
+
+/*
+
+const char *fxFlexBody::getSeqFilename(const char *seqname)
+{
+	char filename[512];
+	TSShape *kShape = getShapeInstance()->getShape();
+	if (1) 
+	{
+		U32 index = kShape->findSequence(seqname);
+		if ((index>=0)&&(index<kShape->sequences.size()))  
+		{
+			TSShape::Sequence & seq = kShape->sequences[index];
+			String fromStr(seq.sourceData.from.c_str()); 
+			Vector<String> justFilename;//(throwing away the second half of the split)
+			fromStr.split("\t",justFilename);
+			dSprintf(filename,256,"%s",justFilename[0].c_str());//fromPath.getFullFileName());//kExtension.c_str());
+		}
+	}
+	if (dStrlen(filename)>0)
+		return filename;
+
+*/
 ////////////////////////////////////////////////////////////////
 
 
@@ -4036,7 +4156,8 @@ bool PhysicsShape::setNavPathTo(Point3F toPos)
 	{
 		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());//SINGLE PLAYER HACK
 		clientShape->mNavPath = mNavPath;
-		clientShape->mVehicle->mDetourNavPath = mNavPath;
+		if (clientShape->mVehicle)
+			clientShape->mVehicle->mDetourNavPath = mNavPath;
 	} //Con::printf("Navpath apparently successful! from %f %f %f, to %f %f %f, length %f  nodes %d",
 	//		mNavPath->mFrom.x,mNavPath->mFrom.y,mNavPath->mFrom.z,mNavPath->mTo.x,mNavPath->mTo.y,mNavPath->mTo.z,
 	//		mNavPath->getLength(),mNavPath->size());
@@ -4244,63 +4365,49 @@ DefineEngineMethod(PhysicsShape,setOpenSteerMaxForce,void, (F32 value),,"")
 }
 
 
-
-/*
-
-	float mSeekTargetWeight;
-	float mAvoidTargetWeight;
-	float mSeekNeighborWeight;
-	float mAvoidNeighborWeight;
-	float mAvoidNavMeshEdgeWeight;
-	float mWanderWeight;
-
-	float mWanderChance;
-	float mWallRange;
-	*/
-
-DefineEngineMethod(PhysicsShape,setWanderChance,void, (F32 value),,"")
+DefineEngineMethod(PhysicsShape,setOpenSteerWanderChance,void, (F32 value),,"")
 {
 	if (object->mVehicle)
 		object->mVehicle->mWanderChance = value;//Warning, might want to sanity check.
 }
 
-DefineEngineMethod(PhysicsShape,setWanderWeight,void, (F32 value),,"")
+DefineEngineMethod(PhysicsShape,setOpenSteerWanderWeight,void, (F32 value),,"")
 {
 	if (object->mVehicle)
 		object->mVehicle->mWanderWeight = value;//Warning, might want to sanity check.
 }
 
-DefineEngineMethod(PhysicsShape,setSeekTargetWeight,void, (F32 value),,"")
+DefineEngineMethod(PhysicsShape,setOpenSteerSeekTargetWeight,void, (F32 value),,"")
 {
 	if (object->mVehicle)
 		object->mVehicle->mSeekTargetWeight = value;//Warning, might want to sanity check.
 }
 
-DefineEngineMethod(PhysicsShape,setAvoidTargetWeight,void, (F32 value),,"")
+DefineEngineMethod(PhysicsShape,setOpenSteerAvoidTargetWeight,void, (F32 value),,"")
 {
 	if (object->mVehicle)
 		object->mVehicle->mAvoidTargetWeight = value;//Warning, might want to sanity check.
 }
 
-DefineEngineMethod(PhysicsShape,setSeekNeighborWeight,void, (F32 value),,"")
+DefineEngineMethod(PhysicsShape,setOpenSteerSeekNeighborWeight,void, (F32 value),,"")
 {
 	if (object->mVehicle)
 		object->mVehicle->mSeekNeighborWeight = value;//Warning, might want to sanity check.
 }
 
-DefineEngineMethod(PhysicsShape,setAvoidNeighborWeight,void, (F32 value),,"")
+DefineEngineMethod(PhysicsShape,setOpenSteerAvoidNeighborWeight,void, (F32 value),,"")
 {
 	if (object->mVehicle)
 		object->mVehicle->mAvoidNeighborWeight = value;//Warning, might want to sanity check.
 }
 
-DefineEngineMethod(PhysicsShape,setAvoidNavMeshEdgeWeight,void, (F32 value),,"")
+DefineEngineMethod(PhysicsShape,setOpenSteerAvoidNavMeshEdgeWeight,void, (F32 value),,"")
 {
 	if (object->mVehicle)
 		object->mVehicle->mAvoidNavMeshEdgeWeight = value;//Warning, might want to sanity check.
 }
 
-DefineEngineMethod(PhysicsShape,setDetectNavMeshEdgeRange,void, (F32 value),,"")
+DefineEngineMethod(PhysicsShape,setOpenSteerDetectNavMeshEdgeRange,void, (F32 value),,"")
 {
 	if (object->mVehicle)
 		object->mVehicle->mDetectNavMeshEdgeRange = value;//Warning, might want to sanity check.

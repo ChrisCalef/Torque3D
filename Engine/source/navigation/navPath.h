@@ -184,6 +184,7 @@ private:
 	  F32 findDistanceToWall(Point3F pos,F32 radius);
 	  Point3F mHitPos;
 	  Point3F mHitNormal;
+	  bool mOnMesh;
 };
 
 #endif
