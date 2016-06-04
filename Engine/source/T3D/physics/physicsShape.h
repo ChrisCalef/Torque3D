@@ -264,8 +264,9 @@ public: //protected:
    //F32 mBuildAngDrag;
    //F32 mBuildLinDrag;
 
-   /// The rendered shape.
    TSShapeInstance *mShapeInstance;
+   TSShape *mShape;
+
    Vector <bool> mNodeBodies;//Tracks which nodes have physics.
    /// The current physics state.
    PhysicsState mState;
@@ -414,6 +415,10 @@ public:
    bool setCurrentSeq(S32);
    bool loadSequence(const char *path);
 	
+	void setSequenceTimeScale(F32);
+	void setSequencePos(F32);
+	F32  getSequencePos();
+
    bool mUseDataSource;
    vehicleDataSource *mDataSource;
 	S32 mPropStatus;//Silly but need a variable to record our blade/propblur/propdisc status
@@ -423,7 +428,7 @@ public:
 	void updateBodyFromNode(S32 body);
 	void updateNodeFromBody(S32 body);
 
-	//openSimEarth: Aircraft-specific data, should probably move these out to a derived class.
+	/////openSimEarth: Aircraft-specific, should probably move these. ////////
 	F32 mRudderRange;
 	F32 mElevRange;
 	F32 mAilerRange;
@@ -461,7 +466,7 @@ public:
 	void showRotorBlur();
 	void showRotorDisc();
 	
-   /// NavMesh we pathfind on.
+   //////// NavMesh and NavPath //////////////
    //SimObjectPtr<NavMesh> mNavMesh;
 	NavMesh *mNavMesh;
 	NavPath *mNavPath;
@@ -473,7 +478,7 @@ public:
 	bool setNavMesh();
 	bool setNavPathTo(Point3F);
 
-	//////OpenSteer////////////
+	/////////// OpenSteer //////////////////////
 	S32 mPedId;
 	//OpenSteer::Vec3 mNavPoints[MAX_NAV_NODES];//wasteful?  better way?//OBSOLETE? use navPaths?
 	NavClient *mVehicle;
@@ -487,6 +492,16 @@ public:
 	void assignLastVehicle();
 	void updateToVehicle();
 	//////OpenSteer////////////
+
+	///// MegaMotion Keyframe Edits //////	
+	ultraframeSet mUFSet;
+
+	void addUltraframeSet(const char *name);
+	void addUltraframeSeries(S32 type,S32 node);
+	void addUltraframe(S32 frame,F32 x,F32 y,F32 z);
+
+	void applyUltraframeSet();
+
 
 //#endif // TORQUE_NAVIGATION_ENABLED
 };

@@ -727,7 +727,6 @@ bool PhysicsShape::onAdd()
       setProcessTick( false );
    }
 
-	
    return true;
 }
 
@@ -809,8 +808,8 @@ bool PhysicsShape::_createShape()
    }
 
    // Create the shape instance.   
-   TSShape *kShape = mDataBlock->shape;
-   mShapeInstance = new TSShapeInstance( mDataBlock->shape, isClientObject() );
+   mShape = mDataBlock->shape;
+   mShapeInstance = new TSShapeInstance( mShape, isClientObject() );
 
    if ( isClientObject() )
    {
@@ -977,9 +976,9 @@ bool PhysicsShape::_createShape()
 				PD->jointID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
 				j++;//We don't need to keep name.
 				sprintf(baseNode,resultSet->vRows[i]->vColumnValues[j++]);
-				PD->baseNode = kShape->findNode(baseNode);
+				PD->baseNode = mShape->findNode(baseNode);
 				sprintf(childNode,resultSet->vRows[i]->vColumnValues[j++]);
-				PD->childNode = kShape->findNode(childNode);
+				PD->childNode = mShape->findNode(childNode);
 				PD->shapeType = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
 				PD->dimensions.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.x;
 				PD->dimensions.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]) * mObjScale.y;
@@ -1128,7 +1127,7 @@ bool PhysicsShape::_createShape()
 					//Now, we need to find the parent physics body, which may involve skipping TSShape nodes in the hierarchy 
 					//if they don't have physics.
 					S32 parentNode,finalParentNode=-1;
-					parentNode = kShape->nodes[PD->baseNode].parentIndex;
+					parentNode = mShape->nodes[PD->baseNode].parentIndex;
 					int notForever=0;
 					PhysicsBody *parentBody;
 					while ((finalParentNode<0)&&(notForever<200))
@@ -1142,7 +1141,7 @@ bool PhysicsShape::_createShape()
 								mPhysicsBodies[mPhysicsBodies.size()-1]->setParentBodyIndex(k);
 							}
 						}
-						parentNode = kShape->nodes[parentNode].parentIndex;
+						parentNode = mShape->nodes[parentNode].parentIndex;
 						mPhysicsBodies[mPhysicsBodies.size()-1]->setParentNodeIndex(parentNode);//Set parent node for body we just created.
 						notForever++;//(Just to make sure we don't get bodypart order mixed up and wind up in forever loop.)
 					}
@@ -1167,12 +1166,12 @@ bool PhysicsShape::_createShape()
 		   
 	   kSQL->ClearResultSet(result);
 	   
-	   for (U32 i=0;i<kShape->nodes.size();i++)
+	   for (U32 i=0;i<mShape->nodes.size();i++)
 	   {
 		   mNodeBodies.increment();
 		   mNodeBodies.last() = false;
 	   }
-	   for (U32 i=0;i<kShape->nodes.size();i++)
+	   for (U32 i=0;i<mShape->nodes.size();i++)
 	   {
 		   for (U32 j=0;j<mBodyNodes.size();j++)
 		   {
@@ -1404,7 +1403,6 @@ bool PhysicsShape::_createShape()
 	   if (resultSet->iNumRows<=0)
 		   goto EXIT; 	
 
-	   TSShape *kShape = mShapeInstance->getShape();
 		TSStatic *mountObj;
 
 	   for (U32 i=0;i<resultSet->iNumRows;i++)
@@ -1539,7 +1537,7 @@ void PhysicsShape::_setCurrent()
       // Create thread if we dont already have.
       if ( mAmbientThread == NULL )
          mAmbientThread = mShapeInstance->addThread();
-    
+
       // Play the sequence.
       mShapeInstance->setSequence( mAmbientThread, mCurrentSeq, 0);
       setProcessTick(true);
@@ -1835,8 +1833,7 @@ void PhysicsShape::makeSequence(const char *seqName)
 	
 	U32 importGround = 0;
 	S32 numRealKeyframes;
-   TSShape *kShape = mDataBlock->shape;
-	//Con::errorf("sequences: %d, rotations: %d, translations %d",kShape->sequences.size(),kShape->nodeRotations.size(),kShape->nodeTranslations.size());
+	//Con::errorf("sequences: %d, rotations: %d, translations %d",mShape->sequences.size(),mShape->nodeRotations.size(),mShape->nodeTranslations.size());
 
 	//NOW: make the conversion to global position happen 
 	bool kRelativePosition = true;    //ONLY at export time.
@@ -1873,8 +1870,8 @@ void PhysicsShape::makeSequence(const char *seqName)
 	sequenceName.replace(' ','_');
 
 	//Now, make the new sequence.
-	kShape->sequences.increment();
-	TSShape::Sequence & seq = kShape->sequences.last();
+	mShape->sequences.increment();
+	TSShape::Sequence & seq = mShape->sequences.last();
 	constructInPlace(&seq);
 	S32 numKeys;
 	if (mPhysicsBodies.size()>0) 
@@ -1888,16 +1885,16 @@ void PhysicsShape::makeSequence(const char *seqName)
 		seq.numKeyframes = numKeys + 10;//nodeTranslations.size() + 10;
 
 	seq.duration = (F32)seq.numKeyframes * (TickSec*mRecordSampleRate);
-	seq.baseRotation = kShape->nodeRotations.size();
-	seq.baseTranslation = kShape->nodeTranslations.size();
+	seq.baseRotation = mShape->nodeRotations.size();
+	seq.baseTranslation = mShape->nodeTranslations.size();
 	seq.baseScale = 0;
 	seq.baseObjectState = 1;
 	seq.baseDecalState = 0;
-	seq.firstGroundFrame = kShape->groundTranslations.size();
+	seq.firstGroundFrame = mShape->groundTranslations.size();
 	//if (importGround) seq.numGroundFrames = numSamples;
 	//else seq.numGroundFrames = 0;//1;?
 	seq.numGroundFrames = 0;//TEMP, groundRotations.size();
-	seq.firstTrigger = kShape->triggers.size();
+	seq.firstTrigger = mShape->triggers.size();
 	seq.numTriggers = 0;
 	seq.toolBegin = 0.0;
 	seq.flags = 0;//TSShape::Cyclic;// | TSShape::Blend;// | TSShape::MakePath;
@@ -1933,24 +1930,24 @@ void PhysicsShape::makeSequence(const char *seqName)
 	//seq.decalMatters.clearAll();
 	//seq.iflMatters.clearAll();
 
-	kShape->names.increment();
-	kShape->names.last() = StringTable->insert(seqName);
+	mShape->names.increment();
+	mShape->names.last() = StringTable->insert(seqName);
 
-	seq.nameIndex = kShape->findName(seqName);
+	seq.nameIndex = mShape->findName(seqName);
 
 	//if ((!kRelativePosition)&&(!importGround))
 	//{
 		//for (U32 i=0;i<10;i++)
 		//{
-		//	kShape->nodeTranslations.increment();
+		//	mShape->nodeTranslations.increment();
 		//	//nodeTranslations[0].z = 0.0;//For iClone specifically - vertical axis has to be zero, iClone keeps 
 		//	//it on ground as long as there is no Z (actually Y in bvh/iClone world) value.
 		//	Point3F pos;
 		//	pos.x = nodeTranslations[0].x * ((F32)i/10.0);
 		//	pos.y = nodeTranslations[0].y * ((F32)i/10.0);
 		//	pos.z = nodeTranslations[0].z;
-		//	//kShape->nodeTranslations[kShape->nodeTranslations.size()-1] = nodeTranslations[0] * ((F32)i/10.0);
-		//	kShape->nodeTranslations[kShape->nodeTranslations.size()-1] = pos;
+		//	//mShape->nodeTranslations[mShape->nodeTranslations.size()-1] = nodeTranslations[0] * ((F32)i/10.0);
+		//	mShape->nodeTranslations[mShape->nodeTranslations.size()-1] = pos;
 		//}
 	//	numRealKeyframes = seq.numKeyframes - 10;
 	//} else numRealKeyframes = seq.numKeyframes;
@@ -1962,23 +1959,23 @@ void PhysicsShape::makeSequence(const char *seqName)
 		{
 			if (importGround)
 			{
-				kShape->nodeTranslations.increment();
-				kShape->nodeTranslations[kShape->nodeTranslations.size()-1].x = 0.0;
-				kShape->nodeTranslations[kShape->nodeTranslations.size()-1].y = 0.0;
-				kShape->nodeTranslations[kShape->nodeTranslations.size()-1].z = mNodeTranslations[i].z;
+				mShape->nodeTranslations.increment();
+				mShape->nodeTranslations[mShape->nodeTranslations.size()-1].x = 0.0;
+				mShape->nodeTranslations[mShape->nodeTranslations.size()-1].y = 0.0;
+				mShape->nodeTranslations[mShape->nodeTranslations.size()-1].z = mNodeTranslations[i].z;
 
-				kShape->groundRotations.increment();
-				kShape->groundRotations[kShape->groundRotations.size()-1].identity();
+				mShape->groundRotations.increment();
+				mShape->groundRotations[mShape->groundRotations.size()-1].identity();
 
-				kShape->groundTranslations.increment();
-				kShape->groundTranslations[kShape->groundTranslations.size()-1].x = mNodeTranslations[i].x;
-				kShape->groundTranslations[kShape->groundTranslations.size()-1].y = mNodeTranslations[i].y;
-				kShape->groundTranslations[kShape->groundTranslations.size()-1].z = 0.0;
+				mShape->groundTranslations.increment();
+				mShape->groundTranslations[mShape->groundTranslations.size()-1].x = mNodeTranslations[i].x;
+				mShape->groundTranslations[mShape->groundTranslations.size()-1].y = mNodeTranslations[i].y;
+				mShape->groundTranslations[mShape->groundTranslations.size()-1].z = 0.0;
 			} else {
 				
 				
-				kShape->nodeTranslations.increment();
-				kShape->nodeTranslations[kShape->nodeTranslations.size()-1] = mNodeTranslations[i];
+				mShape->nodeTranslations.increment();
+				mShape->nodeTranslations[mShape->nodeTranslations.size()-1] = mNodeTranslations[i];
 			
 				//nodeTranslations[i].z = 0.0;//iClone, see above. [Nope - didn't work either.]
 				//Con::errorf("nodeTranslations: %f %f %f",nodeTranslations[i].x,nodeTranslations[i].y,nodeTranslations[i].z);
@@ -1990,9 +1987,9 @@ void PhysicsShape::makeSequence(const char *seqName)
 			for (U32 i=0;i<numRealKeyframes;i++)
 			{
 				//TEMP
-				kShape->nodeTranslations.increment();
+				mShape->nodeTranslations.increment();
 				Point3F pos = mNodeTranslations[(i*mPhysicsBodies.size())+j];
-				kShape->nodeTranslations[kShape->nodeTranslations.size()-1] = pos;
+				mShape->nodeTranslations[mShape->nodeTranslations.size()-1] = pos;
 			}
 		}
 	}
@@ -2010,8 +2007,8 @@ void PhysicsShape::makeSequence(const char *seqName)
 		{
 			for (U32 i=0;i<10;i++)
 			{
-				kShape->nodeRotations.increment();
-				kShape->nodeRotations[kShape->nodeRotations.size()-1] = mNodeRotations[j];//Should duplicate 
+				mShape->nodeRotations.increment();
+				mShape->nodeRotations[mShape->nodeRotations.size()-1] = mNodeRotations[j];//Should duplicate 
 			}                                                             //first frame rotations ten times.
 		}
 		for (U32 i=0;i<numRealKeyframes;i++)
@@ -2020,12 +2017,12 @@ void PhysicsShape::makeSequence(const char *seqName)
 			//q16.set(nodeRotations[(i*mNumBodyParts)+j]);
 
 			//TEMP
-			kShape->nodeRotations.increment();
-			kShape->nodeRotations[kShape->nodeRotations.size()-1] = mNodeRotations[(i*bones)+j];
+			mShape->nodeRotations.increment();
+			mShape->nodeRotations[mShape->nodeRotations.size()-1] = mNodeRotations[(i*bones)+j];
 			
 			QuatF qF = mNodeRotations[(i*bones)+j].getQuatF();
 			//Con::printf("  final nodeRots, bodypart %d:  %f %f %f %f",j,qF.x,qF.y,qF.z,qF.w);
-			//kShape->nodeRotations[kShape->nodeRotations.size()-1] = nodeRotations[(i*mNumBodyParts)+j];
+			//mShape->nodeRotations[mShape->nodeRotations.size()-1] = nodeRotations[(i*mNumBodyParts)+j];
 		}
 	}
 
@@ -2033,22 +2030,22 @@ void PhysicsShape::makeSequence(const char *seqName)
 	mNodeRotations.clear();
 	mRecordCount = 0;
 
-	//Con::printf("BVH -- nodes %d nodeTranslations %d nodeRotations %d sequences: %d",kShape->nodes.size(),
-	//	kShape->nodeTranslations.size(),kShape->nodeRotations.size(),kShape->sequences.size());
-	//for (U32 i=0;i<kShape->sequences.size();i++)
+	//Con::printf("BVH -- nodes %d nodeTranslations %d nodeRotations %d sequences: %d",mShape->nodes.size(),
+	//	mShape->nodeTranslations.size(),mShape->nodeRotations.size(),mShape->sequences.size());
+	//for (U32 i=0;i<mShape->sequences.size();i++)
 	//{
-	//	TSShape::Sequence & seq = kShape->sequences[i];
+	//	TSShape::Sequence & seq = mShape->sequences[i];
 
 	//	Con::printf("Seq[%d] %s frames: %d duration %3.2f baseObjectState %d baseScale %d baseDecalState %d toolbegin %f",
-	//		i,kShape->getName(seq.nameIndex).c_str(),seq.numKeyframes,
-	//		seq.duration,kShape->sequences[i].baseObjectState,kShape->sequences[i].baseScale,
-	//		kShape->sequences[i].baseDecalState,seq.toolBegin);
+	//		i,mShape->getName(seq.nameIndex).c_str(),seq.numKeyframes,
+	//		seq.duration,mShape->sequences[i].baseObjectState,mShape->sequences[i].baseScale,
+	//		mShape->sequences[i].baseDecalState,seq.toolBegin);
 	//	Con::printf("   groundFrames %d isBlend %d isCyclic %d flags %d",
 	//		seq.numGroundFrames,seq.isBlend(),seq.isCyclic(),seq.flags);
 	//}
 
 	//HA!  Yay, finally T3D has its own exportSequence (singular) function, don't 
-	//kShape->dropAllButOneSeq(kShape->sequences.size()-1); // have to do this anymore.
+	//mShape->dropAllButOneSeq(mShape->sequences.size()-1); // have to do this anymore.
 
 
 	//HERE: It's working, but we do need to find the directory the model lives in first.
@@ -2059,8 +2056,8 @@ void PhysicsShape::makeSequence(const char *seqName)
 	if ((outstream = FileStream::createAndOpen( dsqPath.c_str(), Torque::FS::File::Write))==NULL) {
 		Con::printf("whoops, name no good: %s!",dsqPath.c_str()); 
 	} else {
-		//kShape->exportSequences((Stream *)outstream);
-		kShape->exportSequence((Stream *)outstream,seq,1);//1 = save in old format (v24) for show tool
+		//mShape->exportSequences((Stream *)outstream);
+		mShape->exportSequence((Stream *)outstream,seq,1);//1 = save in old format (v24) for show tool
 		outstream->close();
 		Con::printf("Exported sequence to file: %s",dsqPath.c_str());
 		//HERE, maybe choose this moment to insert this sequence into the database.  Still need to strip
@@ -2497,7 +2494,6 @@ void PhysicsShape::processTick( const Move *move )
 		//ground animate distance is the key point.  If we always start our ground animation 
 		//locally at (0,0,0), which we should, then the length of the last ground frame 
 		//translation should be all we need.
-		//const TSShape *kShape = getShape();
 
 		//FIX: DB-ize gait velocities (per PhysicsShape?) 
 		// Decide between "walk", "jog", and "run" based on pedVel.	
@@ -2540,11 +2536,10 @@ void PhysicsShape::processTick( const Move *move )
 
 		}
 		//Con::printf("PedVelLen: %f",pedVelLen);
-		TSShape *kShape = mDataBlock->shape;
-		const TSShape::Sequence *kSeq = &(kShape->sequences[mCurrentSeq]);
+		const TSShape::Sequence *kSeq = &(mShape->sequences[mCurrentSeq]);
 		//FIX: add shape scale to groundTranslations!!
 		
-		Point3F gfPos = kShape->groundTranslations[kSeq->firstGroundFrame + (kSeq->numGroundFrames-1)];
+		Point3F gfPos = mShape->groundTranslations[kSeq->firstGroundFrame + (kSeq->numGroundFrames-1)];
 		F32 groundSpeed = (gfPos.len() * mObjScale.z) / kSeq->duration ;//Scaling groundSpeed by object scale.
 		F32 speedRatio = pedVelLen / groundSpeed;
 		//F32 speedRatio = 1.0;
@@ -2564,7 +2559,7 @@ void PhysicsShape::processTick( const Move *move )
 			//}
 		//mFlexBody->mMoveSequence = moveSeq;
 		//Con::printf("move seq: %s, pedVel %f",moveSeq.c_str(),pedVelLen);
-		//setSeqCyclic(kShape->findSequence(moveSeq.c_str()),true);
+		//setSeqCyclic(mShape->findSequence(moveSeq.c_str()),true);
 		//mIsGroundAnimating = false;
 		//mFlexBody->playThread(0,moveSeq.c_str());
 		//mFlexBody->setThreadPos(0,gRandom.randF(0.0,1.0));//random staggering of anims.
@@ -2598,7 +2593,6 @@ void PhysicsShape::processTick( const Move *move )
 	//}
 
    mCurrentTick++;
-   TSShape *kShape = mShapeInstance->getShape();
 
    //Now, this also only makes sense on the client, for articulated shapes at least...
    if (mIsRecording)
@@ -2609,12 +2603,12 @@ void PhysicsShape::processTick( const Move *move )
    //GroundMove: really belongs in the ts directory, or somewhere else, not related to physics, but testing it here.
    if ( (mIsGroundMoving) && (mCurrentSeq>=0) && !isServerObject() && (!mIsDynamic) && (!mUseDataSource))
    {
-	   TSSequence currSeq = kShape->sequences[mCurrentSeq];
+	   TSSequence currSeq = mShape->sequences[mCurrentSeq];
 	   //Rots: maybe later, maybe not even necessary this time around.
-	   //Quat16 groundRot = kShape->groundRotations[ambSeq.firstGroundFrame+(S32)(mAmbientThread->getPos()*(F32)(ambSeq.numGroundFrames))];
+	   //Quat16 groundRot = mShape->groundRotations[ambSeq.firstGroundFrame+(S32)(mAmbientThread->getPos()*(F32)(ambSeq.numGroundFrames))];
 	   //QuatF groundQuat;
 	   //groundRot.getQuatF(&groundQuat);
-	   Point3F groundTrans = kShape->groundTranslations[currSeq.firstGroundFrame+(S32)(mAmbientThread->getPos()*(F32)(currSeq.numGroundFrames))];
+	   Point3F groundTrans = mShape->groundTranslations[currSeq.firstGroundFrame+(S32)(mAmbientThread->getPos()*(F32)(currSeq.numGroundFrames))];
 	   Point3F mulGroundTrans;
 	   mStartMat.mulP(groundTrans,&mulGroundTrans);
 	   MatrixF m1 = getTransform();
@@ -2660,14 +2654,14 @@ void PhysicsShape::processTick( const Move *move )
 	Point3F defTrans,newPos;
 	MatrixF m1,m2;
 	m1.identity();
-	for (U32 i=0;i<kShape->nodes.size();i++)
+	for (U32 i=0;i<mShape->nodes.size();i++)
 	{
 		if (!mNodeBodies[i])
 		{				  
-			S32 parentIndex = kShape->nodes[i].parentIndex;
+			S32 parentIndex = mShape->nodes[i].parentIndex;
 			if (parentIndex>=0)
 			{
-				defTrans = kShape->defaultTranslations[i];
+				defTrans = mShape->defaultTranslations[i];
 				m2 = mShapeInstance->mNodeTransforms[parentIndex];
 				m2.mulP(defTrans,&newPos);//There, that sets up our position, but now we need to grab our orientation
 				m1 = m2;                       //directly from the parent node.
@@ -2780,12 +2774,11 @@ void PhysicsShape::updateBodyFromNode(S32 i)
 	if (mBodyNodes.size()==0)
 		return;
 
-   TSShape *kShape = mShapeInstance->getShape();
 	MatrixF m1,m2;
 	if (i==0) //Here: we need to store our initial world position for purposes of recording sequences, 
 	{  // and possibly other reasons.
 		Point3F defTrans,mulDefTrans;
-		defTrans = kShape->defaultTranslations[0];
+		defTrans = mShape->defaultTranslations[0];
 		mStartMat = getTransform();		
 		mStartMat.setPosition(Point3F(0,0,0));
 		mStartMat.mulP(defTrans,&mulDefTrans);
@@ -2794,9 +2787,9 @@ void PhysicsShape::updateBodyFromNode(S32 i)
 	}  // Ah, except below, we are adding this again. Just remember that it is not the hip node, later, it is the ground position.
 
 	Point3F defTrans,rotPos,newPos;
-	defTrans = kShape->defaultTranslations[mBodyNodes[i]];
+	defTrans = mShape->defaultTranslations[mBodyNodes[i]];
 	defTrans *= mObjScale;
-	S32 parentInd = kShape->nodes[mBodyNodes[i]].parentIndex;
+	S32 parentInd = mShape->nodes[mBodyNodes[i]].parentIndex;
 	if (parentInd>=0)
 		m2 = mShapeInstance->mNodeTransforms[parentInd];
 	else
@@ -2808,7 +2801,7 @@ void PhysicsShape::updateBodyFromNode(S32 i)
 	m2.setPosition(nodePos);
 	m2.mulP(defTrans,&rotPos);
 	mStartMat.mulP(rotPos,&newPos);
-	//newPos += ( mStartPos - kShape->defaultTranslations[0] );
+	//newPos += ( mStartPos - mShape->defaultTranslations[0] );
 	newPos += ( mStartPos );
 	//newPos +=  mStartPos;
 
@@ -2843,7 +2836,6 @@ void PhysicsShape::updateNodeFromBody(S32 i)
 	Point3F defTrans,newPos,globalPos,mulPos;
 	MatrixF m1,m2;
 
-   TSShape *kShape = mShapeInstance->getShape();
 	MatrixF shapeTransform = getTransform();
 	Point3F shapePos = shapeTransform.getPosition();
 	shapeTransform.setPosition(Point3F(0,0,0));
@@ -2857,7 +2849,7 @@ void PhysicsShape::updateNodeFromBody(S32 i)
 	{
 		//Point3F mulDefTrans;
 		////mStartMat = m1;//Wait, why? I thought mStartMat was our stored initial orientation...?
-		//defTrans = kShape->defaultTranslations[0];
+		//defTrans = mShape->defaultTranslations[0];
 		//newPos =  globalPos - mStartPos;
 		//invShapeTransform.mulP(newPos,&mulPos);
 		//invShapeTransform.mulP(defTrans,&mulDefTrans);
@@ -2869,8 +2861,8 @@ void PhysicsShape::updateNodeFromBody(S32 i)
 
 	} else { //all other nodes, position is relative to parent
 
-		defTrans = kShape->defaultTranslations[mBodyNodes[i]];
-		m2 = mShapeInstance->mNodeTransforms[kShape->nodes[mBodyNodes[i]].parentIndex];
+		defTrans = mShape->defaultTranslations[mBodyNodes[i]];
+		m2 = mShapeInstance->mNodeTransforms[mShape->nodes[mBodyNodes[i]].parentIndex];
 		m2.mulP(defTrans,&newPos);
 		m1 = invShapeTransform * m1;
 		m1.setPosition(newPos);
@@ -3435,9 +3427,7 @@ bool PhysicsShape::loadSequence(const char *dsqPath)
 	
 	Con::printf("shape adding sequence, myPath %s, myFileName %s fullPath %s",myPath.c_str(),myFileName.c_str(),myFullPath.c_str());
 
-	TSShape *kShape = mShapeInstance->getShape();
-
-	//S32 seqindex = kShape->findSequence(seq_name);
+	//S32 seqindex = mShape->findSequence(seq_name);
 	//if (seqindex>=0)
 	//{
 	//	Con::errorf("trying to load a sequence that is already loaded: %s",seq_name);
@@ -3451,7 +3441,7 @@ bool PhysicsShape::loadSequence(const char *dsqPath)
 		Con::errorf("Missing sequence %s",dsqPath);
 		return false;
 	}
-	if (!kShape->importSequences(&fileStream,myPath) || fileStream.getStatus()!= Stream::Ok)
+	if (!mShape->importSequences(&fileStream,myPath) || fileStream.getStatus()!= Stream::Ok)
 	{
 		fileStream.close();
 		Con::errorf("Load sequence %s failed",dsqPath);
@@ -3462,6 +3452,115 @@ bool PhysicsShape::loadSequence(const char *dsqPath)
 	
 }
 
+void PhysicsShape::setSequenceTimeScale(F32 timescale)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientObj = (PhysicsShape*)getClientObject();
+		clientObj->setSequenceTimeScale(timescale);
+	}
+
+	if (mAmbientThread)
+	{
+		mShapeInstance->setTimeScale(mAmbientThread,timescale);
+	}
+}
+
+void PhysicsShape::setSequencePos(F32 pos)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientObj = (PhysicsShape*)getClientObject();
+		clientObj->setSequencePos(pos);
+	}
+
+	if (mAmbientThread)
+	{
+		mShapeInstance->setPos(mAmbientThread,pos);
+	}
+}
+
+F32 PhysicsShape::getSequencePos()
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientObj = (PhysicsShape*)getClientObject();
+		return clientObj->getSequencePos();
+	}
+
+	if (mAmbientThread)
+	{
+		return mShapeInstance->getPos(mAmbientThread);
+	}
+}
+
+
+//////////////////////////////////////////////////////////////
+//ultraframe types: 0=ADJUST_NODE_POS, 1=SET_NODE_POS, 2=ADJUST_NODE_ROT, 3=SET_NODE_ROT
+
+void PhysicsShape::addUltraframeSet(const char *name)//path)
+{
+	//And, whoops! We have the file path, but findSequence only works with the short name.
+	//I don't think I want that. So, need to find the sequence via the path. Hmm.
+
+	//mUFSet.sequence = mShape->findSequenceByPath(path);
+	mUFSet.sequence = mShape->findSequence(name);
+	mUFSet.series.clear();
+}
+
+void PhysicsShape::addUltraframeSeries(S32 type,S32 node)
+{
+	ultraframeSeries ufs;
+	ufs.type = type;
+	ufs.node = node;
+	mUFSet.series.push_back(ufs);
+}
+
+void PhysicsShape::addUltraframe(S32 frame,F32 x,F32 y,F32 z)
+{
+	//Now, we are assuming that we are only doing this all at once, so all ultraframes are going to be
+	//added in order to the last series added.
+	ultraframe uf;
+	uf.frame = frame;
+	uf.value.x = x;
+	uf.value.y = y;
+	uf.value.z = z;
+	mUFSet.series.last().frames.push_back(uf);
+}
+
+void PhysicsShape::applyUltraframeSet()
+{
+	S32 seq;
+	ultraframeSet ufs;
+	mShape->applyUltraframeSet(&mUFSet);
+}
+
+//////////////////////////////////////////////////////////////
+
+DefineEngineMethod( PhysicsShape, addKeyframeSet, void, (const char *path),,"")
+{  
+	object->addUltraframeSet(path);
+}
+
+DefineEngineMethod( PhysicsShape, addKeyframeSeries, void, (S32 type,S32 node),,"")
+{  
+	object->addUltraframeSeries(type,node);
+}
+
+DefineEngineMethod( PhysicsShape, addKeyframe, void, (S32 frame,F32 x,F32 y,F32 z),,"")
+{  
+	object->addUltraframe(frame,x,y,z);
+}
+
+DefineEngineMethod( PhysicsShape, applyKeyframeSet, void, (),,"")
+{  
+	object->applyUltraframeSet();
+}
+
+
+
+////////////////////////////////////////////////////////////////////
+//Temp, aircraft experimentation section.
 
 void PhysicsShape::loadXml(const char *file)
 {
@@ -3517,6 +3616,7 @@ void PhysicsShape::showPropDisc()
 {
 
 }
+////////////////////////////////////////////////////////////////////
 
 //TEMP: we need to start deriving vehicle etc classes from PhysicsShape, it seems. AND, need to fix this so it doesn't 
 //assume mounted rotors, assume nodes on the model first, and mounted rotors as a special case.
@@ -3626,6 +3726,16 @@ void PhysicsShape::showRotorDisc()
 		}
 	}
 }
+
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+
 //////////////////////////////////////////////////////////////////////////////////////////
 DefineEngineMethod( PhysicsShape, loadSequence, void, (const char *path),,
    "@brief.\n\n")
@@ -3826,7 +3936,6 @@ DefineEngineMethod( PhysicsShape, actionSeq, void, (const char *name),,
 }
 
 ///////////////////////////////////////////////////////
-//Obsolete... 
 
 DefineEngineMethod( PhysicsShape, setAmbientSeq, bool, (S32 seq),,
    "@brief \n\n")
@@ -3885,12 +3994,19 @@ DefineEngineMethod( PhysicsShape, playSeq, void, (const char *name),,
 	object->setCurrentSeq(seqID);
 }
 
+DefineEngineMethod( PhysicsShape, playSeqByNum, void, (S32 index),,
+   "@brief.\n\n")
+{  
+	object->setDynamic(0);
+	object->setCurrentSeq(index);
+}
+
 DefineEngineMethod( PhysicsShape, showSeqs, void, (),,
    "@brief.\n\n")
 {	
-	TSShape *kShape = object->mShapeInstance->getShape();
-
-	Con::errorf("ground Rotations: %d, translations %d",kShape->groundRotations.size(),kShape->groundTranslations.size());
+	TSShape *kShape = object->mShape;
+	Con::errorf("ground Rotations: %d, translations %d",kShape->groundRotations.size(),
+						kShape->groundTranslations.size());
 	for (U32 i=0;i<kShape->sequences.size();i++)
 	{
 		TSShape::Sequence & seq = kShape->sequences[i];
@@ -3907,32 +4023,28 @@ DefineEngineMethod( PhysicsShape, showSeqs, void, (),,
 DefineEngineMethod( PhysicsShape, getNumSeqs, S32, (),,
    "@brief.\n\n")
 {  
-	TSShape *kShape = object->mShapeInstance->getShape();
-	return kShape->sequences.size();
+
+	return object->mShape->sequences.size();
 }
 
 
 DefineEngineMethod( PhysicsShape, getSeqName, const char*, (S32 index),,
    "@brief.\n\n")
 {  
-	TSShape *kShape = object->mShapeInstance->getShape();
-	TSShape::Sequence & seq = kShape->sequences[index];
-	return kShape->getName(seq.nameIndex).c_str();
+	TSShape::Sequence & seq = object->mShape->sequences[index];
+	return object->mShape->getName(seq.nameIndex).c_str();
 }
 
 DefineEngineMethod( PhysicsShape, getSeqNum, S32, (const char *name),,
    "@brief.\n\n")
 {  
-	TSShape *kShape = object->mShapeInstance->getShape();
-	return kShape->findSequence(name);
+	return object->mShape->findSequence(name);
 }
-
 
 DefineEngineMethod( PhysicsShape, getSeqFilename, const char*, (S32 index),,
    "@brief.\n\n")
 {  
-	TSShape *kShape = object->mShapeInstance->getShape();
-	TSShape::Sequence & seq = kShape->sequences[index];
+	TSShape::Sequence & seq = object->mShape->sequences[index];
 
 	char filename[512];
 	String fromStr(seq.sourceData.from.c_str()); 
@@ -3947,8 +4059,7 @@ DefineEngineMethod( PhysicsShape, getSeqFilename, const char*, (S32 index),,
 DefineEngineMethod( PhysicsShape, getSeqPath, const char*, (S32 index),,
    "@brief.\n\n")
 {  
-	TSShape *kShape = object->mShapeInstance->getShape();
-	TSShape::Sequence & seq = kShape->sequences[index];
+	TSShape::Sequence & seq = object->mShape->sequences[index];
 
 	char filename[512];
 	String fromStr(seq.sourceData.from.c_str()); 
@@ -3959,28 +4070,70 @@ DefineEngineMethod( PhysicsShape, getSeqPath, const char*, (S32 index),,
 		return filename;
 }
 
-/*
+DefineEngineMethod( PhysicsShape, getSeqFrames, S32, (S32 index),,
+   "@brief.\n\n")
+{  
+	TSShape::Sequence & seq = object->mShape->sequences[index];
 
-const char *fxFlexBody::getSeqFilename(const char *seqname)
+	return seq.numKeyframes;
+}
+
+
+DefineEngineMethod( PhysicsShape, pauseSeq, void, (),,
+   "@brief.\n\n")
+{ 
+	object->setSequenceTimeScale(0.0);
+}
+
+DefineEngineMethod( PhysicsShape, reverseSeq, void, (),,
+   "@brief.\n\n")
+{ 
+	object->setSequenceTimeScale(-1.0);
+	//object->setSequencePos();
+}
+
+DefineEngineMethod( PhysicsShape, forwardSeq, void, (),,
+   "@brief.\n\n")
+{ 
+	object->setSequenceTimeScale(1.0);
+}
+
+DefineEngineMethod( PhysicsShape, getSeqPos, F32, (),,
+   "@brief.\n\n")
+{ 
+	return object->getSequencePos();
+}
+
+DefineEngineMethod( PhysicsShape, setSeqPos, void, (F32 pos),,
+   "@brief.\n\n")
+{ 
+	object->setSequencePos(pos);
+}
+
+/*
+const char *PhysicsShape::getSeqFilename(const char *seqname)
 {
 	char filename[512];
-	TSShape *kShape = getShapeInstance()->getShape();
 	if (1) 
 	{
-		U32 index = kShape->findSequence(seqname);
-		if ((index>=0)&&(index<kShape->sequences.size()))  
+		U32 index = mShape->findSequence(seqname);
+		if ((index>=0)&&(index<mShape->sequences.size()))  
 		{
-			TSShape::Sequence & seq = kShape->sequences[index];
+			TSShape::Sequence & seq = mShape->sequences[index];
 			String fromStr(seq.sourceData.from.c_str()); 
 			Vector<String> justFilename;//(throwing away the second half of the split)
 			fromStr.split("\t",justFilename);
-			dSprintf(filename,256,"%s",justFilename[0].c_str());//fromPath.getFullFileName());//kExtension.c_str());
+			dSprintf(filename,256,"%s",justFilename[0].c_str());
 		}
 	}
 	if (dStrlen(filename)>0)
 		return filename;
-
 */
+
+
+
+
+
 ////////////////////////////////////////////////////////////////
 
 
@@ -4001,14 +4154,14 @@ DefineEngineMethod( PhysicsShape, getSceneID, S32, (),,
 DefineEngineMethod( PhysicsShape, showNodes, void, (),,
    "@brief prints all nodes\n\n")
 {  
-	TSShape *kShape = object->mShapeInstance->getShape();
 	QuatF q;
-	for (U32 i=0;i<kShape->nodes.size();i++)
+	for (U32 i=0;i<object->mShape->nodes.size();i++)
 	{
-		q = kShape->defaultRotations[i].getQuatF();
-		Con::printf("nodes[%d] %s parent %d  pos %f %f %f  rot %f %f %f %f len %f",i,kShape->getName(kShape->nodes[i].nameIndex).c_str(),kShape->nodes[i].parentIndex,kShape->defaultTranslations[i].x,
-			kShape->defaultTranslations[i].y,kShape->defaultTranslations[i].z,
-			q.x,q.y,q.z,q.w,kShape->defaultTranslations[i].len());
+		q = object->mShape->defaultRotations[i].getQuatF();
+		Con::printf("nodes[%d] %s parent %d  pos %f %f %f  rot %f %f %f %f len %f",i,
+			object->mShape->getName(object->mShape->nodes[i].nameIndex).c_str(),object->mShape->nodes[i].parentIndex,
+			object->mShape->defaultTranslations[i].x,object->mShape->defaultTranslations[i].y,
+			object->mShape->defaultTranslations[i].z,q.x,q.y,q.z,q.w,object->mShape->defaultTranslations[i].len());
 	}
 }
 
@@ -4022,11 +4175,10 @@ DefineEngineMethod( PhysicsShape, write, void,  (const char *filename),,
    "@brief \n\n")
 {
 	FileStream *outstream;
-	TSShape *kShape = object->mShapeInstance->getShape();
 	if ((outstream = FileStream::createAndOpen(filename, Torque::FS::File::Write))==NULL) {
 		Con::printf("whoops, name no good!"); 
 	} else {
-		kShape->write(outstream);
+		object->mShape->write(outstream);
 		outstream->close();
 	}	
 }

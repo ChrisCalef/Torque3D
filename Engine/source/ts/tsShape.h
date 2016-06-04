@@ -50,6 +50,35 @@ struct CollisionShapeInfo
    PhysicsCollision *colShape;
 };
 
+//// MegaMotion ////
+struct sequenceBackup
+{
+	S32 index;
+	Vector<Quat16>  nodeRotations;
+	Vector<Point3F> nodeTranslations;
+};
+
+struct ultraframe
+{
+	S32 frame;
+	Point3F value;
+};
+
+struct ultraframeSeries
+{
+	S32 type;
+	S32 node;
+	Vector<ultraframe> frames;
+};
+
+struct ultraframeSet
+{
+	S32 sequence;
+	Vector<ultraframeSeries> series;
+};
+//// End MegaMotion //////
+
+
 /// TSShape stores generic data for a 3space model.
 ///
 /// TSShape and TSShapeInstance act in conjunction to allow the rendering and
@@ -197,14 +226,6 @@ class TSShape
 	  void write(Stream *, bool writeNameIndex, int rotMatters);//openSimEarth
       
       /// @}
-   };
-
-   //openSimEarth
-   struct sequenceBackup
-   {
-	   String name;
-	   Vector<Quat16>  nodeRotations;
-	   Vector<Point3F> nodeTranslations;
    };
 
    /// Describes state of an individual object.  Includes everything in an object that can be
@@ -663,7 +684,7 @@ class TSShape
    String mShapePath;  
    const char* getPath() { return mShapePath.c_str(); }
 
-   Vector<sequenceBackup>  sequenceBackups;
+   Vector<sequenceBackup>  mSequenceBackups;
 
    void sequenceUp(U32 seq);
    void sequenceDown(U32 seq);
@@ -686,10 +707,14 @@ class TSShape
    void groundCaptureSeq(S32 seq);
    void unGroundCaptureSeq(S32 seq);
    void examineShape();
+	S32 findSequenceByPath(const char *path);
 
    //Another approach to the Collada import right-handed/left-handed problem.  We're
    //converting the node positions and mesh verts instead of just rotating the figure from 
    void fixUpAxis(S32 axis);//the base.  0=X,1=Y, Z is unnecessary, converting X- or Y- to Z-up.
+
+	//Now, time to move all of the Ecstasy Motion fxFlexBody keyframe editing functions to here.
+	void applyUltraframeSet(ultraframeSet *ufs);//Except I guess it all boils down to this.
 
    /// @}
 };

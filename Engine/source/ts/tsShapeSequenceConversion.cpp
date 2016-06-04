@@ -1379,3 +1379,160 @@ void TSShape::examineShape()
 		lastSubshape = ss;
 	}
 }
+
+//FAIL. 
+S32 TSShape::findSequenceByPath(const char *path)
+{
+	S32 index = -1;
+	Con::printf("looking for sequence path: %s",path);
+	for (U32 i=0;i<sequences.size();i++)
+	{
+		Con::printf("comparing against sequence source: %s",sequences[i].sourceData.from);
+		if (!strcmp(sequences[i].sourceData.from,path))
+			index = i;
+	}
+	return index;
+}
+
+//ultraframe types:
+#define ADJUST_NODE_POS 0
+#define SET_NODE_POS 1
+#define ADJUST_NODE_ROT 2
+#define SET_NODE_ROT 3
+
+void TSShape::applyUltraframeSet(ultraframeSet *ufs)
+{
+	//Tthe first thing we need to do is check to see whether we have a backup of this sequence. If so, that
+	//means we have already altered it, and therefore we need to restore it before we alter it again.
+	//If not, then we need to make one.
+	sequenceBackup seqBackup;
+	Sequence *kSeq = &(sequences[ufs->sequence]);
+	S32 rot_matters_count;
+	rot_matters_count = 0;
+	for (U32 i=0;i<nodes.size();i++) 
+		if (kSeq->rotationMatters.test(i)) 
+			rot_matters_count++;
+	
+	//First, either make a backup seq, if we don't have one, or reload it if we do, to start fresh.
+	S32 backupSeq = -1;
+	for (U32 i=0;i<mSequenceBackups.size();i++)
+	{
+		if (mSequenceBackups[i].index==ufs->sequence)
+			backupSeq = i;
+	}
+	if (backupSeq>=0)
+	{
+		//Make a restoreSequence() function? Or just do it here.
+		for (U32 j=0;j<kSeq->numKeyframes;j++)
+		{
+			nodeTranslations[kSeq->baseTranslation+j] = mSequenceBackups[backupSeq].nodeTranslations[j];
+		}
+		for (U32 j=0;j<rot_matters_count;j++)
+		{
+			for (U32 k=0;k<kSeq->numKeyframes;k++)
+			{
+				nodeRotations[kSeq->baseRotation+(j*kSeq->numKeyframes)+k] = mSequenceBackups[backupSeq].nodeRotations[(j*kSeq->numKeyframes)+k];
+			}
+		}
+	}
+	else 
+	{
+		//Make a backupSequence() function? Or just do it here.
+		seqBackup.index = ufs->sequence;
+		for (U32 j=0;j<kSeq->numKeyframes;j++)
+		{
+			seqBackup.nodeTranslations.increment();
+			seqBackup.nodeTranslations.last() = nodeTranslations[kSeq->baseTranslation+j];
+		}
+		for (U32 j=0;j<rot_matters_count;j++)
+		{
+			for (U32 k=0;k<kSeq->numKeyframes;k++)
+			{
+				seqBackup.nodeRotations.increment();
+				seqBackup.nodeRotations.last() = nodeRotations[kSeq->baseRotation+(j*kSeq->numKeyframes)+k];
+			}
+		}
+		mSequenceBackups.push_back(seqBackup);
+	}
+
+	//Now, we should be ready to apply a full set of changes to the (once again) virginal sequence data.
+	
+	for (U32 i=0;i<ufs->series.size();i++)
+	{
+		U32 type = ufs->series[i].type;
+		U32 node = ufs->series[i].node;
+		S32 mattersNode = getNodeMattersIndex(ufs->sequence,node);
+		Vector<ultraframe> ultraframes;
+		Con::printf("ultraframe series, type %d node %d",type,node);
+		for (U32 j=0;j<ufs->series[i].frames.size();j++)
+		{
+			ultraframes.push_back(ufs->series[i].frames[j]);
+
+			Con::printf("frame: %d  %f %f %f",ufs->series[i].frames[j].frame,
+				ufs->series[i].frames[j].value.x,ufs->series[i].frames[j].value.y,ufs->series[i].frames[j].value.z);
+		}
+		if (ultraframes.size()==1)
+		{
+			//we have only a single frame to change
+
+
+		}
+		else 
+		{
+			//we have more than one, so loop from the first to the second, and then the second to the third,
+			//and so on until we reach the end.
+			Point3F curVal,startVal,endVal;
+			curVal.zero(); startVal.zero(); endVal.zero();
+			S32 startFrame,endFrame;
+			Point3F newPos,basePos;
+			Quat16 newQuat,baseQuat;
+			startFrame = endFrame = 0;
+			ultraframe *sf,*ef;
+			for (U32 j=0;j<ufs->series[i].frames.size()-1;j++)
+			{
+				
+
+				sf = &(ufs->series[i].frames[j]);
+				ef = &(ufs->series[i].frames[j+1]);
+
+				startFrame = sf->frame;
+				startVal = sf->value;
+				endFrame = ef->frame;
+				endVal = ef->value;
+
+				for (U32 k=startFrame;k<=endFrame;k++)
+				{
+					curVal = startVal + ((endVal - startVal)*((F32)(k-startFrame)/(F32)(endFrame-startFrame)));
+					if ((type==ADJUST_NODE_POS) || (type==SET_NODE_POS))
+					{
+						basePos = seqBackup.nodeTranslations[k];
+						if (type==ADJUST_NODE_POS)
+							newPos = basePos + curVal;
+						else if (type==SET_NODE_POS)
+							newPos = curVal;
+						nodeTranslations[k+kSeq->baseTranslation] = newPos;
+					}
+					else if ((type==ADJUST_NODE_ROT) || (type==SET_NODE_ROT))
+					{
+						//Con::printf("ultraframe mod: frame %d  node %d  value %f %f %f",k,node,curVal.x,curVal.y,curVal.z);
+						curVal.x = mDegToRad(curVal.x);
+						curVal.y = mDegToRad(curVal.y);
+						curVal.z = mDegToRad(curVal.z);
+						QuatF q((EulerF)curVal);
+						if (type==SET_NODE_ROT)
+						{
+							newQuat.set(q);
+						} else if (type==ADJUST_NODE_ROT) {
+							QuatF temp;
+							baseQuat = seqBackup.nodeRotations[(mattersNode*kSeq->numKeyframes)+k];
+							baseQuat.getQuatF(&temp);
+							temp *= q;
+							newQuat.set(temp);
+						}
+						nodeRotations[kSeq->baseRotation+(mattersNode*kSeq->numKeyframes)+k] = newQuat;
+					}
+				}
+			}
+		}
+	}
+}
