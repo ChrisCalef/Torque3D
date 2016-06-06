@@ -955,8 +955,6 @@ S32 TSShape::getNumMattersNodes(S32 seqNum)
 
 S32 TSShape::getMattersNodeIndex(S32 seqNum,S32 nodeNum)
 {//nodenum in matters index, 0 - rotation_matters_count
-
-
 	S32 rot_matters_count = 0;
 	S32 node_index = -1;
 
@@ -980,7 +978,6 @@ S32 TSShape::getMattersNodeIndex(S32 seqNum,S32 nodeNum)
 
 S32 TSShape::getNodeMattersIndex(S32 seqNum,S32 nodeNum)
 {//nodenum in shape index, 0 - nodes.size
-
 	S32 rot_matters_count = 0;
 	S32 node_index = -1;
 	if (seqNum>=0)
@@ -1007,7 +1004,7 @@ void TSShape::addMattersNode(S32 seqNum,S32 nodeNum)
 	if (seqNum>=0)
 	{
 		Sequence & seq = sequences[seqNum];
-		Con::errorf("adding matters node %d to seq %d",nodeNum,seqNum);
+		//Con::errorf("adding matters node %d to seq %d",nodeNum,seqNum);
 		if ( (nodeNum>0) && (nodeNum<nodes.size()) && !seq.rotationMatters.test(nodeNum))
 		{
 			seq.rotationMatters.set(nodeNum);
@@ -1423,6 +1420,7 @@ void TSShape::applyUltraframeSet(ultraframeSet *ufs)
 	if (backupSeq>=0)
 	{
 		//Make a restoreSequence() function? Or just do it here.
+		seqBackup = mSequenceBackups[backupSeq];
 		for (U32 j=0;j<kSeq->numKeyframes;j++)
 		{
 			nodeTranslations[kSeq->baseTranslation+j] = mSequenceBackups[backupSeq].nodeTranslations[j];
@@ -1456,26 +1454,53 @@ void TSShape::applyUltraframeSet(ultraframeSet *ufs)
 	}
 
 	//Now, we should be ready to apply a full set of changes to the (once again) virginal sequence data.
-	
+	Point3F newPos,basePos;
+	Quat16 newQuat,baseQuat;
 	for (U32 i=0;i<ufs->series.size();i++)
 	{
 		U32 type = ufs->series[i].type;
 		U32 node = ufs->series[i].node;
 		S32 mattersNode = getNodeMattersIndex(ufs->sequence,node);
 		Vector<ultraframe> ultraframes;
-		Con::printf("ultraframe series, type %d node %d",type,node);
+		//Con::printf("ultraframe series, type %d node %d",type,node);
 		for (U32 j=0;j<ufs->series[i].frames.size();j++)
 		{
 			ultraframes.push_back(ufs->series[i].frames[j]);
-
-			Con::printf("frame: %d  %f %f %f",ufs->series[i].frames[j].frame,
-				ufs->series[i].frames[j].value.x,ufs->series[i].frames[j].value.y,ufs->series[i].frames[j].value.z);
+			//Con::printf("frame: %d  %f %f %f",ufs->series[i].frames[j].frame,
+			//	ufs->series[i].frames[j].value.x,ufs->series[i].frames[j].value.y,ufs->series[i].frames[j].value.z);
 		}
 		if (ultraframes.size()==1)
 		{
 			//we have only a single frame to change
+			S32 frame = ufs->series[i].frames[0].frame;
+			Point3F value = ufs->series[i].frames[0].value;
+			if ((type==ADJUST_NODE_POS) || (type==SET_NODE_POS))
+			{
+				basePos = seqBackup.nodeTranslations[frame];
+				if (type==ADJUST_NODE_POS)
+					newPos = basePos + value;
+				else if (type==SET_NODE_POS)
+					newPos = value;
+				nodeTranslations[frame+kSeq->baseTranslation] = newPos;
 
+			} else if ((type==ADJUST_NODE_ROT) || (type==SET_NODE_ROT)) {
 
+				value.x = mDegToRad(value.x);
+				value.y = mDegToRad(value.y);
+				value.z = mDegToRad(value.z);
+				QuatF q((EulerF)value);
+				if (type==ADJUST_NODE_ROT) 
+				{
+					QuatF temp;
+					baseQuat = seqBackup.nodeRotations[(mattersNode*kSeq->numKeyframes)+frame];
+					baseQuat.getQuatF(&temp);
+					temp *= q;
+					newQuat.set(temp);
+				} else if (type==SET_NODE_ROT) {
+					newQuat.set(q);
+				}
+				nodeRotations[kSeq->baseRotation+(mattersNode*kSeq->numKeyframes)+frame] = newQuat;
+			}
 		}
 		else 
 		{
@@ -1484,14 +1509,10 @@ void TSShape::applyUltraframeSet(ultraframeSet *ufs)
 			Point3F curVal,startVal,endVal;
 			curVal.zero(); startVal.zero(); endVal.zero();
 			S32 startFrame,endFrame;
-			Point3F newPos,basePos;
-			Quat16 newQuat,baseQuat;
 			startFrame = endFrame = 0;
 			ultraframe *sf,*ef;
 			for (U32 j=0;j<ufs->series[i].frames.size()-1;j++)
 			{
-				
-
 				sf = &(ufs->series[i].frames[j]);
 				ef = &(ufs->series[i].frames[j+1]);
 
@@ -1499,10 +1520,11 @@ void TSShape::applyUltraframeSet(ultraframeSet *ufs)
 				startVal = sf->value;
 				endFrame = ef->frame;
 				endVal = ef->value;
-
+				
 				for (U32 k=startFrame;k<=endFrame;k++)
 				{
 					curVal = startVal + ((endVal - startVal)*((F32)(k-startFrame)/(F32)(endFrame-startFrame)));
+					//Con::printf("curval %f %f %f nodeRots %d",curVal.x,curVal.y,curVal.z,seqBackup.nodeRotations.size());
 					if ((type==ADJUST_NODE_POS) || (type==SET_NODE_POS))
 					{
 						basePos = seqBackup.nodeTranslations[k];
@@ -1518,16 +1540,17 @@ void TSShape::applyUltraframeSet(ultraframeSet *ufs)
 						curVal.x = mDegToRad(curVal.x);
 						curVal.y = mDegToRad(curVal.y);
 						curVal.z = mDegToRad(curVal.z);
+						//Con::printf("type %d node %d radian value: %f %f %f",type,node,curVal.x,curVal.y,curVal.z);
 						QuatF q((EulerF)curVal);
-						if (type==SET_NODE_ROT)
+						if (type==ADJUST_NODE_ROT) 
 						{
-							newQuat.set(q);
-						} else if (type==ADJUST_NODE_ROT) {
 							QuatF temp;
 							baseQuat = seqBackup.nodeRotations[(mattersNode*kSeq->numKeyframes)+k];
 							baseQuat.getQuatF(&temp);
 							temp *= q;
 							newQuat.set(temp);
+						} else if (type==SET_NODE_ROT) {
+							newQuat.set(q);
 						}
 						nodeRotations[kSeq->baseRotation+(mattersNode*kSeq->numKeyframes)+k] = newQuat;
 					}
@@ -1535,4 +1558,444 @@ void TSShape::applyUltraframeSet(ultraframeSet *ufs)
 			}
 		}
 	}
+}
+
+/////////////////////////////////////////////////////////////////////////
+//HERE:  All of the following functions need to take groundframes into account.
+//If the sequence has groundframes==keyframes then assume it's ours, and apply
+//base node translations (X,Y, not Z) and rotations to the ground frame instead.
+
+void TSShape::adjustBaseNodePosRegion(U32 seq, Point3F &pos, F32 start, F32 stop)
+{
+	S32 startFrame,stopFrame;
+
+	//mBaseNodeAdjustPosTemp = pos;
+
+	TSShape::Sequence *kSeq = &(sequences[seq]);
+
+	startFrame = (S32)((F32)kSeq->numKeyframes * start);
+	stopFrame = (S32)((F32)kSeq->numKeyframes * stop);
+
+	if (kSeq->numKeyframes != kSeq->numGroundFrames)
+	{
+		for (U32 i=startFrame;i<stopFrame;i++)
+		{
+			Point3F oldpos = nodeTranslations[i+kSeq->baseTranslation];//+node	
+			Point3F newpos = oldpos + pos;
+			nodeTranslations[i+kSeq->baseTranslation] = newpos;
+		}
+	} else {
+		for (U32 i=startFrame;i<stopFrame;i++)
+		{
+			Point3F oldpos = groundTranslations[i+kSeq->firstGroundFrame];//+node	
+			Point3F newpos = oldpos + pos;
+			groundTranslations[i+kSeq->firstGroundFrame] = newpos;
+		}
+	}
+}
+
+void TSShape::setBaseNodePosRegion(U32 seq, Point3F &pos, F32 start, F32 stop)
+{
+	S32 startFrame,stopFrame;
+
+	//mBaseNodeAdjustPosTemp = pos;
+
+	TSShape::Sequence *kSeq = &(sequences[seq]);
+
+	startFrame = (S32)((F32)kSeq->numKeyframes * start);
+	stopFrame = (S32)((F32)kSeq->numKeyframes * stop);
+
+	if (kSeq->numKeyframes != kSeq->numGroundFrames)
+	{
+		for (U32 i=startFrame;i<stopFrame;i++)
+		{
+			Point3F oldpos = nodeTranslations[i+kSeq->baseTranslation];//+node	
+			nodeTranslations[i+kSeq->baseTranslation] = pos;
+		}
+	} else {
+		for (U32 i=startFrame;i<stopFrame;i++)
+		{
+			Point3F oldpos = groundTranslations[i+kSeq->firstGroundFrame];//+node	
+			groundTranslations[i+kSeq->firstGroundFrame] = pos;
+		}
+	}
+}
+
+void TSShape::adjustNodeRotRegion(U32 seq, U32 node, EulerF &rot, F32 start, F32 stop)
+{
+	S32 rot_matters_count=0,node_matter_index=0;
+	Quat16 q16,nq16;
+	S32 startFrame,stopFrame;
+
+	////// assign adjustRotsTemp ///////////
+	/*
+	bool found = false;
+	for (U32 i=0;i<mNodeAdjustRotsTemp.size();i++)
+	{
+		if (mNodeAdjustRotsTemp[i].node == node)
+		{
+			mNodeAdjustRotsTemp[i].rot = rot;
+			//Con::printf("setting node rot temp: %f %f %f",rot.x,rot.y,rot.z);
+			found = true;
+			break;
+		}
+	}
+	if (!found)
+	{
+		mNodeAdjustRotsTemp.increment();
+		mNodeAdjustRotsTemp.last().node = node;
+		mNodeAdjustRotsTemp.last().rot = rot;
+		//Con::printf("setting new node rot temp: %f %f %f",rot.x,rot.y,rot.z);
+	} */
+	/////////////////////////////////////
+
+	rot.x = mDegToRad(rot.x);
+	rot.y = mDegToRad(rot.y);
+	rot.z = mDegToRad(rot.z);
+
+	QuatF q(rot);
+	QuatF temp;
+	//q16.set(q);
+
+	if ( seq > sequences.size() )
+	  return;
+
+	TSShape::Sequence *kSeq = &(sequences[seq]);
+
+
+
+	startFrame = (S32)((F32)kSeq->numKeyframes * start);
+	stopFrame = (S32)((F32)kSeq->numKeyframes * stop);
+
+	//WHoops, need a new test to find if node is base of physics body. (not always zero)
+	//if (mBodyParts[0]->mNodeIndex == node)
+	if (node == 0)
+	{
+		Con::printf("seq %d adjusting BASE node %d rotation (%f %f %f) from %d to %d",
+			seq,node,rot.x,rot.y,rot.z,startFrame,stopFrame);
+		Point3F oldPos,newPos;
+
+		if (kSeq->numKeyframes != kSeq->numGroundFrames)
+		{
+			for (U32 i=startFrame;i<stopFrame;i++)
+			{
+				oldPos = nodeTranslations[i+kSeq->baseTranslation];
+				q.mulP(oldPos,&newPos);
+				nodeTranslations[i+kSeq->baseTranslation] = newPos;
+			}
+		} else {
+			for (U32 i=startFrame;i<stopFrame;i++)
+			{
+				oldPos = groundTranslations[i+kSeq->firstGroundFrame];
+				q.mulP(oldPos,&newPos);
+				groundTranslations[i+kSeq->firstGroundFrame] = newPos;
+			}
+		}
+	}
+
+	//Hmm, should this happen before above rotation of base translations?
+	if (!kSeq->rotationMatters.test(node)) { 
+		Con::errorf("Node %d doesn't matter!",node); 
+		return; 
+	}
+
+	for (U32 j=0;j<nodes.size();j++) 
+	{
+		if (j==node) node_matter_index = rot_matters_count;
+		if (kSeq->rotationMatters.test(j))
+			rot_matters_count++;
+	}
+	for (U32 i=startFrame;i<stopFrame;i++)
+	{
+		//if ((mBodyParts[0]->mNodeIndex == node)&&
+		if ((node == 0)&&
+			(kSeq->numKeyframes == kSeq->numGroundFrames))
+		{
+			q16 = groundRotations[kSeq->firstGroundFrame+i];
+			q16.getQuatF(&temp);
+			QuatF bQ = temp;
+			temp *= q;
+			nq16.set(temp);
+			groundRotations[kSeq->firstGroundFrame+i] = nq16;
+			//Con::printf("old ground rot: %3.2f %3.2f %3.2f %3.2f, new ground rot: %3.2f %3.2f %3.2f %3.2f",
+			//	bQ.x,bQ.y,bQ.z,bQ.w,temp.x,temp.y,temp.z,temp.w);
+		} else {
+			q16 = nodeRotations[kSeq->baseRotation+(node_matter_index*kSeq->numKeyframes)+i];
+			q16.getQuatF(&temp);
+			temp *= q;
+			nq16.set(temp);
+			nodeRotations[kSeq->baseRotation+(node_matter_index*kSeq->numKeyframes)+i] = nq16;
+		}
+	}
+}
+
+void TSShape::setNodeRotRegion(U32 seq, U32 node, EulerF &rot, F32 start, F32 stop)
+{
+	S32 rot_matters_count=0,node_matter_index=0;
+	S32 startFrame,stopFrame;
+
+	////// assign adjustRotsTemp ///////////
+	/*
+	bool found = false;
+	for (U32 i=0;i<mNodeAdjustRotsTemp.size();i++)
+	{
+		if (mNodeAdjustRotsTemp[i].node == node)
+		{
+			mNodeAdjustRotsTemp[i].rot = rot;
+			//Con::printf("setting node rot temp: %f %f %f",rot.x,rot.y,rot.z);
+			found = true;
+			break;
+		}
+	}
+	if (!found)
+	{
+		mNodeAdjustRotsTemp.increment();
+		mNodeAdjustRotsTemp.last().node = node;
+		mNodeAdjustRotsTemp.last().rot = rot;
+		//Con::printf("setting new node rot temp: %f %f %f",rot.x,rot.y,rot.z);
+	} */
+	/////////////////////////////////////
+
+	rot.x = mRadToDeg(rot.x);
+	rot.y = mRadToDeg(rot.y);
+	rot.z = mRadToDeg(rot.z);
+
+	QuatF q(rot);
+	Quat16 q16;
+	q16.set(q);
+
+	if ( seq > sequences.size() )
+	  return;
+
+	TSShape::Sequence *kSeq = &(sequences[seq]);
+
+	startFrame = (S32)((F32)kSeq->numKeyframes * start);
+	stopFrame = (S32)((F32)kSeq->numKeyframes * stop);
+
+	//HERE: do anything about groundTranslations / base node translations??
+
+	if (!kSeq->rotationMatters.test(node)) { 
+		Con::errorf("Node %d doesn't matter!",node); 
+		return; 
+	}
+	for (U32 j=0;j<nodes.size();j++) 
+	{
+		if (j==node) node_matter_index = rot_matters_count;
+		if (kSeq->rotationMatters.test(j)) 
+			rot_matters_count++;
+	}
+	//for (U32 i=0;i<kShape->sequences[seq].numKeyframes;i++)
+	for (U32 i=startFrame;i<stopFrame;i++)
+	{
+		//if ((mBodyParts[0]->mNodeIndex == node)&&
+		if ((node == 0)&&
+			(kSeq->numKeyframes == kSeq->numGroundFrames))
+		{
+			groundRotations[kSeq->firstGroundFrame+i] = q16;
+		} else {
+			nodeRotations[kSeq->baseRotation+(node_matter_index*kSeq->numKeyframes)+i] = q16;
+		}
+	}
+}
+
+//Will we use these at all? Currently undecided.
+void TSShape::addNodeSetRot(U32 node, EulerF &rot)
+{/*
+	U32 done = 0;
+	if (mNodeSetRots.size())
+	{
+		for (U32 i=0;i<mNodeSetRots.size();i++)
+		{
+			if (mNodeSetRots[i].node==node)
+			{
+				mNodeSetRots[i].rot = rot;
+				done = 1;
+				break;
+			}
+		}
+	}
+	if (!done) 
+	{
+		mNodeSetRots.increment();
+		mNodeSetRots.last().node = node;
+		mNodeSetRots.last().rot = rot;
+		//Con::errorf("added node set rot: node %d rot %f %f %f",node,rot.x,rot.y,rot.z);
+	}*/
+}
+
+void TSShape::addNodeAdjustRot(U32 node, EulerF &rot)
+{
+	/*(
+			U32 done = 0;
+	if (mNodeAdjustRots.size())
+	{
+		for (U32 i=0;i<mNodeAdjustRots.size();i++)
+		{
+			if (mNodeAdjustRots[i].node==node)
+			{
+				mNodeAdjustRots[i].rot = rot;
+				done = 1;
+				break;
+			}
+		}
+	}
+	if (!done) 
+	{
+		mNodeAdjustRots.increment();
+		mNodeAdjustRots.last().node = node;
+		mNodeAdjustRots.last().rot = rot;
+
+		//Con::errorf("added node adjust rot: node %d rot %f %f %f",node,rot.x,rot.y,rot.z); 
+	}
+	*/
+}
+
+void TSShape::doMatrixFix(U32 seq, EulerF &eul1,EulerF &eul2)
+{
+	TSShape::Sequence *kSeq = &(sequences[seq]);
+	MatrixF m,mQ,matAxesFixA,matAxesFixB,matAxesFix,matAxesUnfix;
+	QuatF q,qM;
+	Quat16 q16,q16Final;
+	S32 rot_matters_count = 0;
+
+	for (U32 j=0;j<nodes.size();j++) 
+		if (kSeq->rotationMatters.test(j)) 
+			rot_matters_count++;
+
+	matAxesFixA.set(eul1);
+	matAxesFixB.set(eul2);
+	//matAxesFix.set(EulerF(90,0,180));
+	matAxesFix.mul(matAxesFixA,matAxesFixB);//(matAxesFixB,matAxesFixA);//
+	matAxesUnfix = matAxesFix;
+	matAxesUnfix.inverse();
+
+	for (U32 i=0;i<kSeq->numKeyframes;i++)
+	{
+		for (U32 j=0;j<rot_matters_count;j++)
+		{
+			m.identity();
+
+			m.mul(matAxesFix);
+			q16 = nodeRotations[kSeq->baseRotation+(j*kSeq->numKeyframes)+i];
+			q = q16.getQuatF();
+			q.setMatrix(&mQ);
+			m.mul(mQ);
+			m.mul(matAxesUnfix);
+
+			QuatF qM(m);
+			q16Final.set(qM);
+
+			nodeRotations[kSeq->baseRotation+(j*kSeq->numKeyframes)+i] = q16Final;
+		}
+	}
+}
+
+void TSShape::smoothLoopTransition(S32 seq,S32 frames)
+{
+	//For each active node in seq, take the last (frames) frames and modify them linearly,
+	//such that frame(num_keyframes - frames) has no change and frame(num_keyframes)==frame(0).
+	Con::printf("Smoothing Loop Transition for sequence %d, %d frames from end.",seq,frames);
+
+	S32 rot_matters_count=0,node_matter_index=0;
+	Quat16 q16,nq16;
+	QuatF qStart,qEnd,qDiff,qTemp,qOut;
+	S32 startFrame,stopFrame;
+
+	if ( seq > sequences.size() )
+	  return;
+	TSShape::Sequence *kSeq = &(sequences[seq]);
+
+	startFrame = kSeq->numKeyframes - frames;
+	stopFrame = kSeq->numKeyframes-1;
+
+	for (U32 j=0;j<nodes.size();j++) 
+	{
+		if (kSeq->rotationMatters.test(j))
+			rot_matters_count++;
+	}
+
+	for (U32 j=0;j<rot_matters_count;j++) 
+	{
+		//HERE: for each matters node, grab the first frame and the last frame, get the difference between
+		//them (first frame minus last frame) then add that difference incrementally to every frame from
+		//(numKeyframes-frames) to (numKeyframes)
+		if (j==0) //base node, also check position
+		{
+			Point3F startPos = nodeTranslations[kSeq->baseTranslation];//+node	
+			Point3F endPos = nodeTranslations[kSeq->baseTranslation + stopFrame];
+			Point3F diffPos = startPos - endPos;
+			for (U32 i=startFrame;i<=stopFrame;i++)
+			{
+				F32 ratio = ((F32)(i-startFrame)/(F32)frames);
+				Point3F oldPos = nodeTranslations[i+kSeq->baseTranslation];//+node	
+				oldPos += Point3F(diffPos.x * ratio,diffPos.y * ratio,diffPos.z * ratio);
+				nodeTranslations[i+kSeq->baseTranslation] = oldPos;
+			}
+		}
+		q16 = nodeRotations[kSeq->baseRotation+(j*kSeq->numKeyframes)+0];//first frame
+		q16.getQuatF(&qStart);
+		q16 = nodeRotations[kSeq->baseRotation+(j*kSeq->numKeyframes) + stopFrame];//last frame
+		q16.getQuatF(&qEnd);
+		qDiff = QuatF((qStart.x-qEnd.x),(qStart.y-qEnd.y),(qStart.z-qEnd.z),(qStart.w-qEnd.w));
+		//qDiff = qStart * qTemp.x)
+		for (U32 i=startFrame;i<=stopFrame;i++)
+		{
+			q16 = nodeRotations[kSeq->baseRotation+(j*kSeq->numKeyframes)+i];
+			q16.getQuatF(&qTemp);
+			F32 ratio = ((F32)(i-startFrame)/(F32)frames);
+			qTemp.x = qTemp.x + (qDiff.x * ratio);
+			qTemp.y = qTemp.y + (qDiff.y * ratio);
+			qTemp.z = qTemp.z + (qDiff.z * ratio);
+			qTemp.w = qTemp.w + (qDiff.w * ratio);
+			Quat16 nq16;
+			nq16.set(qTemp);
+			nodeRotations[kSeq->baseRotation+(j*kSeq->numKeyframes)+i] = nq16;
+		}
+	}
+}
+
+bool TSShape::getSeqCyclic(U32 seq)
+{
+	if ((seq>=0)&&(seq<sequences.size())) 
+	{
+		return sequences[seq].isCyclic();
+	}	
+	return 0;
+}
+
+void TSShape::setSeqCyclic(U32 seq,bool val)
+{
+	if ((seq>=0)&&(seq<sequences.size())) 
+	{
+		Sequence & kSeq = sequences[seq];
+		if (val) kSeq.flags = kSeq.flags | TSShape::Cyclic;
+		else {
+			if (kSeq.isCyclic())
+				kSeq.flags = kSeq.flags ^ TSShape::Cyclic;
+		}
+	}
+	return;
+}
+
+bool TSShape::getSeqBlend(U32 seq)
+{
+	if ((seq>=0)&&(seq<sequences.size())) 
+	{
+		return sequences[seq].isBlend();
+	}	
+	return 0;
+}
+
+void TSShape::setSeqBlend(U32 seq,bool val)
+{
+	if ((seq>=0)&&(seq<sequences.size())) 
+	{
+		Sequence & kSeq = sequences[seq];
+		if (val) kSeq.flags = kSeq.flags | TSShape::Blend;
+		else {
+			if (kSeq.isBlend())
+				kSeq.flags = kSeq.flags ^ TSShape::Blend;
+		}
+	}
+	return;
 }

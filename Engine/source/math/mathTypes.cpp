@@ -964,6 +964,34 @@ DefineConsoleFunction( MatrixMulPoint, Point3F, ( TransformF transform, Point3F 
    return point;
 }
 
+DefineConsoleFunction( rotationArcDegrees, Point3F, ( Point3F pos1, Point3F pos2 ),,
+				"@brief Find rotationArc between two vectors.\n\n"
+				"@ingroup Matrices")
+{
+	QuatF q;
+	MatrixF mat;
+
+	q.rotationArc(pos1,pos2);
+	q.setMatrix(&mat);
+	EulerF eul = mat.toEuler();
+
+   return eul;
+}
+
+DefineConsoleFunction( rotationArcRadians, Point3F, ( Point3F pos1, Point3F pos2 ),,
+				"@brief Find rotationArc between two vectors.\n\n"
+				"@ingroup Matrices")
+{
+	QuatF q;
+	MatrixF mat;
+
+	q.rotationArc(pos1,pos2);
+	q.setMatrix(&mat);
+	EulerF eul = mat.toEuler();
+
+   return eul;
+}
+
 ConsoleFunctionGroupEnd(MatrixMath);
 
 //------------------------------------------------------------------------------

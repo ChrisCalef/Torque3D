@@ -502,6 +502,12 @@ public:
 
 	void applyUltraframeSet();
 
+	void cropSequence(U32 seq,F32 start,F32 stop,const char *name);
+	
+	Vector<QuatF>    nodeCropStartRotations;
+
+	F32 getSeqDeltaSum(S32 seq,S32 currFrame,S32 baseFrame);
+
 
 //#endif // TORQUE_NAVIGATION_ENABLED
 };

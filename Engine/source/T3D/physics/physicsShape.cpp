@@ -3452,6 +3452,7 @@ bool PhysicsShape::loadSequence(const char *dsqPath)
 	
 }
 
+//Hm, do we have a version of this in TSShape that permanently sets the base sequence timescale? If not, we should.
 void PhysicsShape::setSequenceTimeScale(F32 timescale)
 {
 	if (isServerObject())
@@ -3493,6 +3494,47 @@ F32 PhysicsShape::getSequencePos()
 		return mShapeInstance->getPos(mAmbientThread);
 	}
 }
+
+
+void PhysicsShape::cropSequence(U32 seq,F32 start,F32 stop,const char *name)
+{
+	mShape->cropSequence(seq,start,stop,name);
+
+	FileStream *outstream;
+	String dsqPath(name);
+	String dsqExt(".dsq");
+	if (!dStrstr(dsqPath.c_str(),dsqExt.c_str())) dsqPath += dsqExt;
+	if ((outstream = FileStream::createAndOpen( dsqPath.c_str(), Torque::FS::File::Write))==NULL) {
+		Con::printf("whoops, name no good: %s!",dsqPath.c_str()); 
+	} else {
+		TSShape::Sequence & seq = mShape->sequences.last();
+		mShape->exportSequence((Stream *)outstream,seq,1);
+		outstream->close();
+	}
+}
+
+DefineEngineMethod( PhysicsShape, cropSequence, void, (S32 seq,F32 start,F32 stop,const char *name),,"")
+{  
+	object->cropSequence(seq,start,stop,name);
+}
+
+
+DefineEngineMethod( PhysicsShape, dropSequence, void, (S32 seq),,"")
+{  
+	object->mShape->dropSequence(seq);
+}
+
+DefineEngineMethod( PhysicsShape, groundCaptureSeq, void, (S32 seq),,"")
+{  
+	object->mShape->groundCaptureSeq(seq);
+}
+
+
+DefineEngineMethod( PhysicsShape, unGroundCaptureSeq, void, (S32 seq),,"")
+{  
+	object->mShape->unGroundCaptureSeq(seq);
+}
+
 
 
 //////////////////////////////////////////////////////////////
@@ -4078,6 +4120,13 @@ DefineEngineMethod( PhysicsShape, getSeqFrames, S32, (S32 index),,
 	return seq.numKeyframes;
 }
 
+DefineEngineMethod( PhysicsShape, getSeqGroundFrames, S32, (S32 index),,
+   "@brief.\n\n")
+{  
+	TSShape::Sequence & seq = object->mShape->sequences[index];
+
+	return seq.numGroundFrames;
+}
 
 DefineEngineMethod( PhysicsShape, pauseSeq, void, (),,
    "@brief.\n\n")
@@ -4110,6 +4159,29 @@ DefineEngineMethod( PhysicsShape, setSeqPos, void, (F32 pos),,
 	object->setSequencePos(pos);
 }
 
+DefineEngineMethod( PhysicsShape, getSeqCyclic, bool, (S32 seq),,
+   "@brief.\n\n")
+{ 
+	return object->mShape->getSeqCyclic(seq);
+}
+
+DefineEngineMethod( PhysicsShape, setSeqCyclic, void, (S32 seq,bool val),,
+   "@brief.\n\n")
+{ 
+	object->mShape->setSeqCyclic(seq,val);
+}
+
+DefineEngineMethod( PhysicsShape, getSeqBlend, bool, (S32 seq),,
+   "@brief.\n\n")
+{ 
+	return object->mShape->getSeqBlend(seq);
+}
+
+DefineEngineMethod( PhysicsShape, setSeqBlend, void, (S32 seq,bool val),,
+   "@brief.\n\n")
+{ 
+	object->mShape->setSeqBlend(seq,val);
+}
 /*
 const char *PhysicsShape::getSeqFilename(const char *seqname)
 {
@@ -4165,6 +4237,264 @@ DefineEngineMethod( PhysicsShape, showNodes, void, (),,
 	}
 }
 
+DefineEngineMethod( PhysicsShape, getNumNodes, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mShape->nodes.size();
+}
+
+DefineEngineMethod( PhysicsShape, getNodeName, const char*, (S32 index),,
+   "@brief.\n\n")
+{  
+	return object->mShape->getName(object->mShape->nodes[index].nameIndex).c_str();
+}
+
+DefineEngineMethod( PhysicsShape, getNodeNum, S32, (const char *name),,
+   "@brief \n\n")
+{  
+	String nameString = name;
+	return object->mShape->findNode(nameString);
+}
+
+
+DefineEngineMethod( PhysicsShape, getNumMattersNodes, S32, (S32 index),,
+   "@brief \n\n")
+{  
+	return object->mShape->getNumMattersNodes(index);
+}
+
+DefineEngineMethod( PhysicsShape, getMattersNodeIndex, S32, (S32 index,S32 node),,
+   "@brief \n\n")
+{  
+	return object->mShape->getMattersNodeIndex(index,node);
+}
+
+DefineEngineMethod( PhysicsShape, getNodeMattersIndex, S32, (S32 index,S32 node),,
+   "@brief \n\n")
+{  
+	return object->mShape->getNodeMattersIndex(index,node);
+}
+
+DefineEngineMethod( PhysicsShape, addMattersNode, void, (S32 index,S32 node),,
+   "@brief \n\n")
+{  
+	return object->mShape->addMattersNode(index,node);
+}
+
+DefineEngineMethod( PhysicsShape, dropMattersNode, void, (S32 index,S32 node),,
+   "@brief \n\n")
+{  
+	return object->mShape->dropMattersNode(index,node);
+}
+
+DefineEngineMethod( PhysicsShape, getNodeRot, Point3F, (S32 seq,S32 node,S32 frame),,
+   "@brief \n\n")
+{  
+	TSShape *kShape = object->mShape;
+	QuatF q;
+	MatrixF mat;
+
+	Quat16 q16 = kShape->nodeRotations[frame+kShape->sequences[seq].baseRotation+(kShape->sequences[seq].numKeyframes*node)];
+	q16.getQuatF(&q);
+	q.setMatrix(&mat);
+	EulerF eul = mat.toEuler();
+
+	return eul;
+}
+
+DefineEngineMethod( PhysicsShape, getNodeFrameQuat, const char *, (S32 seq,S32 mattersNode,S32 frame),,
+   "@brief \n\n")
+{ 	
+	TSShape *kShape = object->mShape;
+	QuatF q;
+	char data[256];
+
+	S32 num_frames = kShape->sequences[seq].numKeyframes;
+	Quat16 q16 = kShape->nodeRotations[kShape->sequences[seq].baseRotation+(mattersNode*num_frames)+frame];
+	q = q16.getQuatF();
+	sprintf(data,"%f %f %f %f",q.x,q.y,q.z,q.w);
+
+	return data;
+}
+
+
+DefineEngineMethod( PhysicsShape, setNodeFrameQuat, void, (S32 seq,S32 mattersNode,S32 frame,const char *quatString),,
+   "@brief \n\n")
+{ 	
+	TSShape *kShape = object->mShape;
+	S32 num_frames = kShape->sequences[seq].numKeyframes;
+	QuatF q;
+	
+	dSscanf(quatString,"%g %g %g %g",&q.x,&q.y,&q.z,&q.w);
+	
+	Quat16 q16;
+	q16.set(q);
+	kShape->nodeRotations[kShape->sequences[seq].baseRotation+(mattersNode*num_frames)+frame] = q16;
+	
+	return;
+}
+
+
+DefineEngineMethod( PhysicsShape, getNodeFrameEuler, Point3F, (S32 seq,S32 mattersNode,S32 frame),,
+   "@brief \n\n")
+{ 		
+	QuatF q;
+	EulerF eul;
+	MatrixF mat;
+	TSShape *kShape = object->mShape;
+	S32 num_frames = kShape->sequences[seq].numKeyframes;
+
+	Quat16 q16 = kShape->nodeRotations[kShape->sequences[seq].baseRotation+(mattersNode*num_frames)+frame];
+	q = q16.getQuatF();
+	q.setMatrix(&mat);
+	eul = mat.toEuler();
+	eul *= 180.0/M_PI;
+
+	return eul;
+}
+
+
+DefineEngineMethod( PhysicsShape, setNodeFrameEuler, void, (S32 seq,S32 mattersNode,S32 frame,Point3F eul),,
+   "@brief \n\n")
+{ 	
+	Quat16 q16;
+	TSShape *kShape = object->mShape;
+	S32 num_frames = kShape->sequences[seq].numKeyframes;
+
+	eul *= M_PI/180.0;
+	QuatF q(eul);
+	q16.set(q);
+	kShape->nodeRotations[kShape->sequences[seq].baseRotation+(mattersNode*num_frames)+frame] = q16;
+
+	return;
+}
+
+DefineEngineMethod( PhysicsShape, getNodeTrans, Point3F, (S32 seq,S32 frame),,
+   "@brief \n\n")
+{ 
+	Point3F trans;
+	if ((seq>=0)&&(frame>=0))
+	{
+		TSShape *kShape = object->mShape;
+		trans = kShape->nodeTranslations[frame+kShape->sequences[seq].baseTranslation];
+	}
+	return trans;
+}
+
+
+DefineEngineMethod( PhysicsShape, zeroGroundRots, void, (S32 seq),,
+   "@brief \n\n")
+{ 
+	TSShape *kShape = object->mShape;
+	for (U32 i=kShape->sequences[seq].firstGroundFrame;i<kShape->sequences[seq].numGroundFrames+kShape->sequences[seq].firstGroundFrame;i++)
+	{
+		kShape->groundRotations[i].identity();
+	}
+	return;
+}
+
+DefineEngineMethod( PhysicsShape, addToGroundTrans, void, (S32 seq,Point3F pos),,
+   "@brief \n\n")
+{ 
+	TSShape *kShape = object->mShape;
+	Point3F gt(0,0,0);
+	for (U32 i=kShape->sequences[seq].firstGroundFrame;i<kShape->sequences[seq].numGroundFrames+kShape->sequences[seq].firstGroundFrame;i++)
+	{
+		gt = kShape->groundTranslations[i];
+		kShape->groundTranslations[i] = gt + pos;
+	}
+	return;
+}
+
+DefineEngineMethod( PhysicsShape, zeroGroundTransAxis, void, (S32 seq,S32 axis),,
+   "zeroGroundTransAxis(S32 seq,S32 axis: 0=X,1=Y,2=Z) \n\n")
+{ 
+	TSShape *kShape = object->mShape;
+	if ((seq<0)||(seq>=kShape->sequences.size())||(axis<0)||(axis>2))
+		return;
+
+	Point3F gt(0,0,0);
+	for (U32 i=kShape->sequences[seq].firstGroundFrame;i<kShape->sequences[seq].numGroundFrames+kShape->sequences[seq].firstGroundFrame;i++)
+	{
+		gt = kShape->groundTranslations[i];
+		if (axis==0)
+			gt.x = 0.0;
+		else if (axis==1)
+			gt.y = 0.0;
+		else 
+			gt.z = 0.0;
+		kShape->groundTranslations[i] = gt;
+	}
+	return;
+}
+
+DefineEngineMethod( PhysicsShape, scaleGroundTrans, void, (S32 seq,F32 scale),,
+   "@brief \n\n")
+{ 
+	TSShape *kShape = object->mShape;
+	Point3F gt(0,0,0);
+	for (U32 i=kShape->sequences[seq].firstGroundFrame;i<kShape->sequences[seq].numGroundFrames+kShape->sequences[seq].firstGroundFrame;i++)
+	{
+		Point3F gt = kShape->groundTranslations[i];
+		gt *= scale;
+		kShape->groundTranslations[i] = gt;
+	}
+	return;
+}
+
+
+DefineEngineMethod( PhysicsShape, adjustBaseNodePosRegion, void, (S32 seq,Point3F pos,F32 start,F32 stop),,
+   "@brief \n\n")
+{ 
+	object->mShape->adjustBaseNodePosRegion(seq,pos,start,stop);
+}
+/*
+
+
+setNodeRotRegion(U32 seq, U32 node, EulerF &rot, F32 start, F32 stop)
+addNodeSetRot(U32 node, EulerF &rot)
+addNodeAdjustRot(U32 node, EulerF &rot)
+doMatrixFix(U32 seq, EulerF &eul1,EulerF &eul2)
+*/
+DefineEngineMethod( PhysicsShape, setBaseNodePosRegion, void, (S32 seq,Point3F pos,F32 start,F32 stop),,
+   "@brief \n\n")
+{ 
+	object->mShape->setBaseNodePosRegion(seq,pos,start,stop);
+}
+
+DefineEngineMethod( PhysicsShape, adjustNodeRotRegion, void, (S32 seq,S32 node,EulerF rot,F32 start,F32 stop),,
+   "@brief \n\n")
+{ 
+	object->mShape->adjustNodeRotRegion(seq,node,rot,start,stop);
+}
+
+DefineEngineMethod( PhysicsShape, setNodeRotRegion, void, (S32 seq,S32 node,EulerF rot,F32 start,F32 stop),,
+   "@brief \n\n")
+{ 
+	object->mShape->setNodeRotRegion(seq,node,rot,start,stop);
+}
+
+DefineEngineMethod( PhysicsShape, addNodeSetRot, void, (S32 node,EulerF rot),,
+   "@brief \n\n")
+{ 
+	object->mShape->addNodeSetRot(node,rot);
+}
+
+DefineEngineMethod( PhysicsShape, addNodeAdjustRot, void, (S32 node,EulerF rot),,
+   "@brief \n\n")
+{ 
+	object->mShape->addNodeAdjustRot(node,rot);
+}
+
+DefineEngineMethod( PhysicsShape, doMatrixFix, void, (S32 seq,EulerF eul1,EulerF eul2),,
+   "@brief \n\n")
+{ 
+	object->mShape->doMatrixFix(seq,eul1,eul2);
+}
+
+
+/////////////////////////////////////////////////////////
+
 DefineEngineMethod( PhysicsShape, loadXml, void, (const char *file),,
    "@brief \n\n")
 {  	
@@ -4198,6 +4528,70 @@ DefineEngineMethod( PhysicsShape, setNodeTransform, void, (const char *nodeName,
 	if (clientShape)
 		clientShape->getShapeInstance()->setNodeTransform(nodeName,offset,EulerF(mDegToRad(rot.x),mDegToRad(rot.y),mDegToRad(rot.z)));
 }
+
+F32 PhysicsShape::getSeqDeltaSum(S32 seq,S32 currFrame,S32 baseFrame)
+{
+	Vector<MatrixF> baseGlobalRotations,currGlobalRotations;
+	F32 deltaSum = 0.0;
+	F32 fDeltaSum = 0.0;
+	S32 n = 0;
+	if (nodeCropStartRotations.size()==0)
+		return deltaSum;
+
+	for (U32 i=0;i<mShape->nodes.size();i++)
+	{
+		MatrixF bM,cM;
+		QuatF bQ,cQ,bRQ,cRQ;
+		Quat16 q16;
+		
+		baseGlobalRotations.increment();
+		currGlobalRotations.increment();
+		if (mShape->sequences[seq].rotationMatters.test(i))
+		{
+			//This uses the actual global positions, measured from the world.
+			bQ = nodeCropStartRotations[i];
+			cQ = QuatF(mShapeInstance->mNodeTransforms[i]);
+			deltaSum += fabs(bQ.x - cQ.x) + fabs(bQ.y - cQ.y) + fabs(bQ.z - cQ.z) + fabs(bQ.w - cQ.w);
+			//Con::printf("baseQ: %f %f %f %f, currQ: %f %f %f %f, deltaSum %f",
+			//	bQ.x,bQ.y,bQ.z,bQ.w,cQ.x,cQ.y,cQ.z,cQ.w,deltaSum);
+			n++;
+		}
+	}
+	//fDeltaSum /= (F32)n;
+	deltaSum /= (F32)n;
+	//Con::printf(" deltaSum %f    fDeltaSum %f",deltaSum,fDeltaSum);
+	
+	return deltaSum;
+}
+
+DefineEngineMethod( PhysicsShape, getSeqDeltaSum, F32, (S32 seq,S32 currFrame,S32 baseFrame),,
+   "@brief\n\n")
+{ 
+	return object->getSeqDeltaSum(seq,currFrame,baseFrame);
+}
+
+DefineEngineMethod( PhysicsShape, recordCropStartPositions, void, (),,
+   "@brief \n\n")
+{ 
+	object->nodeCropStartRotations.clear();
+	for (U32 i=0;i<object->mShape->nodes.size();i++)
+	{
+		QuatF q(object->mShapeInstance->mNodeTransforms[i]);
+		object->nodeCropStartRotations.increment();
+		object->nodeCropStartRotations[object->nodeCropStartRotations.size()-1] = q;
+	}
+
+	return;
+}
+
+DefineEngineMethod( PhysicsShape, smoothLoopTransition, void, (S32 seq,S32 frames),,
+   "@brief \n\n")
+{ 
+	object->mShape->smoothLoopTransition(seq,frames);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
 
 DefineEngineMethod( PhysicsShape, setUseDataSource, void, (bool useDataSource),,
    "@brief Tells physicsShape to create a vehicleDataSource and listen to it for transforms and other data.\n\n")

@@ -76,6 +76,22 @@ struct ultraframeSet
 	S32 sequence;
 	Vector<ultraframeSeries> series;
 };
+
+struct nodeRot
+{
+	S32 node;
+	EulerF rot;
+};
+
+ struct bvhJoint
+{
+	String name;
+	Point3F offset;
+	U32 channels;
+	U32 chanrots[3];//keep track of rotation order
+	S32 parent;
+};
+
 //// End MegaMotion //////
 
 
@@ -713,8 +729,24 @@ class TSShape
    //converting the node positions and mesh verts instead of just rotating the figure from 
    void fixUpAxis(S32 axis);//the base.  0=X,1=Y, Z is unnecessary, converting X- or Y- to Z-up.
 
+   void adjustBaseNodePosRegion(U32 seq, Point3F &pos, F32 start, F32 stop);
+   void setBaseNodePosRegion(U32 seq, Point3F &pos, F32 start, F32 stop);
+   void adjustNodeRotRegion(U32 seq, U32 node, EulerF &rot, F32 start, F32 stop);
+   void setNodeRotRegion(U32 seq, U32 node, EulerF &rot, F32 start, F32 stop);
+   void addNodeSetRot(U32 node, EulerF &rot);
+   void addNodeAdjustRot(U32 node, EulerF &rot);
+   void doMatrixFix(U32 seq, EulerF &eul1,EulerF &eul2);
+	void smoothLoopTransition(S32 seq,S32 frames);
+
+	bool getSeqCyclic(U32 seq);
+	void setSeqCyclic(U32 seq,bool cyclic);
+	bool getSeqBlend(U32 seq);
+	void setSeqBlend(U32 seq,bool blend);
+
+
 	//Now, time to move all of the Ecstasy Motion fxFlexBody keyframe editing functions to here.
 	void applyUltraframeSet(ultraframeSet *ufs);//Except I guess it all boils down to this.
+
 
    /// @}
 };
