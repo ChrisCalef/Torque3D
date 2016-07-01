@@ -3,7 +3,7 @@
 #include <math.h>
 #include <float.h>
 #include "math/util/EulerAngles.h"
-
+/*
 EulerAngles Eul_(float ai, float aj, float ah, int order)
 {
     EulerAngles ea;
@@ -11,7 +11,7 @@ EulerAngles Eul_(float ai, float aj, float ah, int order)
     ea.w = order;
     return (ea);
 }
-/* Construct quaternion from Euler angles (in radians). */
+// Construct quaternion from Euler angles (in radians). 
 Quat Eul_ToQuat(EulerAngles ea)
 {
     Quat qu;
@@ -25,8 +25,8 @@ Quat Eul_ToQuat(EulerAngles ea)
     si = sin(ti);  sj = sin(tj);  sh = sin(th);
     cc = ci*ch; cs = ci*sh; sc = si*ch; ss = si*sh;
     if (s==EulRepYes) {
-	a[i] = cj*(cs + sc);	/* Could speed up with */
-	a[j] = sj*(cc + ss);	/* trig identities. */
+	a[i] = cj*(cs + sc);	// Could speed up with 
+	a[j] = sj*(cc + ss);	// trig identities. 
 	a[k] = sj*(cs - sc);
 	qu.w = cj*(cc - ss);
     } else {
@@ -40,7 +40,7 @@ Quat Eul_ToQuat(EulerAngles ea)
     return (qu);
 }
 
-/* Construct matrix from Euler angles (in radians). */
+// Construct matrix from Euler angles (in radians). 
 void Eul_ToHMatrix(EulerAngles ea, HMatrix M)
 {
     double ti, tj, th, ci, cj, ch, si, sj, sh, cc, cs, sc, ss;
@@ -64,7 +64,7 @@ void Eul_ToHMatrix(EulerAngles ea, HMatrix M)
     M[W][X]=M[W][Y]=M[W][Z]=M[X][W]=M[Y][W]=M[Z][W]=0.0; M[W][W]=1.0;
 }
 
-/* Convert matrix to Euler angles (in radians). */
+// Convert matrix to Euler angles (in radians). 
 EulerAngles Eul_FromHMatrix(HMatrix M, int order)
 {
     EulerAngles ea;
@@ -99,7 +99,7 @@ EulerAngles Eul_FromHMatrix(HMatrix M, int order)
     return (ea);
 }
 
-/* Convert quaternion to Euler angles (in radians). */
+// Convert quaternion to Euler angles (in radians). 
 EulerAngles Eul_FromQuat(Quat q, int order)
 {
     HMatrix M;
@@ -121,3 +121,5 @@ EulerAngles someOtherNewFunction()
 	EulerAngles ea;
 	return (ea);
 }
+
+*/

@@ -41,9 +41,6 @@
 #ifndef _SIMOBJECTREF_H_
    #include "console/simObjectRef.h"
 #endif
-#ifndef _T3D_PHYSICS_PHYSICSJOINT_H_
-   #include "T3D/physics/physicsJoint.h"
-#endif
 #ifndef _MATERIALDEFINITION_H_
 #include "materials/materialDefinition.h"
 #endif
@@ -285,7 +282,7 @@ public: //protected:
 
    S32 mCurrentSeq;//This will be set to whatever sequence we are currently playing, need one per thread when we get that far.
    
-   std::map<std::string,int> mActionSeqs;//Associate arrays for C++! This should give us e.g. mActions["attack"] = 15
+   std::map<std::string,int> mActionSeqs;//Associative arrays for C++! This should give us e.g. mActions["attack"] = 15
 
    S32 mAmbientSeq;//Obsolete, but need to replace all references with mActionSeqs["ambient"] now...
    TSThread* mAmbientThread;//Really this should be called mActiveThread now...
@@ -303,6 +300,7 @@ public: //protected:
    S32 mShapeID;    //Database ID of the physicsShape, to find all the physicsShapePart objects with body and joint data.
    S32 mSceneShapeID;
    S32 mSceneID;
+   S32 mSkeletonID;
    S32 mCurrentTick;
    F32 mLastThreadPos;
    Point3F mLastGroundTrans;
@@ -508,6 +506,13 @@ public:
 
 	F32 getSeqDeltaSum(S32 seq,S32 currFrame,S32 baseFrame);
 
+	void saveSequence(S32 seq,const char *filename);
+
+	U32 loadBvhCfg(bvhCfgData *cfg,U32 profile_id);
+	U32 loadBvhSkeleton(bvhCfgData *cfg,U32 profile_id);
+	U32 importBvhSkeleton(const char *bvhFile,const char *profileName);
+	void importBvh(bool importGround,const char *bvhFile,const char *bvhProfile,bool cache_dsqs);
+	void saveBvh(U32 seqNum, const char *bvh_file, const char *bvh_format, bool isGlobal);
 
 //#endif // TORQUE_NAVIGATION_ENABLED
 };

@@ -42,6 +42,8 @@
 #include "T3D/physics/physicsCommon.h"
 #endif
 
+#include <map>
+
 #include "T3D/physics/physicsCloth.h"
 
 #include "ts/tsShapeInstance.h"
@@ -61,6 +63,27 @@ class SQLiteObject;
 
 typedef Delegate<PhysicsObject*( const SceneObject *)> CreatePhysicsObjectFn; 
 typedef Map<StringNoCase, CreatePhysicsObjectFn> CreateFnMap;
+/*
+struct physicsJointData 
+{
+	S32 id;
+	String name;
+	S32 jointType;
+	F32 twistLimit;
+	F32 swingLimit;
+	F32 swingLimit2;
+	Point3F xyzLimits;
+	Point3F localAxis;
+	Point3F localNormal;
+	F32 swingSpring;
+	F32 twistSpring;
+	F32 springDamper;
+	F32 motorSpring;
+	F32 motorDamper;
+	F32 maxForce;
+	F32 maxTorque;
+	//and then limit planes, if physx < 3.0...
+};*/ // WHOOPS, already did this in physicsJoint.h, derp.
 
 
 ///
@@ -91,7 +114,7 @@ protected:
 public:
 
    static SQLiteObject* mSQL;//Hmmm
-
+	static std::map<int,physicsJointData> mJointData;
    /// Note this should go away when we have "real" singleplayer.
    static bool smSinglePlayer;
    static bool isSinglePlayer() { return smSinglePlayer; }

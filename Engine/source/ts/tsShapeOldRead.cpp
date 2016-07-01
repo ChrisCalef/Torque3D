@@ -440,6 +440,8 @@ void TSShape::exportSequence(Stream * s, const TSShape::Sequence& seq, bool save
    }
 
    smVersion = currentVersion;
+
+	Con::printf("saved sequence, nameIndex %d, nodes %d", seq.nameIndex,nodes.size());
 }
 
 //-------------------------------------------------
@@ -491,7 +493,7 @@ bool TSShape::importSequences(Stream * s, const String& sequencePath)
             names.decrement();
 
             if (names.size() != startSize)
-               Con::errorf(ConsoleLogEntry::General, "TSShape::importSequence: failed to remove unused node correctly for dsq %s.", names[nameIndex].c_str(), sequencePath.c_str());
+               Con::errorf(ConsoleLogEntry::General, "TSShape::importSequence: failed to remove unused node correctly for dsq.", names[nameIndex].c_str());
          }
       }
    }

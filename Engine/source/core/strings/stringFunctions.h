@@ -203,6 +203,30 @@ inline bool dIsquote(const char c)
    return ( c == '\"' );
 }
 
+//MegaMotion
+inline bool dIsAllNumeric(const char *str)
+{
+	bool isAllNumeric = true;
+	for (U32 i=0;i<dStrlen(str);i++) {
+		if ((str[i]>='0')&&(str[i]<='9'))
+			continue;
+		//HERE: actually going to allow basic arithmetic operations in here, since they are legal
+		//in SQL input, i.e. SET weightThreshold = 4.5+3.2*8 would actually work, as well as +8 or -7.6.
+		if ((str[i]=='-') && (i<dStrlen(str)-1))//But NOT .6, 45+, 3., etc.
+			continue;
+		if ((str[i]=='+') && (i<dStrlen(str)-1))
+			continue;
+		if ((str[i]=='*') && (i<dStrlen(str)-1))
+			continue;
+		if ((str[i]=='/') && (i<dStrlen(str)-1))
+			continue;
+		if ((str[i]=='.') && (i>0) && (i<dStrlen(str)-1) )
+			continue;
+		isAllNumeric = false;
+	}
+	return isAllNumeric;
+}
+
 //------------------------------------------------------------------------------
 // non-standard string functions [defined in stringFunctions.cpp]
 

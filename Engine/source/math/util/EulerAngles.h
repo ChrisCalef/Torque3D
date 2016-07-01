@@ -3,7 +3,14 @@
 #ifndef _H_EulerAnglesTemp
 #define _H_EulerAnglesTemp
 
-#include "math/util/QuatTypes.h"
+//#include "math/util/QuatTypes.h"//Actually this is just the following four lines, why bother with an include?
+
+typedef struct {float x, y, z, w;} Quat; /* Quaternion */
+enum QuatPart {X, Y, Z, W};
+typedef float HMatrix[4][4]; /* Right-handed, for column vectors */
+typedef Quat EulerAngles;    /* (x,y,z)=ang 1,2,3, w=order code  */
+
+
 /*** Order type constants, constructors, extractors ***/
     /* There are 24 possible conventions, designated by:    */
     /*	  o EulAxI = axis used initially		    */
@@ -62,10 +69,10 @@
 #define EulOrdXYZr    EulOrd(Z,EulParOdd,EulRepNo,EulFrmR)
 #define EulOrdZYZr    EulOrd(Z,EulParOdd,EulRepYes,EulFrmR)
 
-EulerAngles Eul_(float ai, float aj, float ah, int order);
-Quat Eul_ToQuat(EulerAngles ea);
-void Eul_ToHMatrix(EulerAngles ea, HMatrix M);
-EulerAngles Eul_FromHMatrix(HMatrix M, int order);
-EulerAngles Eul_FromQuat(Quat q, int order);
-EulerAngles someOtherNewFunction();
+//EulerAngles Eul_(float ai, float aj, float ah, int order);
+//Quat Eul_ToQuat(EulerAngles ea);
+//void Eul_ToHMatrix(EulerAngles ea, HMatrix M);
+//EulerAngles Eul_FromHMatrix(HMatrix M, int order);
+//EulerAngles Eul_FromQuat(Quat q, int order);
+//EulerAngles someOtherNewFunction();
 #endif

@@ -42,8 +42,10 @@ PhysicsPlugin* PhysicsPlugin::smSingleton = NULL;
 PhysicsResetSignal PhysicsPlugin::smPhysicsResetSignal;
 bool PhysicsPlugin::smSinglePlayer = false;
 U32 PhysicsPlugin::smThreadCount = 2;
-SQLiteObject* PhysicsPlugin::mSQL = NULL;
 
+//Chris Calef - MegaMotion/openSimEarth
+SQLiteObject* PhysicsPlugin::mSQL = NULL;
+std::map<int,physicsJointData> PhysicsPlugin::mJointData;
 
 String PhysicsPlugin::smServerWorldName( "server" );
 String PhysicsPlugin::smClientWorldName( "client" );

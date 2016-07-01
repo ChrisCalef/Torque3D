@@ -92,6 +92,25 @@ struct nodeRot
 	S32 parent;
 };
 
+ struct bvhCfgData
+{
+	Vector<S32> bvhNodes;//this is index into bvh nodes, since we might skip some.
+	Vector<S32> dtsNodes;//this is the index into the dts chain
+	Vector<S32> nodeGroups;//these are the group id, 0-4 for (spine neck head-RL arms-RL legs)
+	Vector<S32> orderNodes;
+	Vector<Point3F> bvhPoseRotsA;
+	Vector<Point3F> bvhPoseRotsB;
+	Vector<Point3F> axesFixRotsA;
+	Vector<Point3F> axesFixRotsB;
+	Vector<bvhJoint> joints;
+	Vector<Point3F> endSiteOffsets;
+	Vector<String> bvhNames;
+	bool usingNames;
+	U32 numBvhNodes;
+	U32 numDtsNodes;
+	U32 numNodeGroups;
+	F32 bvhScale;
+};
 //// End MegaMotion //////
 
 

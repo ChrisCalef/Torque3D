@@ -249,6 +249,24 @@ bool GuiTabBookCtrl::reOrder(SimObject* obj, SimObject* target)
    return true;
 }
 
+void GuiTabBookCtrl::reArrange()
+{
+	Con::printf("rearranging tab book!");
+	TabHeaderInfo tempPage;
+	for( S32 i = 0; i < mPages.size(); i++ )
+   {
+		for( S32 j = 0; j < mPages.size()-1; j++ )
+		{
+			if (mPages[j].Page->mTabIndex > mPages[j+1].Page->mTabIndex)
+			{
+				tempPage = mPages[j];
+				mPages[j] = mPages[j+1];
+				mPages[j+1] = tempPage;
+			}	
+		}
+	}
+   calculatePageTabs();
+}
 //-----------------------------------------------------------------------------
 
 bool GuiTabBookCtrl::acceptsAsChild( SimObject* object ) const
@@ -981,4 +999,10 @@ DefineEngineMethod( GuiTabBookCtrl, getSelectedPage, S32, (),,
    "@return Index of the selected tab page or -1 if no tab page is selected." )
 {
    return object->getSelectedPageNum();
+}
+
+DefineEngineMethod( GuiTabBookCtrl, reArrange, void, (),,
+   "Rearrange pages by tab index." )
+{
+   object->reArrange();
 }

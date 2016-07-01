@@ -63,15 +63,63 @@ Px3Plugin::Px3Plugin()
 	mSQL = new SQLiteObject();
 
 	char dbName[65];
-    dStrncpy( dbName, Con::getVariable( "pref::OpenSimEarth::DB" ), 64 );
-    dbName[64] = 0;
+	dStrncpy( dbName, Con::getVariable( "pref::OpenSimEarth::DB" ), 64 );
+	dbName[64] = 0;
 
 	if (mSQL->OpenDatabase(dbName))
 		Con::printf("Opened SQLITE Database %s",dbName);
 	else
 		Con::printf("Could not open SQLITE Database: %s",dbName);
 
+	//HERE: we are going to load up the entire joints table into array mJointData, so that we don't 
+	//have to query it joint by joint later. There should be a limited number of joints, reused by everybody.
+	char query[255];
+	S32 result;
+	sqlite_resultset *resultSet;
+	S32 numJoints = 0;
+
+	sprintf(query,"SELECT * FROM px3Joint;");
+	result = mSQL->ExecuteSQL(query);
+	if (result>0)
+	{
+		resultSet = mSQL->GetResultSet(result);
+		for (U32 i=0;i<resultSet->iNumRows;i++)
+		{
+			int j=0;
+			int jointID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].jointID = jointID;
+			j++;//Don't need the name here.
+			int jointType = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].jointType = (physicsJointType)jointType;
+			
+			mJointData[jointID].twistLimit = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[j++]));
+			mJointData[jointID].swingLimit = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[j++]));
+			mJointData[jointID].swingLimit2 = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[j++]));
+			mJointData[jointID].XLimit = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].YLimit = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].ZLimit = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].localAxis.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].localAxis.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].localAxis.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].localNormal.x = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].localNormal.y = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].localNormal.z = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].swingSpring = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].twistSpring = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].springDamper = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].motorSpring = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].motorDamper = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].maxForce = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+			mJointData[jointID].maxTorque = dAtof(resultSet->vRows[i]->vColumnValues[j++]);
+
+			Con::printf("loaded a joint: %d twistLimit %f",jointID,mJointData[jointID].twistLimit);
+		}
+	}
+
+	
+
 }
+
 
 Px3Plugin::~Px3Plugin()
 {	
@@ -278,13 +326,15 @@ PhysicsJoint* Px3Plugin::createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,P
 	actor1 = dynamic_cast<Px3Body*>(A)->getActor();
 	actor2 = dynamic_cast<Px3Body*>(B)->getActor();
 	
-	physicsJointData jD;	
-	loadJointData(jointID,&jD);
-	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&jD,origin,jointRots,jointRots2,shapeTrans);
+	//physicsJointData jD;	
+	//loadJointData(jointID,&jD);
+
+	Px3Joint* joint = new Px3Joint(actor1,actor2,dynamic_cast<Px3World*>(worldA),&(PHYSICSMGR->mJointData[jointID]),origin,jointRots,jointRots2,shapeTrans);
 
 	return (PhysicsJoint *)joint;
 }
 
+//OBSOLETE, with creation of std::map PHYSICSMGR->mJointData
 void Px3Plugin::loadJointData(U32 jointID, physicsJointData* jD)
 {
 	int i=0;
@@ -335,7 +385,7 @@ void Px3Plugin::loadJointData(U32 jointID, physicsJointData* jD)
 	jD->maxTorque = dAtof(resultSet->vRows[0]->vColumnValues[i++]);
 	
 	mSQL->ClearResultSet(result);
-
+	
 	//And then later, the limit planes...
 	//...
 	

@@ -10,11 +10,11 @@
 #include "math/mMath.h"
 #include <stdio.h>
 
-QuatF globalQuats[200];
+QuatF globalQuats[200];//FIX Vector
 //Point3F nodeTrans[2500];
 S32 numFrames;
 F32 seqDuration;
-TSShape *kork,*soldier,*jeff,*jill,*adam,*cstrike,*swordsman;//TEMP
+//TSShape *kork,*soldier,*jeff,*jill,*adam,*cstrike,*swordsman;//
 // methods in this file are for interacting with common/editor/SequenceEditor.gui
 
 void TSShape::moveSequence(U32 target_seq,U32 dest_seq)

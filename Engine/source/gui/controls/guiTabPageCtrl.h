@@ -31,11 +31,11 @@ class GuiTabPageCtrl : public GuiTextCtrl
 {
    private:
       typedef GuiTextCtrl Parent;
-
-      bool           mFitBook;   ///< Resize to fit book when first added
-      S32            mTabIndex;
-
+		
    public:
+      bool           mFitBook;   ///< Resize to fit book when first added
+		S32            mTabIndex;
+
       GuiTabPageCtrl();
       
       DECLARE_CONOBJECT(GuiTabPageCtrl);
@@ -67,6 +67,9 @@ class GuiTabPageCtrl : public GuiTextCtrl
       virtual void setText(const char *txt = NULL); ///< Override setText function to signal parent we need to update.
 
       void onRender(Point2I offset, const RectI &updateRect);  ///< Called when it's time to render this page to the scene
+
+		void setTabIndex(S32 index) { mTabIndex = index; }
+
 };
 
 #endif //_GUI_WINDOW_CTRL_H

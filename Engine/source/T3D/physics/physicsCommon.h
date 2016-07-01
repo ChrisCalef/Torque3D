@@ -35,7 +35,9 @@
 #ifndef _REFBASE_H_
 #include "core/util/refBase.h"
 #endif
-
+#ifndef _T3D_PHYSICS_PHYSICSJOINT_H_
+   #include "T3D/physics/physicsJoint.h"
+#endif
 
 /// Helper structure which defines the state of a single physics body.
 struct PhysicsState

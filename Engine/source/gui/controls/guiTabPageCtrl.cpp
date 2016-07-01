@@ -232,3 +232,13 @@ DefineEngineMethod( GuiTabPageCtrl, select, void, (),,
 
    book->selectPage( object );
 }
+
+DefineEngineMethod( GuiTabPageCtrl, getTabIndex, S32, (),,"" )
+{
+   return object->getTabIndex();
+}
+
+DefineEngineMethod( GuiTabPageCtrl, setTabIndex, void, (S32 index),,"" )
+{
+	object->setTabIndex(index);
+}

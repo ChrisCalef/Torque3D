@@ -328,3 +328,8 @@ DefineConsoleFunction( mIsPow2, bool, ( S32 v ),,
 {
    return isPow2( v );
 }
+
+DefineConsoleFunction( isAllNumeric, bool, (const char *text),,"" )
+{
+   return dIsAllNumeric(text);
+}

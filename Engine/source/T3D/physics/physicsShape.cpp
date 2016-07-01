@@ -44,7 +44,13 @@
 #include "console/SQLiteObject.h"
 #include "T3D/camera.h"
 #include "T3D/player.h"
+#include <math.h>
+#include <float.h>
 #include <time.h>
+
+#ifndef _H_EulerAnglesTemp
+	#include "math/util/EulerAngles.h"
+#endif
 
 #ifndef _VEHICLEDATASOURCE_H_
 	#include "sim/dataSource/vehicleDataSource.h"
@@ -72,6 +78,14 @@ ImplementEnumType( PhysicsSimType,
    { PhysicsShapeData::SimType_ServerOnly,   "ServerOnly", "Only handle physics on the server.\n" },
    { PhysicsShapeData::SimType_ClientServer,  "ClientServer", "Handle physics on both the client and server.\n"   }
 EndImplementEnumType;
+
+//So, basic C++ problems here: why can't I forward declare these in EulerAngles.h??
+EulerAngles Eul_(float ai, float aj, float ah, int order);
+Quat Eul_ToQuat(EulerAngles ea);
+void Eul_ToHMatrix(EulerAngles ea, HMatrix M);
+EulerAngles Eul_FromHMatrix(HMatrix M, int order);
+EulerAngles Eul_FromQuat(Quat q, int order);
+EulerAngles someOtherNewFunction();
 
 
 IMPLEMENT_CO_DATABLOCK_V1( PhysicsShapeData );
@@ -459,6 +473,7 @@ PhysicsShape::PhysicsShape()
 		mShapeID( -1 ),
 		mSceneID( -1 ),
 		mSceneShapeID( -1 ),
+		mSkeletonID( 0 ),
 		mNavMesh( NULL ),
 		mNavPath( NULL ),
 		mVehicle( NULL ),
@@ -513,10 +528,13 @@ void PhysicsShape::initPersistFields()
 		  "@brief Turns object kinematic if set to false.\n\n");
 	  
 	  addField( "sceneShapeID", TypeS32, Offset( mSceneShapeID, PhysicsShape ),
-		  "@brief Database ID for this sceneShape.\n\n");
+		  "@brief SceneShape ID.\n\n");
 
 	  addField( "sceneID", TypeS32, Offset( mSceneID, PhysicsShape ),
-		  "@brief Database ID for this scene.\n\n");
+		  "@brief Scene ID.\n\n");
+	  
+	  addField( "skeletonID", TypeS32, Offset( mSkeletonID, PhysicsShape ),
+		  "@brief Skeleton ID.\n\n");
 
    endGroup( "PhysicsShape" );
 
@@ -1011,7 +1029,13 @@ bool PhysicsShape::_createShape()
 
 				//////////////////////////////////////////
 				// Joint Data
+				//FIX!!! This is far too many queries, especially per instance. Load all possible joints at once for now, 
+				//limit that by shape later (someday) if we get too many in the table.
+				//PHYSICSMGR->mJointData[PD->jointID].jointType;//This is how it looks now.
 				bool hasJoint = true;
+				if (PD->jointID <= 0)
+					hasJoint = false;
+				/*
 				sprintf(joint_query,"SELECT * FROM px3Joint WHERE id=%d;",PD->jointID);
 				physicsJointData* JD = new physicsJointData();
 				result2 = kSQL->ExecuteSQL(joint_query);
@@ -1022,6 +1046,7 @@ bool PhysicsShape::_createShape()
 				if (resultSet2->iNumRows!=1)
 					hasJoint = false;
 				kSQL->ClearResultSet(result2);
+				*/
 
 				//////////////////////////////////////////
 				// Create Physics Body
@@ -3421,6 +3446,8 @@ bool PhysicsShape::loadSequence(const char *dsqPath)
 		delete sql;
 	}
 	*/
+
+	//HMM, these used to work, but don't seem to work now. But they are apparently not needed.
 	const String myPath = mShapeInstance->getShapeResource()->getPath().getPath();
 	const String myFileName = mShapeInstance->getShapeResource()->getPath().getFileName();
 	const String myFullPath = mShapeInstance->getShapeResource()->getPath().getFullPath();
@@ -3441,6 +3468,8 @@ bool PhysicsShape::loadSequence(const char *dsqPath)
 		Con::errorf("Missing sequence %s",dsqPath);
 		return false;
 	}
+
+	//Even though importSequences() calls for a path string, it  doesn't use it except for an error message.
 	if (!mShape->importSequences(&fileStream,myPath) || fileStream.getStatus()!= Stream::Ok)
 	{
 		fileStream.close();
@@ -3493,6 +3522,26 @@ F32 PhysicsShape::getSequencePos()
 	{
 		return mShapeInstance->getPos(mAmbientThread);
 	}
+}
+
+void PhysicsShape::saveSequence(S32 seq,const char *filename)
+{
+	FileStream *outstream;
+	String dsqPath(filename);
+	String dsqExt(".dsq");
+	if (!dStrstr(dsqPath.c_str(),dsqExt.c_str())) dsqPath += dsqExt;
+	if ((outstream = FileStream::createAndOpen( dsqPath.c_str(), Torque::FS::File::Write))==NULL) {
+		Con::printf("whoops, name no good: %s!",dsqPath.c_str()); 
+	} else {
+		TSShape::Sequence & kSeq = mShape->sequences[seq];
+		mShape->exportSequence((Stream *)outstream,kSeq,1);
+		outstream->close();
+	}
+}
+
+DefineEngineMethod( PhysicsShape, saveSequence, void, (S32 seq,const char *filename),,"")
+{  
+	object->saveSequence(seq,filename);
 }
 
 
@@ -3598,6 +3647,1809 @@ DefineEngineMethod( PhysicsShape, applyKeyframeSet, void, (),,"")
 {  
 	object->applyUltraframeSet();
 }
+
+
+////////////////////////////////////////////////////////////////////
+
+
+#define MAX_BVH_NODES 400  //TEMP!! Make sure we don't make static arrays anywhere!
+
+U32 PhysicsShape::loadBvhCfg(bvhCfgData *cfg,U32 profile_id)
+{
+	U32 rc=0,profile_skeleton_id=0,nc=0;
+	char select_query[512];
+	String bvhName,dtsName;
+
+	F32 shapeSize = 2.4;//FIX: this was an arbitrary variable in EM, need to make it part of cfg somehow.
+	S32 skeleton_id = 1;//FIX: put it in physicsShape, or something, or let user choose.
+
+	SQLiteObject *kSQL = PHYSICSMGR->mSQL;//MegaMotion/openSimEarth
+
+	if (!profile_id) 
+		return 0;
+
+	int result;
+	sqlite_resultset *resultSet;
+	if (profile_id)
+	{
+		sprintf(select_query,"SELECT scale FROM bvhProfile WHERE id = %d;",profile_id);
+		result = kSQL->ExecuteSQL(select_query);
+		resultSet = kSQL->GetResultSet(result);
+		if (resultSet->iNumRows == 1) 
+			cfg->bvhScale = dAtof(resultSet->vRows[0]->vColumnValues[0]);
+		if (shapeSize) cfg->bvhScale *= shapeSize/2.0;//HERE: this converts from arbitrary shape size 
+		//defined by user to "standard" two meter shape size.
+
+		sprintf(select_query,"SELECT id FROM bvhProfileSkeleton WHERE profile_id = %d AND skeleton_id = %d;",
+			profile_id,skeleton_id);
+		result = kSQL->ExecuteSQL(select_query);
+		resultSet = kSQL->GetResultSet(result);
+		if (resultSet->iNumRows == 1)
+			profile_skeleton_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+
+		//FIX!! Change this to ostrstream
+		sprintf(select_query,"SELECT bvhNodeName, skeletonNodeName,nodeGroup, poseRotA_x, poseRotA_y, poseRotA_z, poseRotB_x, poseRotB_y, poseRotB_z,fixRotA_x, fixRotA_y, fixRotA_z,fixRotB_x, fixRotB_y, fixRotB_z FROM bvhProfileSkeletonNode WHERE bvhProfileSkeleton_id = %d;",
+			profile_skeleton_id);
+		result = kSQL->ExecuteSQL(select_query);
+		resultSet = kSQL->GetResultSet(result);
+
+
+		if (!resultSet)
+		{
+			Con::errorf("Found no bvhProfileSkeletonNodes for profile %d",profile_skeleton_id);
+			return 0;
+		}
+
+		rc = resultSet->iNumRows;
+		Con::printf("num profile skeleton nodes: %d, profile id: %d",rc,profile_skeleton_id);
+		for (U32 i=0;i<rc;i++)
+		{
+			S32 kID = mShape->findNode(resultSet->vRows[i]->vColumnValues[1]);
+			if (1){//(kID>=0) { //if ((kID>=0)||(bvhOutputFull)) { //HERE: either new db field or new argument, tell us whether
+				cfg->dtsNodes.increment();
+				cfg->dtsNodes.last() = kID;							//to export entire skeleton or just used nodes. 
+				cfg->bvhNames.increment();
+				cfg->bvhNames.last() = String(resultSet->vRows[i]->vColumnValues[0]);
+				cfg->bvhNodes.increment();
+				cfg->bvhNodes.last() = i;//(right?) wrong!  Need cfg to be able to skip finger nodes in bvh, for example.  Need a findNode or getID function for BVH.
+				//Actually, if we want real node ids we need to load the skeleton FIRST, not after this.  Then query db for this node name. 
+				//Con::printf("bvh Name: %s skeleton name: %s",resultSet->vRows[i]->vColumnValues[0],resultSet->vRows[i]->vColumnValues[1]);
+				//Con::printf("%s  bvh node %d  shape node %d",cfg->bvhNames[i].c_str(),i,kID);
+				cfg->nodeGroups.increment();
+				cfg->nodeGroups.last() = dAtoi(resultSet->vRows[i]->vColumnValues[2]);//HERE: count up distinct! 
+				cfg->bvhPoseRotsA.increment();
+				cfg->bvhPoseRotsA.last().x = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[3]));
+				cfg->bvhPoseRotsA.last().y = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[4]));
+				cfg->bvhPoseRotsA.last().z = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[5]));
+				cfg->bvhPoseRotsB.increment();
+				cfg->bvhPoseRotsB.last().x = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[6]));
+				cfg->bvhPoseRotsB.last().y = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[7]));
+				cfg->bvhPoseRotsB.last().z = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[8]));
+				cfg->axesFixRotsA.increment();
+				cfg->axesFixRotsA.last().x = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[9]));
+				cfg->axesFixRotsA.last().y = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[10]));
+				cfg->axesFixRotsA.last().z = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[11]));
+				cfg->axesFixRotsB.increment();
+				cfg->axesFixRotsB.last().x = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[12]));
+				cfg->axesFixRotsB.last().y = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[13]));
+				cfg->axesFixRotsB.last().z = mDegToRad(dAtof(resultSet->vRows[i]->vColumnValues[14]));
+				nc++;
+			}
+		}
+		if (rc>0) Con::printf("Found %d bvh profile nodes in the database.",rc);
+
+	}
+
+	//Now, sort by dts node order. 
+	Vector <S32> sortNodes;
+	for (U32 i=0; i<nc; i++)
+	{
+		sortNodes.increment();
+		sortNodes.last() = cfg->dtsNodes[i];
+	}	
+	for (U32 i=0; i<nc; i++)
+	{
+		for (U32 j=0; j<nc-1; j++)
+		{
+			S32 temp;
+			if (sortNodes[j] > sortNodes[j+1]) 
+			{
+				temp = sortNodes[j];
+				sortNodes[j] = sortNodes[j+1];
+				sortNodes[j+1] = temp;
+			}
+		}
+	}
+
+	for (U32 i=0; i<nc; i++)
+		for (U32 j=0; j<nc; j++)
+			if (cfg->dtsNodes[j] == sortNodes[i]) 
+			{
+				cfg->orderNodes.increment();
+				cfg->orderNodes.last() = j;
+			}
+
+	cfg->numBvhNodes = nc;
+	cfg->numDtsNodes = nc;
+	cfg->numNodeGroups = 5; //FIX, need to make this smarter!
+	
+	return nc;
+}
+
+U32 PhysicsShape::importBvhSkeleton(const char *bvhFile,const char *profileName)
+{//HERE:  time to turn off the *cfg part of this function, we will load that up later from the database when
+	//we need it.  For now just insert into the DB from the BVH file.  Whoops, except we can't do that easily
+	//because it uses the cfg object to store all the data as it loads it, and then reads from that to insert to db.
+	U32 jc=0,currBvhNode=0,nodeGroup=0,numChannels=0,jloop=0;//WARNING added =0 to currBvhNode not sure if this will cause problems. 
+	U32 bvhProfileSkeleton_id = 0;
+	S32 newParent = -1;
+	char name[255], tempc[255];
+	char chan1[10], chan2[10], chan3[10];
+	char buf[2500];
+	char *bufp;
+	bool keepGoing,loadingJoints;//WARNING isRelevant,
+
+	Point3F p,r;
+	Point3F pos3[MAX_BVH_NODES];
+	Point3F rot3[MAX_BVH_NODES];
+	S32 profile_id;
+
+	bvhCfgData kCfg;
+	kCfg.numBvhNodes = 0;
+	kCfg.numDtsNodes = 0;
+	kCfg.numNodeGroups = 5;//FIX
+	bvhCfgData *cfg = &kCfg; 
+
+	SQLiteObject *sql = PHYSICSMGR->mSQL;//dynamic_cast<nxPhysManager*>(mPM)->getSQL();
+
+	char id_query[512],insert_query[512];
+	int result;
+	sqlite_resultset *resultSet;
+
+	FILE *fp;
+	
+	fp = fopen(bvhFile,"r");
+	if (fp==NULL) 
+	{
+		Con::errorf("ERROR: can't open bvh file: %s",bvhFile);
+		return 0;
+	} else Con::errorf("opened bvhFile: %s",bvhFile);
+
+	
+	//First, make a new profile, get the new id from it, and then you have your profile_id.
+	//Starting with hard coded scale. Before you get here, in script, double check for unique name.
+	sprintf(insert_query,"INSERT INTO bvhProfile (name,scale) VALUES ('%s',0.025641);",profileName);
+	sql->ExecuteSQL(insert_query);
+	
+	sprintf(id_query,"SELECT last_insert_rowid() AS id;");
+	result = sql->ExecuteSQL(id_query);
+	
+	resultSet = sql->GetResultSet(result);
+	profile_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+	sql->ClearResultSet(result);
+
+	Con::printf("inserted a profile: %d",profile_id);
+	
+	//Oh, but I need a name for the profile, which I should grab from the user and send to here - profileName.
+	
+	//Load all nodes from the BVH
+	fgets(buf,250,fp); // HIERARCHY
+	fgets(buf,250,fp); // ROOT
+	dSscanf(buf,"%s %s",&tempc,&name);	
+	Con::printf("base node name: %s",name);
+
+	//if (!dStrcmp(name,cfg->bvhNames[0].c_str()))
+	cfg->bvhNodes.increment();
+	cfg->bvhNodes.last() = 0;//Still necessary if we use node indices in the cfg.
+	currBvhNode = 1;//Use this to track our next possible active bvh node index.	
+
+	cfg->joints.increment();
+	cfg->joints.last().parent = -1;
+	cfg->joints.last().name = name;
+	fgets(buf,250,fp); // {
+	fgets(buf,250,fp);// OFFSET x y z
+	dSscanf(buf,"  OFFSET %f %f %f",&p.x,&p.y,&p.z);
+	cfg->joints.last().offset = p;
+	fgets(buf,250,fp);// CHANNELS n ...
+	dSscanf(buf,"  CHANNELS %d",&numChannels);
+	Con::printf("base BVH node position: %f %f %f",p.x,p.y,p.z); 
+
+	if (numChannels==6)
+		dSscanf(buf,"  CHANNELS %d %s %s %s %s %s %s",&numChannels,&tempc,&tempc,&tempc,&chan1,&chan2,&chan3);
+	else if (numChannels==3)
+		dSscanf(buf,"  CHANNELS %d %s %s %s",&numChannels,&chan1,&chan2,&chan3);
+
+	cfg->joints.last().channels = numChannels;
+
+	//Gotta sort out what order the rotations come in, PER NODE.
+	if (chan1[0]=='X') cfg->joints.last().chanrots[0] = 0;
+	else if (chan1[0]=='Y') cfg->joints.last().chanrots[0] = 1;
+	else if (chan1[0]=='Z') cfg->joints.last().chanrots[0] = 2;
+	if (chan2[0]=='X') cfg->joints.last().chanrots[1] = 0;
+	else if (chan2[0]=='Y') cfg->joints.last().chanrots[1] = 1;
+	else if (chan2[0]=='Z') cfg->joints.last().chanrots[1] = 2;
+	if (chan3[0]=='X') cfg->joints.last().chanrots[2] = 0;
+	else if (chan3[0]=='Y') cfg->joints.last().chanrots[2] = 1;
+	else if (chan3[0]=='Z') cfg->joints.last().chanrots[2] = 2;
+
+	//Con::printf("JOINT %d: %s chanrots %d %d %d",0,joints[0].name,joints[0].chanrots[0],joints[0].chanrots[1],joints[0].chanrots[2]);
+	fgets(buf,250,fp); 
+	bufp = dStrtok(buf," \t\n");
+
+	loadingJoints = true;
+	while (loadingJoints)
+	{
+		keepGoing = true;
+		while (keepGoing)
+		{
+			char tempOne[255];
+			sprintf(tempOne,"JOINT");
+			if (!dStrstr(bufp,tempOne)) 
+			{ 
+				keepGoing = false; //End Site
+				fgets(buf,250,fp);//{
+				fgets(buf,250,fp);//terminal OFFSET x y z, DON'T ignore it
+				bufp = dStrtok(buf," \t\n");//"OFFSET"
+				F32 X,Y,Z;
+				bufp = dStrtok(NULL," \t\n"); dSscanf(bufp,"%f",&X);
+				bufp = dStrtok(NULL, " \t\n"); dSscanf(bufp,"%f",&Y);
+				bufp = dStrtok(NULL, " \t\n"); dSscanf(bufp,"%f",&Z);
+				nodeGroup++;
+				cfg->endSiteOffsets.increment();
+				cfg->endSiteOffsets.last().set(X,Y,Z);
+				//Con::printf("End Site offset:  %f %f %f",X,Y,Z);
+				fgets(buf,250,fp);//}
+				break; 
+			}
+			jc++;
+			cfg->joints.increment();
+			if (newParent>=0) {
+				cfg->joints.last().parent = newParent;
+				newParent = -1;
+			} else cfg->joints.last().parent = jc-1;
+
+			bufp = dStrtok(NULL," \t\n");
+			dSscanf(bufp,"%s",name);				
+			cfg->joints.last().name = name;
+			cfg->nodeGroups.increment();
+			cfg->nodeGroups.last() = nodeGroup;
+			Con::printf("joint %d %s nodeGroup: %d",jc,name,nodeGroup);
+			if (1)//(cfg->usingNames)
+			{
+				if (1)//(!dStrcmp(name,cfg->bvhNames[currBvhNode]))
+				{
+					currBvhNode++;
+					cfg->bvhNodes.increment();
+					cfg->bvhNodes.last() = jc;
+				}
+			}
+			fgets(buf,250,fp);//{
+			fgets(buf,250,fp);//OFFSET x y z
+			bufp = dStrtok(buf," \t\n");//"OFFSET"
+			bufp = dStrtok(NULL," \t\n"); dSscanf(bufp,"%f",&(cfg->joints.last().offset.x));
+			bufp = dStrtok(NULL, " \t\n"); dSscanf(bufp,"%f",&(cfg->joints.last().offset.y));
+			bufp = dStrtok(NULL, " \t\n"); dSscanf(bufp,"%f",&(cfg->joints.last().offset.z));
+
+			fgets(buf,250,fp);//CHANNELS n s s s s s s
+			bufp = dStrtok(buf," \t\n");//"CHANNELS"
+			bufp = dStrtok(NULL," \t\n"); dSscanf(bufp,"%d",&(cfg->joints.last().channels));
+			if (cfg->joints.last().channels==6) {
+				bufp = dStrtok(NULL," \t\n"); 
+				bufp = dStrtok(NULL," \t\n"); 
+				bufp = dStrtok(NULL," \t\n"); 
+			}
+			bufp = dStrtok(NULL," \t\n"); dSscanf(bufp,"%s",&chan1);
+			bufp = dStrtok(NULL," \t\n"); dSscanf(bufp,"%s",&chan2);
+			bufp = dStrtok(NULL," \t\n"); dSscanf(bufp,"%s",&chan3);
+			//This is ugly but it's not worth rewriting chan1 etc. as 2d array.
+			//Gotta sort out what order the rotations come in, PER NODE.
+			if (chan1[0]=='X') cfg->joints.last().chanrots[0] = 0;
+			else if (chan1[0]=='Y') cfg->joints.last().chanrots[0] = 1;
+			else if (chan1[0]=='Z') cfg->joints.last().chanrots[0] = 2; 
+			if (chan2[0]=='X') cfg->joints.last().chanrots[1] = 0;
+			else if (chan2[0]=='Y') cfg->joints.last().chanrots[1] = 1;
+			else if (chan2[0]=='Z') cfg->joints.last().chanrots[1] = 2;
+			if (chan3[0]=='X') cfg->joints.last().chanrots[2] = 0;
+			else if (chan3[0]=='Y') cfg->joints.last().chanrots[2] = 1;
+			else if (chan3[0]=='Z') cfg->joints.last().chanrots[2] = 2;
+
+			if (!fgets(buf,250,fp)) break;
+			bufp = dStrtok(buf," \t\n");
+		}
+		//fgets(buf,250,fp);// JOINT?
+
+		//HERE: back out of the nested curly braces, checking for new JOINTs and decrementing jloop each time.
+
+		keepGoing = true;
+		newParent = jc;//cfg->joints[jc].parent;
+		while (keepGoing)
+		{
+			if (!fgets(buf,250,fp)) 
+			{
+				keepGoing = false;
+				loadingJoints = false;
+				break;
+			}
+			
+			bufp = dStrtok(buf," \n\t");
+			char tempOne[40],tempTwo[40],tempThree[40];
+			sprintf(tempOne,"}");
+			sprintf(tempTwo,"JOINT");
+			sprintf(tempThree,"MOTION");
+			if (dStrstr(bufp,tempOne))
+			{
+				//jloop++;
+				newParent = cfg->joints[newParent].parent;
+			} else if (dStrstr(bufp,tempTwo)) {
+				keepGoing = false;
+			} else if (dStrstr(bufp,tempThree)) {
+				Con::printf("BVH -- loaded skeleton.");
+				keepGoing = false;
+				loadingJoints = false;
+			} else {
+				Con::errorf("BVH -- problem, found no frames.");
+				fclose(fp);
+				return jc;
+			}
+		}
+	}
+	fclose(fp);
+
+	//NOW: add all this to the database, if we have no joints for this profile
+
+	sprintf(id_query,"SELECT id FROM bvhProfileNode WHERE profile_id = %d AND channels > 0;",profile_id);
+	result = sql->ExecuteSQL(id_query);
+	resultSet = sql->GetResultSet(result);
+	if (resultSet->iNumRows == 0)//For now, we are loading the skeleton from the actual bvh file always, instead of
+	{//from the database.  Later it might be helpful to let people make adjustments to their bvh skeleton for some reason
+		//Con::printf("loadBvhSkeleton: loading %d joints into the database, profile_id %d",jc,profile_id);
+		for (U32 i=0;i<=jc;i++)//and save it to the DB, and then read from that for use in-program and for saving out bvhs.
+		{
+			sprintf(insert_query,"INSERT INTO bvhProfileNode (profile_id,parent_id,name,offset_x,offset_y,offset_z,channels,channelRots_0,channelRots_1,channelRots_2) VALUES (%d,%d,'%s',%f,%f,%f,%d,%d,%d,%d);",
+				profile_id,cfg->joints[i].parent,cfg->joints[i].name.c_str(),cfg->joints[i].offset.x,cfg->joints[i].offset.y,cfg->joints[i].offset.z,cfg->joints[i].channels,cfg->joints[i].chanrots[0],cfg->joints[i].chanrots[1],cfg->joints[i].chanrots[2]);
+			//FIX: parent will be wrong, need parent_id from DB stored earlier
+			result = sql->ExecuteSQL(insert_query);
+		}
+	}
+
+	//End Sites
+	for (U32 i=0;i<nodeGroup;i++)
+	{
+		sprintf(insert_query,"INSERT INTO bvhProfileNode (profile_id,parent_id,name,offset_x,offset_y,offset_z,channels,channelRots_0,channelRots_1,channelRots_2) VALUES (%d,-1,'End Site',%f,%f,%f,0,0,0,0);",
+			profile_id,cfg->endSiteOffsets[i].x,cfg->endSiteOffsets[i].y,cfg->endSiteOffsets[i].z);
+		//HMMM very almost made an endSiteParents[] array to store which node was each end site's parent, but then realized 
+		//that it really doesn't matter at all, because they are being used whenever a chain ends and they're used in order.
+		result = sql->ExecuteSQL(insert_query);	
+	}
+
+	sprintf(id_query,"SELECT id FROM bvhProfileSkeleton WHERE profile_id = %d AND skeleton_id = %d;",
+		profile_id,mSkeletonID);
+	result = sql->ExecuteSQL(id_query);
+	resultSet = sql->GetResultSet(result);
+	if (resultSet->iNumRows == 1)
+		bvhProfileSkeleton_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+	else if (resultSet->iNumRows == 0)
+	{
+		sprintf(id_query,"INSERT INTO bvhProfileSkeleton (profile_id,skeleton_id) VALUES (%d,%d);",
+			profile_id,mSkeletonID);
+		result = sql->ExecuteSQL(id_query);
+	}
+
+	//Now wait a second, why are we doing this here? We may not need all the bvh nodes, and we don't know how they map
+	//to the model nodes yet either. Maybe we should wait for the UI to dictate the mapping.
+	/*
+	if (bvhProfileSkeleton_id)
+	{
+		for (U32 i=0;i<=jc;i++)//and save it to the DB, and then read from that for use in-program and for saving out bvhs.
+		{
+			//sprintf(insert_query,"INSERT INTO bvhProfileNode (profile_id,parent_id,name,offset_x,offset_y,offset_z,channels,channelRots_0,channelRots_1,channelRots_2) VALUES (%d,%d,'%s',%f,%f,%f,%d,%d,%d,%d);",
+			//	profile_id,cfg->joints[i].parent,cfg->joints[i].name,cfg->joints[i].offset.x,cfg->joints[i].offset.y,cfg->joints[i].offset.z,cfg->joints[i].channels,cfg->joints[i].chanrots[0],cfg->joints[i].chanrots[1],cfg->joints[i].chanrots[2]);
+			sprintf(insert_query,"INSERT INTO bvhProfileSkeletonNode (bvhProfileSkeleton_id,bvhNodeName,nodeGroup,poseRotA_x,poseRotA_y,poseRotA_z,poseRotB_x,poseRotB_y,poseRotB_z,fixRotA_x,fixRotA_y,fixRotA_z,fixRotB_x,fixRotB_y,fixRotB_z) VALUES (%d,'%s',%d,%1.1f,%1.1f,%1.1f,%1.1f,%1.1f,%1.1f,%1.1f,%1.1f,%1.1f,%1.1f,%1.1f,%1.1f);",
+				bvhProfileSkeleton_id,cfg->joints[i].name.c_str(),cfg->nodeGroups[i],0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+			//FIX: parent will be wrong, need parent_id from DB stored earlier
+			result = sql->ExecuteSQL(insert_query);
+		}
+	} else {
+		Con::printf("Could not load a bvh profile skeleton id.");
+	}*/
+
+	return jc;
+}
+
+U32 PhysicsShape::loadBvhSkeleton(bvhCfgData *cfg, U32 profile_id)
+{
+	U32 jc=0;
+	char select_query[512];
+	S32 numEndSites = 0;
+	
+	SQLiteObject *kSQL = PHYSICSMGR->mSQL;//MegaMotion/openSimEarth
+	if (!profile_id) return 0;
+
+	//WARNING char id_query[512],insert_query[512]; 
+	int result;
+	sqlite_resultset *resultSet;
+	if (profile_id)
+	{
+		sprintf(select_query,"SELECT name,parent_id,\
+									offset_x,offset_y,offset_z,channels, \
+									channelRots_0,channelRots_1,channelRots_2 \
+									FROM bvhProfileNode WHERE profile_id = %d;",profile_id);//channels > 0 = End Site
+		result = kSQL->ExecuteSQL(select_query);
+		resultSet = kSQL->GetResultSet(result);
+		jc = resultSet->iNumRows;
+		for (U32 i=0;i<jc;i++)
+		{
+			S32 channels = dAtoi(resultSet->vRows[i]->vColumnValues[5]);
+			if (channels > 0)//this is a regular node
+			{
+				Con::printf("bvh cfg node name: %s",resultSet->vRows[i]->vColumnValues[0]);
+				cfg->joints.increment();
+				cfg->joints.last().name = resultSet->vRows[i]->vColumnValues[0];
+				cfg->joints.last().parent = dAtoi(resultSet->vRows[i]->vColumnValues[1]);
+				cfg->joints.last().offset.x = dAtof(resultSet->vRows[i]->vColumnValues[2]);
+				cfg->joints.last().offset.y = dAtof(resultSet->vRows[i]->vColumnValues[3]);
+				cfg->joints.last().offset.z = dAtof(resultSet->vRows[i]->vColumnValues[4]);
+				cfg->joints.last().channels = channels;//dAtoi(resultSet->vRows[i]->vColumnValues[5]);
+				cfg->joints.last().chanrots[0] = dAtoi(resultSet->vRows[i]->vColumnValues[6]);
+				cfg->joints.last().chanrots[1] = dAtoi(resultSet->vRows[i]->vColumnValues[7]);
+				cfg->joints.last().chanrots[2] = dAtoi(resultSet->vRows[i]->vColumnValues[8]);
+			} else {//this is an End Site
+				F32 X,Y,Z;
+				X = dAtof(resultSet->vRows[i]->vColumnValues[2]);
+				Y = dAtof(resultSet->vRows[i]->vColumnValues[3]);
+				Z = dAtof(resultSet->vRows[i]->vColumnValues[4]);
+				cfg->endSiteOffsets.increment();
+				cfg->endSiteOffsets.last() = Point3F(X,Y,Z);
+				numEndSites++;
+			}
+			Con::printf("Joint %d offset: (%f, %f, %f)",i,cfg->joints[i].offset.x,cfg->joints[i].offset.y,cfg->joints[i].offset.z);
+		}
+	}
+	
+	return jc - numEndSites;
+}
+
+DefineEngineMethod( PhysicsShape, importBvhSkeleton, void, (const char *bvhFile,const char *profileName),,
+   "@brief.\n\n")
+{ 
+	object->importBvhSkeleton(bvhFile,profileName);
+
+	return;
+}
+
+void PhysicsShape::importBvh(bool importGround,const char *bvhFile,const char *bvhProfile,bool cache_dsqs)
+{
+	U32 pc,rc,jc,jloop,profile_id=0,bvhProfileSkeleton_id=0; //WARNING currBvhNode,
+	pc = 0; rc = 0; jc = 0; jloop = 0;
+	//WARNING U32 sampleRate = 1;//3
+	//WARNING S32 newParent = -1;
+	S32 numTrans = 0;
+	S32 numFrames = 0;
+	S32 numSamples = 0;
+	F32 frameTime = 0.0;
+	QuatF rot,q;
+	Quat16 q16;
+	Vector<QuatF> rots;//FIX - make variable! 
+	U32 numRots = 0; 							
+	Vector<Point3F> trans;//FIX - make variable!
+	Point3F p,r;
+
+	Point3F pos3[MAX_BVH_NODES];
+	Point3F rot3[MAX_BVH_NODES];
+	//bvhJoint joints[MAX_BVH_NODES];
+	//S32 bvhNodes[MAX_BVH_NODES];
+	//S32 dtsNodes[MAX_BVH_NODES];
+	//S32 sortNodes[MAX_BVH_NODES];
+	//S32 orderNodes[MAX_BVH_NODES];//from initial order to shape order
+	//EulerF bvhPoseRotsA[MAX_BVH_NODES],bvhPoseRotsB[MAX_BVH_NODES];//allow for two later, if we need it
+	//EulerF axesFixRotsA[MAX_BVH_NODES],axesFixRotsB[MAX_BVH_NODES];
+	//String bvhNames[MAX_BVH_NODES];
+
+	bool isRelevant,loadingDB=false;//WARNING ,loadingJoints keepGoing,
+	char buf[2500];//WARNING ,scaleUnits[10],bvh_name[255]
+	char *bufp;
+	bvhCfgData kCfg;
+	//bvhCfgData kCfg2;
+	FILE *fp = NULL;
+	FILE *fpc = NULL;
+	String seqDir,seqName,dsqFile;
+
+	//The new, 1.8 way to do it:
+	const String myPath = "art/shapes/Daz3D/Michael4";//mShapeInstance->getShapeResource()->getPath().getPath();
+	const String myFileName = mShapeInstance->getShapeResource()->getPath().getFileName();
+	const String myFullPath = mShapeInstance->getShapeResource()->getPath().getFullPath();
+	
+	Con::printf("starting importBVH, myPath %s, fullPath %s",myPath.c_str(),myFullPath.c_str());
+	
+
+	TSShape *kShape = mShape;
+	
+	F32 shapeSize = 2.4;//FIX: this was an arbitrary variable in EM, need to make it part of cfg somehow.
+	S32 skeleton_id = 1;//FIX: put it in physicsShape, or something, or let user choose.
+	S32 importSampleRate = 1;
+
+	seqDir = bvhFile;
+	U32 nameLength = dStrlen(dStrrchr(seqDir.c_str(),'/'))-1;
+	seqName = seqDir;
+	seqName.erase(0,seqDir.length()-nameLength);
+	seqDir.erase(seqDir.length()-nameLength,nameLength);
+
+	seqName.replace(' ','_');
+	seqName.replace(".BVH","");
+	seqName.replace(".bvh","");//Another way to do it...
+
+	fp = fopen(bvhFile,"r");
+	if (fp==NULL) 
+	{
+		Con::errorf("ERROR: can't open bvh file: %s",bvhFile);
+		return;
+	} else Con::errorf("opened bvhFile: %s",bvhFile);
+
+	//FIRST, we have a bvh profile name
+	//HERE: check in the database for any bvhProfileSkeletonNodes attached to this bvhSkeleton.  If there are none, then this 
+	//is a new profile, so look for a default.cfg to load the data from.  Otherwise, load it from the DB and go on.
+
+	SQLiteObject *kSQL = PHYSICSMGR->mSQL;//MegaMotion/openSimEarth
+
+	char id_query[512];//WARNING ,insert_query[512]
+	int result;
+	sqlite_resultset *resultSet;
+	sprintf(id_query,"SELECT id FROM bvhProfile WHERE name = '%s';",bvhProfile);
+	Con::printf("%s",id_query);
+	result = kSQL->ExecuteSQL(id_query);
+	resultSet = kSQL->GetResultSet(result);
+	if (resultSet->iNumRows == 1)
+		profile_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+
+	sprintf(id_query,"SELECT id FROM bvhProfileSkeleton WHERE profile_id = %d AND skeleton_id = %d;",
+		profile_id,skeleton_id);
+	Con::printf("%s",id_query);
+	result = kSQL->ExecuteSQL(id_query);
+	resultSet = kSQL->GetResultSet(result);
+	if (resultSet->iNumRows == 1)
+		bvhProfileSkeleton_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+
+	loadingDB = false;
+	if (bvhProfileSkeleton_id)
+	{
+		sprintf(id_query,"SELECT id FROM bvhProfileSkeletonNode WHERE bvhProfileSkeleton_id = %d;",
+			bvhProfileSkeleton_id);
+		Con::printf("%s",id_query);
+		result = kSQL->ExecuteSQL(id_query);
+		resultSet = kSQL->GetResultSet(result);
+		if (resultSet->iNumRows > 0)
+			loadingDB = true;
+	}
+	
+	////////////////////////////////////////////////////////////////////////////////////////////////
+	//HERE: strip all but the filename out of the chosen path, then add default.cfg to that.  
+	if (loadingDB) 
+	{
+		rc = loadBvhCfg(&kCfg,profile_id);
+		jc = loadBvhSkeleton(&kCfg,profile_id);
+		Con::printf("LOADED BVH CFG, rc = %d, jc = %d, bvhNodes size %d",rc,jc,kCfg.bvhNodes.size());
+	} else {
+		Con::printf("loadingDB = FALSE");
+	}
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+	Con::printf("Made it to the point of starting to load frames. bvhNames[0] %s, joints[0] %s",
+		kCfg.bvhNames[0].c_str(),kCfg.joints[0].name.c_str());
+	
+	//Now, with skeleton loaded, go back and figure out the right bvh nodes based on names from cfg.
+	for (U32 i=0;i<rc;i++)
+		for (U32 j=0;j<jc;j++)
+			if (!dStrcmp(kCfg.bvhNames[i].c_str(),kCfg.joints[j].name.c_str()))
+			{
+				kCfg.bvhNodes[i] = j;
+				Con::printf("Found bvh node %d %s",i,kCfg.bvhNames[i].c_str());
+			}
+	//NOW: all done loading joints.  Array is filled up and available.  Next step is loading all the motion
+	//frames, after picking up the numFrames and frameLength variables.
+		
+
+	if (kCfg.bvhNodes[rc-1]>jc) {//First, sanity check.
+				Con::errorf("BVH -- problem, nodes referenced in cfg that are not in bvh file.");
+				fclose(fp);
+				return;
+	}
+	F32 pr[3];
+	
+	//OOPS!  Now that we are not reading the skeleton out of the bvh file anymore, we can't assume we've 
+	//moved the pointer down to the "Frames" line anymore.  Gotta suck up all lines before this point.
+	
+	Con::printf("Made it to the point of starting to load frames.");
+
+	fgets(buf,2500,fp);
+	bufp = dStrtok(buf," \n\t");
+	while (dStrnicmp(buf,"Frames:",7))//While NOT "Frames:", keep sucking up text.
+	{
+		fgets(buf,2500,fp);//Frames: n
+	}
+	//bufp = dStrtok(NULL," \t\n");
+	//bufp = dStrtok(NULL," \t\n");
+	if (!dStrncmp(buf,"Frames:",7))
+		dSscanf(buf,"Frames: %d",&numFrames);//Hope this works in all cases...
+	else if (!dStrncmp(buf,"FRAMES:",7))
+		dSscanf(buf,"FRAMES: %d",&numFrames);
+
+	fgets(buf,2500,fp);//Frame Time: f
+	bufp = dStrtok(buf," \n\t");//"Frame"
+	bufp = dStrtok(NULL," \t\n");//"Time:"
+	bufp = dStrtok(NULL," \t\n");
+	dSscanf(bufp,"%f",&frameTime);
+
+	//Con::printf("Frames %d, time %f",numFrames,frameTime);
+
+	if (!numFrames || (numFrames<=0)) 
+	{
+		Con::errorf("BVH -- couldn't read numFrames, bailing.");
+		fclose(fp);
+		return;
+	}
+
+	for (U32 c=0;c<numFrames;c++)
+	{
+		if (!fgets(buf,2500,fp)) 
+		{
+			Con::errorf("BVH -- not enough frames, bailing out.");
+			fclose(fp);
+			return;
+		}
+		//Con::printf("BVH line: %s  %d",buf,jc);
+
+		pc=0;
+		//for (U32 d=0; d < numJoints;d++)
+		for (U32 d=0; d < jc; d++)//rc
+		{
+			if (d==0) 
+				bufp = dStrtok(buf," \t\n");
+			else 
+				bufp = dStrtok(NULL, " \t\n");
+
+			if (kCfg.joints[d].channels == 3)
+			{
+				dSscanf(bufp,"%f",&pr[0]);
+				bufp = dStrtok(NULL, " \t\n");
+				dSscanf(bufp,"%f",&pr[1]);
+				bufp = dStrtok(NULL, " \t\n");
+				dSscanf(bufp,"%f",&pr[2]);
+
+
+				isRelevant = 0;
+				//ACTUALLY: this is all currently irrelevant, bvhNodes[k] = k in practice,
+				//until we start actually skipping nodes (like fingers etc) from the bvh.
+				//HERE: only do this if j is one of the relevant nodes.
+				for (U32 k=0;k<rc;k++) {
+					if (kCfg.bvhNodes[k]==d) isRelevant = 1;
+				//	if (d==15)
+				//	{
+				//		Con::printf("bvhnodes %d: %d",k,kCfg.bvhNodes[k]);
+				//	}
+				}
+				if (isRelevant) 
+				{
+					if (kCfg.joints[pc].chanrots[0]==0) p.x = pr[0];//kCfg.bvhNodes[d]
+					else if (kCfg.joints[pc].chanrots[0]==1) p.y = pr[0];
+					else if (kCfg.joints[pc].chanrots[0]==2) p.z = pr[0];
+					if (kCfg.joints[pc].chanrots[1]==0) p.x = pr[1];
+					else if (kCfg.joints[pc].chanrots[1]==1) p.y = pr[1];
+					else if (kCfg.joints[pc].chanrots[1]==2) p.z = pr[1];
+					if (kCfg.joints[pc].chanrots[2]==0) p.x = pr[2];
+					else if (kCfg.joints[pc].chanrots[2]==1) p.y = pr[2];
+					else if (kCfg.joints[pc].chanrots[2]==2) p.z = pr[2];
+					rot3[pc++] = p;
+					//Con::printf("node %d is relevant %f %f %f",d,pr[0],pr[1],pr[2]);
+				}
+			}
+			else
+			{//ignore isRelevant, assuming this will only happen on root node, do cleanup otherwise.
+				dSscanf(bufp,"%f",&p.x);
+				bufp = dStrtok(NULL, " \t\n");
+				dSscanf(bufp,"%f",&p.y);
+				bufp = dStrtok(NULL, " \t\n");
+				dSscanf(bufp,"%f",&p.z);
+				pos3[pc] = p;
+
+				//HERE: note that this is loading z,x,y order, bvh rule ... ??
+				bufp = dStrtok(NULL, " \t\n");
+				dSscanf(bufp,"%f",&pr[0]);
+				bufp = dStrtok(NULL, " \t\n");
+				dSscanf(bufp,"%f",&pr[1]);
+				bufp = dStrtok(NULL, " \t\n");
+				dSscanf(bufp,"%f",&pr[2]);
+				//Con::printf("node %d is not relevant %f %f %f",d,pr[0],pr[1],pr[2]);
+				if (kCfg.joints[d].chanrots[0]==0) p.x = pr[0];
+				else if (kCfg.joints[d].chanrots[0]==1) p.y = pr[0];
+				else if (kCfg.joints[d].chanrots[0]==2) p.z = pr[0];
+				if (kCfg.joints[d].chanrots[1]==0) p.x = pr[1];
+				else if (kCfg.joints[d].chanrots[1]==1) p.y = pr[1];
+				else if (kCfg.joints[d].chanrots[1]==2) p.z = pr[1];
+				if (kCfg.joints[d].chanrots[2]==0) p.x = pr[2];
+				else if (kCfg.joints[d].chanrots[2]==1) p.y = pr[2];
+				else if (kCfg.joints[d].chanrots[2]==2) p.z = pr[2];
+				rot3[pc++] = p;
+			}
+			
+			//Con::printf("Rot3:  %f %f %f  sample rate %d",rot3[pc-1].x,rot3[pc-1].y,rot3[pc-1].z,mImportSampleRate);
+		}
+		//if (c % sampleRate == 0)
+		if (c % importSampleRate == 0)
+		{
+			//Con::printf("recording sample: %d, rc = %d",numSamples,rc);
+			numSamples++;
+			MatrixF m,matX,matY,matZ,mat1,mat2,mat3,matDef,matBvhPose,matBvhPoseA,matBvhPoseB;
+			MatrixF matAxesFix,matAxesFixA,matAxesFixB;
+			MatrixF matAxesUnfix,matWorldFix,matWorldUnfix;
+			EulerF eulX,eulY,eulZ,eulFix,eulWorldFix;
+
+			//ASSUMPTION: only root node has translation data.  
+			//FIX: do not assume Y is up, this is not part of the BVH specification, it is just common, so far.
+			//Add UI controls on the form specifying up axis and handedness.
+			trans.increment();
+			trans.last().x = -pos3[0].x;//do some sign flipping and coord swapping to 
+			trans.last().y = pos3[0].z;//get from left-handed Y up to right-handed Z up.
+			trans.last().z = pos3[0].y;
+
+			//And then deal with the scale difference between bvh translations and dts, this can be huge.
+			//F32 transScale = kShape->defaultTranslations[0].z / pos3[0].y;
+			//Con::errorf("transScale: %f",transScale);
+
+			//OOH... source of weird base node translation errors!  When we're not in an upright position, this does NOT WORK.  Need 
+			//to get one multiplier from abdomen height in a t-pose, or else find some other way to measure it, or do something else entirely.
+
+
+			trans.last() *= kCfg.bvhScale;
+			//Con::printf("bvh node translation:  %d   %f %f %f",i,trans[numTrans].x,trans[numTrans].y,trans[numTrans].z);
+			//Con::errorf("Importing bvh, base translation: %f %f %f",trans[numTrans].x,trans[numTrans].y,trans[numTrans].z);
+			numTrans++;//Any reason not to just use numSamples here?
+
+			//for (U32 j=0; j<numJoints;j++)
+			for (U32 j=0; j<rc;j++)
+			{
+				//isRelevant = 0;
+				//HERE: only do this if j is one of the relevant nodes.
+				//for (U32 k=0;k<rc;k++) {
+				//	if (bvhNodes[k]==j) isRelevant = 1;
+				//}
+				//if (isRelevant)
+				//{
+					matBvhPoseA.set(kCfg.bvhPoseRotsA[j]);
+					matBvhPoseB.set(kCfg.bvhPoseRotsB[j]);
+					matBvhPose.mul(matBvhPoseA,matBvhPoseB);
+
+					matAxesFixA.set(kCfg.axesFixRotsA[j]);
+					matAxesFixB.set(kCfg.axesFixRotsB[j]);
+					matAxesFix.mul(matAxesFixA,matAxesFixB);
+
+					matAxesUnfix = matAxesFix;
+					matAxesUnfix.inverse();
+
+					//Swap from lefthanded bvh to righthanded Torque.
+					eulX.set(mDegToRad(rot3[j].x),0.0,0.0);
+					matX.set(eulX);
+					eulY.set(0.0,mDegToRad(-rot3[j].z),0.0);
+					matY.set(eulY);
+					eulZ.set(0.0,0.0,mDegToRad(-rot3[j].y));
+					matZ.set(eulZ);
+
+					m.identity();
+					m.mul(matBvhPose);
+					m.mul(matAxesFix);
+
+					//m.mul(matY);//(matZ);
+					//m.mul(matX);
+					//m.mul(matZ);//(matY);
+
+					//Even though I've changed the names of the axes, I still need to do the rotations in the order they came.
+					if (kCfg.joints[kCfg.bvhNodes[j]].chanrots[0]==0) mat1 = matX;
+					else if (kCfg.joints[kCfg.bvhNodes[j]].chanrots[0]==1) mat1 = matZ;
+					else if (kCfg.joints[kCfg.bvhNodes[j]].chanrots[0]==2) mat1 = matY;
+					if (kCfg.joints[kCfg.bvhNodes[j]].chanrots[1]==0) mat2 = matX;
+					else if (kCfg.joints[kCfg.bvhNodes[j]].chanrots[1]==1) mat2 = matZ;
+					else if (kCfg.joints[kCfg.bvhNodes[j]].chanrots[1]==2) mat2 = matY;
+					if (kCfg.joints[kCfg.bvhNodes[j]].chanrots[2]==0) mat3 = matX;
+					else if (kCfg.joints[kCfg.bvhNodes[j]].chanrots[2]==1) mat3 = matZ;
+					else if (kCfg.joints[kCfg.bvhNodes[j]].chanrots[2]==2) mat3 = matY;
+
+					m.mul(mat1);
+					EulerF eul1 = m.toEuler();
+					m.mul(mat2);
+					EulerF eul2 = m.toEuler();
+					m.mul(mat3);
+					EulerF eul3 = m.toEuler();
+
+					m.mul(matAxesUnfix);
+
+					//BLEND WAY:
+					//q.set(m);
+
+					//NON-BLEND WAY:
+					q16 = kShape->defaultRotations[kCfg.dtsNodes[j]];
+					q16.getQuatF(&q);
+
+					q.setMatrix(&matDef);
+					matDef.mul(m);
+					QuatF qFinal(matDef);
+					rots.increment();
+					rots.last() = qFinal;
+					numRots++;
+				//}
+			}
+		}
+		
+
+		//dSprintf(rotation,40,"%3.2f %3.2f %3.2f ",pos3[0].x,pos3[0].y,pos3[0].z);
+		//U32 len = dStrlen(rotation);
+		//dSprintf(line,40,rotation);
+		//for (U32 j=0; j<numJoints;j++)
+		//{
+		//	dSprintf(rotation,40,"%3.2f %3.2f %3.2f ",rot3[j].z,rot3[j].x,rot3[j].y);//HERE: 
+		//	dStrcat(line,rotation);
+		//}
+	}
+
+	fclose(fp);
+
+	Con::printf("Making a new sequence! frames %d",numFrames);
+	
+	//NOW, time to make a new sequence,
+	//and add it to the stack!
+
+	//for (U32 i=0;i<200;i++) dtsNodes[i] = -1;
+	//... and the reverse mapping, just in case I need it.
+	//for (U32 i=0;i<numJoints;i++) dtsNodes[dtsNodes[i]] = i;
+	
+	//DANGER: can you do this while you have an existing shapeInstance?  Change your underlying mShape in realtime?
+	//I bet not.  Maybe so, though.  
+	//[Actually, seems to mostly work, although there are occasional crashes, don't know if this is why.]
+	kShape->sequences.increment();
+	TSShape::Sequence & seq = kShape->sequences.last();
+	constructInPlace(&seq);
+
+	seq.numKeyframes = numSamples;
+	seq.duration = (F32)numFrames * frameTime;
+	seq.baseRotation = kShape->nodeRotations.size();
+	seq.baseTranslation = kShape->nodeTranslations.size();
+	seq.baseScale = 0;
+	seq.baseObjectState = 1;
+	seq.baseDecalState = 0;
+	seq.firstGroundFrame = kShape->groundTranslations.size();
+	if (0) seq.numGroundFrames = numSamples;//(importGround)//see note below, calling groundCaptureSeq instead.
+	else seq.numGroundFrames = 0;
+	seq.firstTrigger = kShape->triggers.size();
+	seq.numTriggers = 0;
+	seq.toolBegin = 0.0;
+	seq.flags = 0;//TSShape::Cyclic;// | TSShape::Blend;// | TSShape::MakePath;
+	seq.priority = 5;
+
+	//Con::errorf("New sequence!  numKeyframes %d, duration %f, baseRotation %d, baseTranslation %d",seq.numKeyframes,seq.duration,seq.baseRotation,seq.baseTranslation);
+	
+	seq.rotationMatters.clearAll();
+	for (U32 i=0;i<rc;i++) seq.rotationMatters.set(kCfg.dtsNodes[i]);//numJoints
+
+	seq.translationMatters.clearAll();
+	seq.translationMatters.set(0);//ASSUMPTION: only root node has position data
+
+	seq.scaleMatters.clearAll();
+	seq.visMatters.clearAll();
+	seq.frameMatters.clearAll();
+	seq.matFrameMatters.clearAll();
+	//seq.decalMatters.clearAll();
+	//seq.iflMatters.clearAll();
+
+   kShape->names.increment();
+   kShape->names.last() = StringTable->insert(seqName.c_str());
+   seq.nameIndex = kShape->findName(seqName.c_str());
+
+	for (U32 i=0;i<numSamples;i++)
+	{
+		//NOW, rotate this vector by the "fix" rotation of the base bodypart node.
+		MatrixF matAxesFixA,matAxesFixB,matAxesFix;
+		Point3F temp = trans[i];
+
+		if ((kCfg.bvhPoseRotsA[0].isZero())&&(!kCfg.axesFixRotsA[0].isZero()))
+		{//Hmm, needed this for Victoria (collada import) but it breaks Kork.  Making special case test here.
+			matAxesFixA.set(kCfg.axesFixRotsA[0]);
+			matAxesFixB.set(kCfg.axesFixRotsB[0]);
+			matAxesFix.mul(matAxesFixA,matAxesFixB);
+			matAxesFix.mulP(temp,&trans[i]);
+		}
+		if (0)//(importGround)//HERE: skipping this now, it is broken anyway, instead call TSShape::groundCaptureSeq later.
+		{
+			kShape->nodeTranslations.increment();
+			kShape->nodeTranslations[kShape->nodeTranslations.size()-1].x = 0.0;
+			kShape->nodeTranslations[kShape->nodeTranslations.size()-1].y = 0.0;
+			kShape->nodeTranslations[kShape->nodeTranslations.size()-1].z = trans[i].z;
+
+			kShape->groundRotations.increment();
+			kShape->groundRotations[kShape->groundRotations.size()-1].identity();
+
+			kShape->groundTranslations.increment();
+			kShape->groundTranslations[kShape->groundTranslations.size()-1].x = trans[i].x;
+			kShape->groundTranslations[kShape->groundTranslations.size()-1].y = trans[i].y;
+			kShape->groundTranslations[kShape->groundTranslations.size()-1].z = 0.0;
+		} else {
+			kShape->nodeTranslations.increment();
+			kShape->nodeTranslations[kShape->nodeTranslations.size()-1].x = trans[i].x;
+			kShape->nodeTranslations[kShape->nodeTranslations.size()-1].y = trans[i].y;
+			kShape->nodeTranslations[kShape->nodeTranslations.size()-1].z = trans[i].z;
+			//Con::printf("bvh node translation:  %d   %f %f %f",i,trans[i].x,trans[i].y,trans[i].z);
+		}
+	}
+
+	//for(U32 j=0;j<numJoints;j++)
+	for(U32 j=0;j<rc;j++)
+	{
+		Con::printf("recording sequence data, node %d",j);
+		for (U32 i=0;i<numSamples;i++)
+		{
+			//q16.set(rots[(i*numJoints)+orderNodes[j]]);
+			q16.set(rots[(i*rc) + kCfg.orderNodes[j]]);// 
+			//q16.set(rots[(i*rc) + j]);  
+			kShape->nodeRotations.increment();
+
+			if (0)//((j==mFirstNode)&&(importGround)) //(j==0)//?
+			{//HERE: make nodeRotations hold on to X and Y components, and save only Z component to groundRotations.
+				kShape->groundRotations[i] = q16;
+				kShape->nodeRotations[kShape->nodeRotations.size()-1].identity();
+			}
+			else
+				kShape->nodeRotations[kShape->nodeRotations.size()-1] = q16;
+		}
+	}
+	
+	//return;
+	/*
+	//Add "Permanent" adjustments.
+	if (mApplyBvhImport)
+	{
+		if (mBaseNodeSetPos.len()>0) setBaseNodePosRegion(kShape->sequences.size()-1,mBaseNodeSetPos,0.0,1.0);
+		if (mBaseNodeAdjustPos.len()>0) adjustBaseNodePosRegion(kShape->sequences.size()-1,mBaseNodeAdjustPos,0.0,1.0);
+		for (U32 i=0;i<mNodeSetRots.size();i++)
+			if (mNodeSetRots[i].rot.len()>0)
+				setNodeRotRegion(kShape->sequences.size()-1,mNodeSetRots[i].node,mNodeSetRots[i].rot,0.0,1.0);
+		for (U32 i=0;i<mNodeAdjustRots.size();i++)
+			if (mNodeAdjustRots[i].rot.len()>0)
+				adjustNodeRotRegion(kShape->sequences.size()-1,mNodeAdjustRots[i].node,mNodeAdjustRots[i].rot,0.0,1.0);
+	}*/
+
+	//NOW: do it the way that works, instead of doing it a different way in here.
+	if (importGround)
+	{
+		//Con::printf("import BVH: calling groundCaptureSeq, importGround = %d",importGround);
+		kShape->groundCaptureSeq(kShape->sequences.size()-1);
+	}
+	//TEMP:  wait...  A. The one flaw in this plan is the fact that keyframe editing does not work
+	//on ground frames, only base node translation and rotation - so you just killed base node editing here.
+	//Second, if I did have import ground true, does it work to ground capture twice?  Seems that
+	//I was relying on import ground being false, with checkbox invisible so it can't change. 
+	//kShape->groundCaptureSeq(kShape->sequences.size()-1);//Everything is just easier if I remove the option of not doing this.
+
+	//NOW: imported the bvh, and it should be working as a new sequence on my model.  However, 
+	//due to the frequent First-Time Playback Bug, odds are high that it doesn't play back 
+	//correctly.  And anyway, it would be nice to automatically save this dsq on import, just so 
+	//we have it and don't have to remember to save it later.  Do that now.
+	//FIX: add a checkbox to decide whether or not to do this.  If no, then delete the dsq file  
+	//immediately after loading it on the model for this session.  But in any event, assume in the 
+	//lack of other info that we are going to put the dsq in directory of the model, not the bvh. 
+
+
+	String dsqPath;
+	if (dStrlen(dsqFile)==0)
+	{
+		dsqPath = myPath + '/' + seqName;
+		//dsqPath = seqDir + seqName;//seqDir + '/' + seqName;
+	} else  {
+		//dsqPath = mypath + '/' + dsqFile;
+		dsqPath.insert(0,dsqFile);
+	}
+	
+	Con::printf("myPath %s, seqName %s dsqPath %s",myPath.c_str(),seqName.c_str(),dsqPath.c_str());
+
+	FileStream *outstream;
+	String dsqExt(".dsq");
+	if (!dStrstr(dsqPath.c_str(),".dsq")) dsqPath += dsqExt;
+	//if (!gResourceManager->openFileForWrite(outstream,dsqPath.c_str())) {
+	if ((outstream = FileStream::createAndOpen( dsqPath.c_str(), Torque::FS::File::Write))==NULL) {
+		Con::printf("whoops, name no good: %s!",dsqPath.c_str()); 
+	} else {
+		//kShape->exportSequences((Stream *)outstream);
+		kShape->exportSequence((Stream *)outstream,seq,1);//1 = save in old format (v24) for show tool
+		Con::printf("exported sequence, %s",dsqPath.c_str());
+		outstream->close();
+	}
+
+	//Now, load the sequence again, and drop the one we have... we hope this works.
+	//10/11/10 - we may get stuck back on the first frame import bug and have to drop and 
+	//reload the sequence, but we do not have to dropAllButOne in order to save it out anymore.
+	kShape->dropSequence(kShape->sequences.size()-1);
+	loadSequence(dsqPath.c_str());
+
+	Con::printf("loaded sequence, cache_dsqs %d",cache_dsqs);
+	//NOW: if "cache dsqs" is turned off, go out and delete this file:
+	if (cache_dsqs == false)
+	{
+		//Con::printf("importing BVH without saving cached DSQ.");
+		remove(dsqPath.c_str());
+	}
+	/*
+	//NICK
+	SQLiteObject *sql2 = new SQLiteObject();//dynamic_cast<nxPhysManager*>(mPM)->getSQL();
+	if (sql2)
+	{
+		if (sql2->OpenDatabase(dynamic_cast<physManagerCommon*>(mPM)->mDatabaseName.c_str()))
+		{
+			char insert_query[512];//WARNING id_query[512],
+			//WARNING sqlite_resultset *resultSet;
+			int result;	
+			sprintf(insert_query,"INSERT INTO sequenceTemp (filename,sequenceName) VALUES ('%s','%s');",
+				dsqPath.c_str(),seqName.c_str());	
+			result = sql2->ExecuteSQL(insert_query);
+		}
+	}
+	delete sql2;*/
+	//END NICK
+}
+
+DefineEngineMethod( PhysicsShape, importBvh, void, (bool importGround,const char *bvhname,const char *bvhProfile,bool cache_dsqs),,
+   "@brief.\n\n")
+{ 
+	object->importBvh(importGround,bvhname,bvhProfile,cache_dsqs);
+
+	return;
+}
+//////////////////////////////////////////////////////////
+
+
+void PhysicsShape::saveBvh(U32 seqNum, const char *bvh_file, const char *bvh_format, bool isGlobal)
+{
+	//HERE:  bvh_format is no longer bvh_format, it is input profile, Truebones2ACK etc.
+	S32 rot_matters_count=0,profile_id=0;
+	U32 node_matters[MAX_BVH_NODES], parent_chain[MAX_BVH_NODES];//, node_indices[MAX_BVH_NODES];
+	S32 bvhNodeMatters[MAX_BVH_NODES], dtsNodeMatters[MAX_BVH_NODES];
+	U32 start_rot, start_trans, first_ground, tab_count,num_keyframes,rc,jc;//WARNING ,parent_count
+	char rotOrder[255]; //WARNING tabs[255],
+	FILE *fpw,*fpc,*fps;//write file, config file, skeleton file
+	fpw = fpc = fps = NULL;
+	bvhCfgData kCfg;
+	Point3F p,r;
+	F32 scale,scale_factor;
+	rc = 0; jc = 0;
+	profile_id = 0;
+	//Moved these all to bvhCfgFileData struct
+	//S32 bvhNodes[MAX_BVH_NODES];
+	//S32 dtsNodes[MAX_BVH_NODES];
+	//S32 sortNodes[MAX_BVH_NODES];
+	//S32 orderNodes[MAX_BVH_NODES];//from initial order to shape order
+	//EulerF bvhPoseRotsA[MAX_BVH_NODES],bvhPoseRotsB[MAX_BVH_NODES];//allow for two later, if we need it
+	//EulerF axesFixRotsA[MAX_BVH_NODES],axesFixRotsB[MAX_BVH_NODES];
+	//String bvhNames[MAX_BVH_NODES];
+
+	TSShape *kShape = mShape;
+	if ((seqNum<0)||(seqNum>=kShape->sequences.size()))
+		return;
+	TSShape::Sequence *kSeq = &(kShape->sequences[seqNum]);
+
+	//The new, 1.8 way to do it:
+	String myPath = mShapeInstance->getShapeResource()->getPath().getPath();
+	String configName,configPath,skeletonName,skeletonPath;
+	configName.clear();
+	skeletonName.clear();
+
+	F32 pi_over_180,pi_under_180;
+
+	pi_over_180 = M_PI/180.0;
+	pi_under_180 = 180.0/M_PI;
+
+	Con::printf("saving BVH - format: %s, isGlobal %d",bvh_format,isGlobal);
+
+	U32 bvhFormat = 0;
+	
+	F32 shapeSize = 2.4;//FIX: this was an arbitrary variable in EM, need to make it part of cfg somehow.
+	S32 skeleton_id = 1;//FIX: put it in physicsShape, or something, or let user choose.
+	S32 importSampleRate = 1;
+
+	SQLiteObject *kSQL = PHYSICSMGR->mSQL;//MegaMotion/openSimEarth
+
+	//HERE:  FIRST, check to see if format = 'Native'.  If so, do not look in DB, instead save 
+	//all active nodes, meaning all sequence rot_matters nodes plus all physics active nodes.
+	//(Unless there is an option to include or not include physics nodes.)
+	//if (!dStrcmp(bvh_format,"NATIVE NODES"))
+	//{
+	//	Con::printf("Saving BVH in NATIVE NODES format.");
+	//	for (U32 i=0;i<kShape->nodes.size();i++)
+	//	{
+	//		if (kSeq->rotationMatters.test(j)) 
+	//				rot_matters_count++;
+
+	if (dStrcmp(bvh_format,"NATIVE NODES")) //is NOT "native nodes"
+	{
+		char myNormalString[255];
+		bvhFormat = 1;
+				
+		char id_query[512];//WARNING ,insert_query[512]
+		int result;
+		sqlite_resultset *resultSet;
+		sprintf(id_query,"SELECT id,scale FROM bvhProfile WHERE name = '%s';",bvh_format);
+		result = kSQL->ExecuteSQL(id_query);
+		resultSet = kSQL->GetResultSet(result);
+		if (resultSet->iNumRows == 1)
+		{
+			profile_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+			scale = dAtof(resultSet->vRows[0]->vColumnValues[1]);
+			scale_factor = (1.0/scale);
+		}
+		if (profile_id==0)
+		{
+			Con::errorf("couldn't find profile_id: %s",bvh_format);
+			return;
+		}
+
+		jc = loadBvhSkeleton(&kCfg,profile_id);//this loads up the cfg object's joints[] array.		
+		rc = loadBvhCfg(&kCfg,profile_id);// rc = skeleton nodes, this function loads up cfg's fixRots etc.
+		Con::printf("saving bvh %s, joints: %d, profile skeleton nodes: %d  profile: %d",bvh_format,jc,rc,profile_id);
+	}
+
+	String bvhFile(bvh_file);
+	String bvhExt(".bvh");
+	if (!dStrstr(bvhFile.c_str(),".bvh")) bvhFile += bvhExt;
+	
+	Con::errorf("opening filename: %s, original %s  scale_factor %f",bvhFile.c_str(),bvh_file,scale_factor);
+
+	fpw = fopen(bvhFile.c_str(),"w");
+
+	//////////////////////////////////////
+
+	rot_matters_count = 0;
+	for (U32 i=0;i<kShape->nodes.size();i++) 
+	{
+		if (kSeq->rotationMatters.test(i)) 
+		{
+			node_matters[rot_matters_count] = i;
+			dtsNodeMatters[i] = rot_matters_count;
+			rot_matters_count++;
+		}
+	}
+
+	tab_count = 1;
+	//WARNING S32 node_marker = 0;
+	for (U32 i=0;i<MAX_BVH_NODES;i++) { parent_chain[i] = -1; }
+	parent_chain[0] = 0;
+
+	if (!dStrcmp(bvh_format,"NATIVE NODES"))//IS "native nodes"
+	{
+		fprintf(fpw,"HIERARCHY\n");
+		fprintf(fpw,"ROOT %s\n",kShape->getName(kShape->nodes[0].nameIndex).c_str());
+
+		fprintf(fpw,"{\n");
+		//fprintf(fpw,"\tOFFSET %f %f %f\n",kShape->defaultTranslations[0].x,kShape->defaultTranslations[0].y,kShape->defaultTranslations[0].z);
+		fprintf(fpw,"\tOFFSET 0.00 0.00 0.00\n");//FIX??
+
+		//fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Zrotation Xrotation Yrotation\n");
+		//fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Yrotation Xrotation Zrotation\n");
+		//fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Zrotation Yrotation Xrotation\n");
+		//fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Yrotation Zrotation Xrotation\n");
+		fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Xrotation Yrotation Zrotation\n");
+		//fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Xrotation Zrotation Yrotation\n");
+		//Number six of six choices... never forget the pain...
+
+
+		//Con::printf("Saving bvh, native nodes, rot_matters_count %d",rot_matters_count);
+		for (U32 i=1;i<rot_matters_count;i++)
+		{
+			//HERE: have to make a method of tab-multiplying, to keep track of indents.  Did this before somewhere, resurrect.
+			//Has to involve joint parent nodes.  Need "End Site" tag when we reach the end of a (limb).  Keep checking to see if bodypart
+			//in front is parent, if not go to bodypart in front of that, sooner or later the next bodypart will find its parent, unless
+			//it is a new root node in which case start a new body.
+
+			S32 back_up = 0;
+			S32 nodeParentIndex = kShape->nodes[node_matters[i]].parentIndex;
+			while (!kSeq->rotationMatters.test(nodeParentIndex))
+			{
+				//Con::printf("node %d has parentIndex %d which doesn't matter!  moving up a step to %d",
+				//	node_matters[i],kShape->nodes[nodeParentIndex].parentIndex);
+				nodeParentIndex = kShape->nodes[nodeParentIndex].parentIndex;
+			}
+			//fxFlexBodyPart *kFBP = getBodyPart(node_matters[i]); 
+			//S32 bodypartIndex = kFBP->mBoneIndex;
+			//S32 bodypartParentIndex = getBodypartParent(bodypartIndex);
+			//S32 parentIndex = mBodyParts[bodypartParentIndex]->mNodeIndex;
+			//Con::printf("i: %d, node: %d  %s, tab_count %d, parentIndex %d, node_matters[parent index]=%d",
+			//	i,node_matters[i],kShape->getName(kShape->nodes[node_matters[i]].nameIndex).c_str(),
+			//	tab_count,nodeParentIndex,kSeq->rotationMatters.test(nodeParentIndex));
+			//while ((i>1)&&(nodeParentIndex < node_matters[i-(back_up+1)])) 
+			while (nodeParentIndex < parent_chain[tab_count - (back_up+1)])
+			{//HERE: we're at the end of a limb!   First, find out how far back up the loop we have to go,
+				//then do the END SITE line and back out of the curly braces and decrement tab_count.
+				//Con::printf("backing up... parentIndex = %d, parent_chain[%d] = %d",
+				//	nodeParentIndex,tab_count - (back_up+1),parent_chain[tab_count - (back_up+1)]);
+				back_up++;
+			}
+
+			if (!back_up) {//back_up==0, meaning we're still moving down the limb.
+				parent_chain[tab_count] = node_matters[i];
+				//Con::printf("new parent chain[%d] = %d",tab_count,node_matters[i]);
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"JOINT %s\n",kShape->getName(kShape->nodes[node_matters[i]].nameIndex).c_str());
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"{\n");
+				tab_count++;
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				Point3F p = kShape->defaultTranslations[node_matters[i]];
+				fprintf(fpw,"OFFSET %f %f %f\n",-p.x*scale_factor,p.z*scale_factor,p.y*scale_factor);
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+
+				//fprintf(fpw,"CHANNELS 3 Zrotation Xrotation Yrotation\n");
+				//fprintf(fpw,"CHANNELS 3 Yrotation Xrotation Zrotation\n");
+				//fprintf(fpw,"CHANNELS 3 Zrotation Yrotation Xrotation\n");
+				//fprintf(fpw,"CHANNELS 3 Yrotation Zrotation Xrotation\n");
+				fprintf(fpw,"CHANNELS 3 Xrotation Yrotation Zrotation\n");
+				//fprintf(fpw,"CHANNELS 3 Xrotation Zrotation Yrotation\n");
+			} else {
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"End Site\n");
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"{\n");
+				tab_count++;
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"OFFSET 0.0 0.0 0.1\n");//FIX!!  
+				tab_count--;
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"}\n");
+				while (back_up-- > 0) 
+				{
+					tab_count--;
+					for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+					fprintf(fpw,"}\n");
+				}
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+
+				fprintf(fpw,"JOINT %s\n",kShape->getName(kShape->nodes[node_matters[i]].nameIndex).c_str());
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"{\n");
+				tab_count++;
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				Point3F p = kShape->defaultTranslations[node_matters[i]];
+				fprintf(fpw,"OFFSET %f %f %f\n",-p.x*scale_factor,p.z*scale_factor,p.y*scale_factor);//TEMP: Have to get things to "normal" BVH scale somehow.
+				//Also have to switch z and y and reverse x, for righthandedness.
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+
+				fprintf(fpw,"CHANNELS 3 Xrotation Yrotation Zrotation\n");
+				//fprintf(fpw,"CHANNELS 3 Xrotation Zrotation Yrotation\n");
+				//fprintf(fpw,"CHANNELS 3 Yrotation Xrotation Zrotation\n");
+				//fprintf(fpw,"CHANNELS 3 Yrotation Zrotation Xrotation\n");
+				//fprintf(fpw,"CHANNELS 3 Zrotation Xrotation Yrotation\n");
+				//fprintf(fpw,"CHANNELS 3 Zrotation Yrotation Xrotation\n");
+			}
+		} 
+		for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+		fprintf(fpw,"End Site\n");
+		for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+		fprintf(fpw,"{\n");
+		tab_count++;
+		for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+		fprintf(fpw,"OFFSET 0.0 0.0 0.1\n");//FIX!! 
+		tab_count--;
+		for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+		fprintf(fpw,"}\n");
+		while (tab_count > 0) 
+		{
+			tab_count--;
+			for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+			fprintf(fpw,"}\n");
+		}
+
+		//HERE: then, do the motion frames...
+		//fprintf(fpw,"}\n");
+		fprintf(fpw,"MOTION\n");
+		fprintf(fpw,"Frames: %d\n",kSeq->numKeyframes);
+		fprintf(fpw,"Frame Time: %f\n",kSeq->duration/((F32)kSeq->numKeyframes));
+		//Don't forget:  if there are ground frames, then copy those into the root node positions in the bvh.
+
+		start_rot = kSeq->baseRotation;
+		start_trans = kSeq->baseTranslation;
+		first_ground = kSeq->firstGroundFrame;
+		if (isGlobal)
+			num_keyframes = kSeq->numKeyframes + 10;//HERE:  find a better way, please.  This is to allow ten frames at the
+		else      //beginning to move the character from origin (where all characters start) to global pos for this actor.
+			num_keyframes = kSeq->numKeyframes;
+
+		for (U32 i=0;i<num_keyframes;i++)
+		{//FIX: go through trans_matters, don't assume only 0
+			//Point3F pos(-kShape->nodeTranslations[start_trans+i].x*scale_factor,kShape->nodeTranslations[start_trans+i].z*scale_factor,kShape->nodeTranslations[start_trans+i].y*scale_factor);
+			Point3F pos,finalPos,bvhPos;
+			if ((isGlobal)&&(i<10))
+			{
+				pos.x = kShape->nodeTranslations[0].x * ((F32)i/10.0);
+				pos.y = kShape->nodeTranslations[0].y * ((F32)i/10.0);
+				pos.z = kShape->nodeTranslations[0].z;
+				getTransform().mulP(pos,&finalPos);
+			} else {
+				if (isGlobal)
+					pos = kShape->nodeTranslations[start_trans+(i-10)];
+				else
+					pos = kShape->nodeTranslations[start_trans+i];
+				//HERE: if (isGlobal), multiply pos by my current transform.
+				if (isGlobal)
+				{
+					getTransform().mulP(pos,&finalPos);
+					Con::printf("is global! finalPos %f %f %f",finalPos.x,finalPos.y,finalPos.z);
+				} else {
+					finalPos = pos;
+				}
+			}
+			bvhPos.set(-finalPos.x*scale_factor,finalPos.z*scale_factor,finalPos.y*scale_factor);
+			fprintf(fpw,"%f %f %f ",bvhPos.x,bvhPos.y,bvhPos.z);
+			//Then, go through all the nodes, convert all rotations to euler, write out.
+			for (U32 j=0;j<rot_matters_count;j++) 
+			{
+				Quat16 q16;
+				if ((isGlobal)&&(i<10)) {
+					q16 = kShape->nodeRotations[start_rot + (j * (num_keyframes-10))];//first frame
+				} else {
+					if ((isGlobal)&&(j==0))
+					{
+						MatrixF matLocal,matFinal;
+						QuatF q;
+						Quat16 q16_local = kShape->nodeRotations[start_rot + (j * (num_keyframes-10)) + (i-10)];
+						q = q16.getQuatF();
+						q.setMatrix(&matLocal);
+						matFinal.mul(getTransform(),matLocal);
+						q.set(matFinal);
+						q16.set(q);
+					} else if (isGlobal) {
+						q16 = kShape->nodeRotations[start_rot + (j * (num_keyframes-10)) + (i-10)];
+					} else {
+						q16 = kShape->nodeRotations[start_rot + (j * (num_keyframes)) + (i)];
+					}
+				}
+				QuatF q;
+				EulerF eul;
+				MatrixF mat;
+
+				q16.getQuatF(&q);
+				q.setMatrix(&mat);
+				eul = mat.toEuler();
+
+				Point3F row0,row1,row2;
+				mat.getRow(0,&row0);
+				mat.getRow(1,&row1);
+				mat.getRow(2,&row2);
+
+				HMatrix	hMatrix;
+				hMatrix[0][0] = row0.x; hMatrix[1][0] = row0.y; hMatrix[2][0] = row0.z; hMatrix[3][0] = 0.0;
+				hMatrix[0][1] = row1.x; hMatrix[1][1] = row1.y; hMatrix[2][1] = row1.z; hMatrix[3][1] = 0.0;
+				hMatrix[0][2] = row2.x; hMatrix[1][2] = row2.y; hMatrix[2][2] = row2.z; hMatrix[3][2] = 0.0;
+				hMatrix[0][3] = 0.0; hMatrix[1][3] = 0.0; hMatrix[2][3] = 0.0; hMatrix[3][3] = 1.0;
+
+				EulerAngles eulQ;
+				eulQ = Eul_FromHMatrix( hMatrix,EulOrdXYZs);
+
+
+				//Con::errorf("XYZ Euler: %f %f %f - %f",eulQ.x * pi_under_180,eulQ.y * pi_under_180,eulQ.z * pi_under_180,eulQ.w);
+				//eulQ = Eul_FromHMatrix( hMatrix,EulOrdZXYs);
+				//Con::errorf("ZXY Euler: %f %f %f - %f",eulQ.x * pi_under_180,eulQ.y * pi_under_180,eulQ.z * pi_under_180,eulQ.w);
+
+				fprintf(fpw,"%3.2f %3.2f %3.2f ",mRadToDeg(eulQ.x),-mRadToDeg(eulQ.z),-mRadToDeg(eulQ.y));
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",-mRadToDeg(eul.y),mRadToDeg(eul.x),-mRadToDeg(eul.z));
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",-mRadToDeg(eul.z),mRadToDeg(eul.x),-mRadToDeg(eul.y));
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",-mRadToDeg(eul.y),-mRadToDeg(eul.z),mRadToDeg(eul.x));
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",-mRadToDeg(eul.z),-mRadToDeg(eul.y),mRadToDeg(eul.x));
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",mRadToDeg(eul.x),-mRadToDeg(eul.z),-mRadToDeg(eul.y));
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",mRadToDeg(eul.x),-mRadToDeg(eul.y),-mRadToDeg(eul.z));
+			}
+			fprintf(fpw,"\n");
+		}
+		//////////////////////////////////////////////////////////////
+	} else { //Using bvhFormat that requires exporting all nodes, whether active or not.
+		//////////////////////////////////////////////////////////////
+		//First, get index from bvh node order to corresponding place in nodeRotations, via rotationMatters. 
+		for (U32 i=0;i<rc;i++)
+		{
+			if (kCfg.dtsNodes[i] > -1)
+			{
+				if (kSeq->rotationMatters.test(kCfg.dtsNodes[i]))
+					bvhNodeMatters[i] = dtsNodeMatters[kCfg.dtsNodes[i]];
+				else 
+					bvhNodeMatters[i] = -1;
+			} else 
+				bvhNodeMatters[i] = -1;
+		}
+
+		//NOW, we've loaded the joints[] array, which has parentage data.
+
+		fprintf(fpw,"HIERARCHY\n");
+		fprintf(fpw,"ROOT %s\n",kCfg.bvhNames[0].c_str());
+
+		fprintf(fpw,"{\n");
+		Point3F baseOffset = kCfg.joints[0].offset;
+		fprintf(fpw,"\tOFFSET %f %f %f\n",baseOffset.x,baseOffset.y,baseOffset.z);
+		//fprintf(fpw,"\tOFFSET 0.00 0.00 0.00\n");//Is this okay?
+
+		if ((kCfg.joints[0].chanrots[0]==0)&&(kCfg.joints[0].chanrots[1]==1)&&(kCfg.joints[0].chanrots[2]==2))
+			sprintf(rotOrder,"Xrotation Yrotation Zrotation");
+		else if ((kCfg.joints[0].chanrots[0]==0)&&(kCfg.joints[0].chanrots[1]==2)&&(kCfg.joints[0].chanrots[2]==1))
+			sprintf(rotOrder,"Xrotation Zrotation Yrotation");
+		else if ((kCfg.joints[0].chanrots[0]==1)&&(kCfg.joints[0].chanrots[1]==0)&&(kCfg.joints[0].chanrots[2]==2))
+			sprintf(rotOrder,"Yrotation Xrotation Zrotation");
+		else if ((kCfg.joints[0].chanrots[0]==1)&&(kCfg.joints[0].chanrots[1]==2)&&(kCfg.joints[0].chanrots[2]==0))
+			sprintf(rotOrder,"Yrotation Zrotation Xrotation");
+		else if ((kCfg.joints[0].chanrots[0]==2)&&(kCfg.joints[0].chanrots[1]==0)&&(kCfg.joints[0].chanrots[2]==1))
+			sprintf(rotOrder,"Zrotation Xrotation Yrotation");
+		else if ((kCfg.joints[0].chanrots[0]==2)&&(kCfg.joints[0].chanrots[1]==1)&&(kCfg.joints[0].chanrots[2]==0))
+			sprintf(rotOrder,"Zrotation Yrotation Xrotation");
+
+		//fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Zrotation Xrotation Yrotation\n");fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Zrotation Xrotation Yrotation\n");
+		fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition %s\n",rotOrder);
+
+
+		//Damn, another parsing section - need to load the skeleton from another bvh file, so I can get the proper
+		//hierarchy.  The dts hierarchy won't work, because some bvh nodes might not be in the dts model at all,
+		//and some might have slightly different parentage.
+		for (U32 i=1;i<rc;i++)
+		{
+			S32 back_up = 0;
+			S32 nodeParentIndex = -1;
+			if (kCfg.joints[i].parent > -1)
+				nodeParentIndex = kCfg.joints[i].parent;//orderNodes[i]
+			
+
+			//Con::errorf("i: %d, node: %d, tab_count %d, parentIndex %d",i,kCfg.dtsNodes[i],tab_count,nodeParentIndex);//orderNodes[i]
+			//while ((i>1)&&(nodeParentIndex < node_matters[i-(back_up+1)])) 
+			while ((i>1)&&(nodeParentIndex < parent_chain[tab_count - (back_up+1)])) 
+			{//HERE: we're at the end of a limb!   First, find out how far back up the loop we have to go,
+				//then do the END SITE line and back out of the curly braces and decrement tab_count.
+				//Con::printf("backing up... parentIndex = %d, parent_chain[%d] = %d",nodeParentIndex,tab_count - (back_up+1),parent_chain[tab_count - (back_up+1)]);
+				back_up++;
+			}
+
+			if (!back_up) {//back_up==0, meaning we're still moving down the limb.
+				parent_chain[tab_count] = i;
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+
+				fprintf(fpw,"JOINT %s\n",kCfg.bvhNames[i].c_str());
+			
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"{\n");
+				tab_count++;
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+
+				//HERE: this actually needs to be the offset from the original skeleton, not my dts skeleton.
+				//if (kCfg.dtsNodes[i] > -1)
+				//	p = kShape->defaultTranslations[kCfg.dtsNodes[i]];//kCfg.orderNodes[i]
+				//else
+				//	p.zero();
+				//fprintf(fpw,"OFFSET %f %f %f\n",-p.x*scale_factor,p.z*scale_factor,p.y*scale_factor);
+				
+				p = kCfg.joints[i].offset;
+				fprintf(fpw,"OFFSET %f %f %f\n",p.x,p.y,p.z);
+				//But now we're going to have to convert the rotations from native to whatever arm position 
+				//we had in the original bvh. (i.e. arms out in T-Pose, or down at sides?)
+				
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+
+				//fprintf(fpw,"CHANNELS 3 Zrotation Xrotation Yrotation\n");
+				if ((kCfg.joints[i].chanrots[0]==0)&&(kCfg.joints[i].chanrots[1]==1)&&(kCfg.joints[i].chanrots[2]==2))
+					sprintf(rotOrder,"Xrotation Yrotation Zrotation");
+				else if ((kCfg.joints[i].chanrots[0]==0)&&(kCfg.joints[i].chanrots[1]==2)&&(kCfg.joints[i].chanrots[2]==1))
+					sprintf(rotOrder,"Xrotation Zrotation Yrotation");
+				else if ((kCfg.joints[i].chanrots[0]==1)&&(kCfg.joints[i].chanrots[1]==0)&&(kCfg.joints[i].chanrots[2]==2))
+					sprintf(rotOrder,"Yrotation Xrotation Zrotation");
+				else if ((kCfg.joints[i].chanrots[0]==1)&&(kCfg.joints[i].chanrots[1]==2)&&(kCfg.joints[i].chanrots[2]==0))
+					sprintf(rotOrder,"Yrotation Zrotation Xrotation");
+				else if ((kCfg.joints[i].chanrots[0]==2)&&(kCfg.joints[i].chanrots[1]==0)&&(kCfg.joints[i].chanrots[2]==1))
+					sprintf(rotOrder,"Zrotation Xrotation Yrotation");
+				else if ((kCfg.joints[i].chanrots[0]==2)&&(kCfg.joints[i].chanrots[1]==1)&&(kCfg.joints[i].chanrots[2]==0))
+					sprintf(rotOrder,"Zrotation Yrotation Xrotation");
+
+				//fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Zrotation Xrotation Yrotation\n");fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Zrotation Xrotation Yrotation\n");
+				fprintf(fpw,"\tCHANNELS 3 %s\n",rotOrder);
+				//fprintf(fpw,"CHANNELS 3 Xrotation Yrotation Zrotation\n");
+			} else {
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"End Site\n");
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"{\n");
+				tab_count++;
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				//fprintf(fpw,"OFFSET 0.0 0.0 0.1\n");//HERE:  Take offset from bvh!!
+				Point3F offset = kCfg.endSiteOffsets[kCfg.nodeGroups[i-1]];
+				//Con::printf("End Site offset:  %f %f %f",offset.x,offset.y,offset.z);
+				fprintf(fpw,"OFFSET %f %f %f\n",offset.x,offset.y,offset.z);//FIX!! 
+				tab_count--;
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"}\n");
+				while (back_up-- > 0) 
+				{
+					tab_count--;
+					for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+					fprintf(fpw,"}\n");
+				}
+				
+				parent_chain[tab_count] = i;//kCfg.dtsNodes[kCfg.orderNodes[i]];
+
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+
+				fprintf(fpw,"JOINT %s\n",kCfg.bvhNames[i].c_str());
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+				fprintf(fpw,"{\n");
+				tab_count++;
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+
+				//if (kCfg.dtsNodes[i] > -1)
+				//	p = kShape->defaultTranslations[kCfg.dtsNodes[i]];
+				//else
+				//	p.zero();
+				//fprintf(fpw,"OFFSET %f %f %f\n",-p.x*scale_factor,p.z*scale_factor,p.y*scale_factor);//TEMP: Have to get things to "normal" BVH scale somehow.
+				
+				p = kCfg.joints[i].offset;
+				fprintf(fpw,"OFFSET %f %f %f\n",p.x,p.y,p.z);
+				//Also have to switch z and y and reverse x, for righthandedness.
+				for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+
+				//HERE:  Make this whatever way required by the bvh flavor.  NOT always ZXY.
+				//fprintf(fpw,"CHANNELS 3 Zrotation Xrotation Yrotation\n");
+				if ((kCfg.joints[i].chanrots[0]==0)&&(kCfg.joints[i].chanrots[1]==1)&&(kCfg.joints[i].chanrots[2]==2))
+					sprintf(rotOrder,"Xrotation Yrotation Zrotation");
+				else if ((kCfg.joints[i].chanrots[0]==0)&&(kCfg.joints[i].chanrots[1]==2)&&(kCfg.joints[i].chanrots[2]==1))
+					sprintf(rotOrder,"Xrotation Zrotation Yrotation");
+				else if ((kCfg.joints[i].chanrots[0]==1)&&(kCfg.joints[i].chanrots[1]==0)&&(kCfg.joints[i].chanrots[2]==2))
+					sprintf(rotOrder,"Yrotation Xrotation Zrotation");
+				else if ((kCfg.joints[i].chanrots[0]==1)&&(kCfg.joints[i].chanrots[1]==2)&&(kCfg.joints[i].chanrots[2]==0))
+					sprintf(rotOrder,"Yrotation Zrotation Xrotation");
+				else if ((kCfg.joints[i].chanrots[0]==2)&&(kCfg.joints[i].chanrots[1]==0)&&(kCfg.joints[i].chanrots[2]==1))
+					sprintf(rotOrder,"Zrotation Xrotation Yrotation");
+				else if ((kCfg.joints[i].chanrots[0]==2)&&(kCfg.joints[i].chanrots[1]==1)&&(kCfg.joints[i].chanrots[2]==0))
+					sprintf(rotOrder,"Zrotation Yrotation Xrotation");
+
+				//fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Zrotation Xrotation Yrotation\n");fprintf(fpw,"\tCHANNELS 6  Xposition Yposition Zposition Zrotation Xrotation Yrotation\n");
+				fprintf(fpw,"\tCHANNELS 3 %s\n",rotOrder);
+				//fprintf(fpw,"CHANNELS 3 Xrotation Yrotation Zrotation\n");
+			}
+		}
+		for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+		fprintf(fpw,"End Site\n");
+		for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+		fprintf(fpw,"{\n");
+		tab_count++;
+		for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+		Point3F offset = kCfg.endSiteOffsets[kCfg.nodeGroups[rc-1]];
+		fprintf(fpw,"OFFSET %f %f %f\n",offset.x,offset.y,offset.z);//FIX!!  Get this from the source skeleton
+				                                 //when you make the bvh import/export profile. 
+		tab_count--;
+		for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+		fprintf(fpw,"}\n");
+		while (tab_count > 0) 
+		{
+			tab_count--;
+			for (U32 j=0;j<tab_count;j++) fprintf(fpw,"\t");
+			fprintf(fpw,"}\n");
+		}
+
+		//HERE: then, do the motion frames...
+		//fprintf(fpw,"}\n");
+		fprintf(fpw,"MOTION\n");
+		fprintf(fpw,"Frames: %d\n",kSeq->numKeyframes);
+		fprintf(fpw,"Frame Time: %f\n",kSeq->duration/((F32)kSeq->numKeyframes));
+		//Don't forget:  if there are ground frames, then copy those into the root node positions in the bvh.
+
+		start_rot = kSeq->baseRotation;
+		start_trans = kSeq->baseTranslation;
+		first_ground = kSeq->firstGroundFrame;
+		if (isGlobal)
+			num_keyframes = kSeq->numKeyframes + 10;
+		else
+			num_keyframes = kSeq->numKeyframes;
+		
+		F32 new_scale_factor = scale_factor * (2.0/shapeSize);
+		Con::printf("saving a bvh, base scale_factor = %f, shapesize-modified scale factor = %f",scale_factor,new_scale_factor);
+		for (U32 i=0;i<num_keyframes;i++)
+		{//FIX: go through trans_matters, don't assume only 0
+			//fprintf(fpw,"%f %f %f ",-kShape->nodeTranslations[start_trans+i].x*new_scale_factor,
+			//	kShape->nodeTranslations[start_trans+i].z*new_scale_factor,
+			//	kShape->nodeTranslations[start_trans+i].y*new_scale_factor);
+			Point3F pos,finalPos,bvhPos;
+			if ((isGlobal)&&(i<10))
+			{
+				pos.x = kShape->nodeTranslations[start_trans].x * ((F32)i/10.0);
+				pos.y = kShape->nodeTranslations[start_trans].y * ((F32)i/10.0);
+				pos.z = kShape->nodeTranslations[start_trans].z;
+				getTransform().mulP(pos,&finalPos);
+			} else {
+				if (isGlobal)
+					pos = kShape->nodeTranslations[start_trans+(i-10)];
+				else
+					pos = kShape->nodeTranslations[start_trans+i];
+
+				if (isGlobal)
+				{
+					getTransform().mulP(pos,&finalPos);
+				} else {
+					finalPos = pos;
+				}
+			}
+			//BUT:  still need to add a few frames at the beginning for the interpolate from origin section!
+			bvhPos.set(-finalPos.x*new_scale_factor,finalPos.z*new_scale_factor,finalPos.y*new_scale_factor);
+			fprintf(fpw,"%f %f %f ",bvhPos.x,bvhPos.y,bvhPos.z);
+			//Then, go through all the nodes, convert all rotations to euler, write out.
+			for (U32 j=0;j<rc;j++) 
+			{
+				Quat16 q16;
+				if ((isGlobal)&&(i<10))
+				{
+					if (bvhNodeMatters[j]>=0)
+						q16 = kShape->nodeRotations[start_rot + (j * (num_keyframes-10))];//first frame
+					else
+						q16.identity();
+				}
+				else
+				{
+					if (bvhNodeMatters[j]>=0)
+					{
+						if ((isGlobal)&&(j==0))
+						{
+							MatrixF matLocal,matFinal,matTransform;
+							QuatF q;
+							Quat16 q16_local = kShape->nodeRotations[start_rot + (j * (num_keyframes-10)) + (i-10)];
+							q = q16_local.getQuatF();
+							q.setMatrix(&matLocal);
+							matTransform = getTransform();
+							matFinal.mul(matTransform,matLocal);
+							q.set(matFinal);
+							q16.set(q);
+							//q16 = q16_local;
+						} else if (isGlobal) {
+							q16 = kShape->nodeRotations[start_rot + (bvhNodeMatters[j] * (num_keyframes-10)) + (i-10)];
+						} else {
+							q16 = kShape->nodeRotations[start_rot + (bvhNodeMatters[j] * (num_keyframes)) + (i)];
+						}
+					}
+					else
+						q16.identity();
+				}
+				QuatF q;
+				EulerF eul;
+				MatrixF m,mat,matBvhPose,matBvhPoseA,matBvhPoseB,matAxesFixA,matAxesFixB,matAxesFix,matAxesUnfix;
+
+
+				//HERE: do necessary rotations from config file!  Need this now because we have to use 
+				//skeleton from original bvh, not our ACK skeleton, and bvh might have arms-down root pose.
+				//EXCEPT: temporarily putting all this back, didn't get it finished and got a different way
+				//to get into iClone anyway.  Still need to do this anyway, though, to fix shoulder problems,
+				//and handle export to formats where arms are down.
+
+				//matBvhPoseA.set(kCfg.bvhPoseRotsA[j]);
+				//matBvhPoseB.set(kCfg.bvhPoseRotsB[j]);
+				//matBvhPose.mul(matBvhPoseA,matBvhPoseB);
+
+				//matAxesFixA.set(kCfg.axesFixRotsA[j]);
+				//matAxesFixB.set(kCfg.axesFixRotsB[j]);
+				//matAxesFix.mul(matAxesFixA,matAxesFixB);
+
+				//matAxesUnfix = matAxesFix;
+				//matAxesUnfix.inverse();
+
+				//m.identity();	
+				//m.mul(matBvhPose);	
+				//m.mul(matAxesFix);
+				//m.mul(mat);
+				//m.mul(matAxesUnfix);
+				//Here: end of cfg adjustment, putting things back the way they were.
+
+				Point3F p,row0,row1,row2;
+				HMatrix	hMatrix;
+				EulerAngles eulQ;
+
+				q16.getQuatF(&q);
+				q.setMatrix(&mat);
+
+				m = mat;
+				//m.rightToLeftHanded(mat);//wait a minute...
+
+				mat.getRow(0,&row0);
+				mat.getRow(1,&row1);
+				mat.getRow(2,&row2);
+
+				//Column major interpretation of hMatrix:
+				hMatrix[0][0] = row0.x; hMatrix[1][0] = row0.y; hMatrix[2][0] = row0.z; hMatrix[3][0] = 0.0;
+				hMatrix[0][1] = row1.x; hMatrix[1][1] = row1.y; hMatrix[2][1] = row1.z; hMatrix[3][1] = 0.0;
+				hMatrix[0][2] = row2.x; hMatrix[1][2] = row2.y; hMatrix[2][2] = row2.z; hMatrix[3][2] = 0.0;
+				hMatrix[0][3] = 0.0;    hMatrix[1][3] = 0.0;    hMatrix[2][3] = 0.0;    hMatrix[3][3] = 1.0;
+
+				//Just in case, had to try a row-major interpretation as well.
+				//hMatrix[0][0] = row0.x; hMatrix[1][0] = row1.x; hMatrix[2][0] = row2.x; hMatrix[3][0] = 0.0;
+				//hMatrix[0][1] = row0.y; hMatrix[1][1] = row1.y; hMatrix[2][1] = row2.y; hMatrix[3][1] = 0.0;
+				//hMatrix[0][2] = row0.z; hMatrix[1][2] = row1.z; hMatrix[2][2] = row2.z; hMatrix[3][2] = 0.0;
+				//hMatrix[0][3] = 0.0; hMatrix[1][3] = 0.0; hMatrix[2][3] = 0.0; hMatrix[3][3] = 1.0;
+ 
+				int kOrder=0;//WARNING 
+
+				if ((kCfg.joints[j].chanrots[0]==0)&&(kCfg.joints[j].chanrots[1]==1)&&(kCfg.joints[j].chanrots[2]==2))
+					kOrder = EulOrdXZYs;//kOrder = EulOrdXYZs;//
+				else if ((kCfg.joints[j].chanrots[0]==0)&&(kCfg.joints[j].chanrots[1]==2)&&(kCfg.joints[j].chanrots[2]==1))
+					kOrder = EulOrdXYZs;//kOrder = EulOrdXZYs;//
+				else if ((kCfg.joints[j].chanrots[0]==1)&&(kCfg.joints[j].chanrots[1]==0)&&(kCfg.joints[j].chanrots[2]==2))
+					kOrder = EulOrdZXYs;//kOrder = EulOrdYXZs;//
+				else if ((kCfg.joints[j].chanrots[0]==1)&&(kCfg.joints[j].chanrots[1]==2)&&(kCfg.joints[j].chanrots[2]==0))
+					kOrder = EulOrdZYXs;//kOrder = EulOrdYZXs;//
+				else if ((kCfg.joints[j].chanrots[0]==2)&&(kCfg.joints[j].chanrots[1]==0)&&(kCfg.joints[j].chanrots[2]==1))
+					kOrder = EulOrdYXZs;//kOrder = EulOrdZXYs;//
+				else if ((kCfg.joints[j].chanrots[0]==2)&&(kCfg.joints[j].chanrots[1]==1)&&(kCfg.joints[j].chanrots[2]==0))
+					kOrder = EulOrdYZXs;//kOrder = EulOrdZYXs;//
+
+				//eulQ.x = 0.0; eulQ.y = 0.0; eulQ.z = 1.0; eulQ.w = 0.0; 
+				eulQ = Eul_FromHMatrix( hMatrix,kOrder);
+
+				//NOW, since the bvh needs the angles written IN THE ORDER specified here, we will use 
+				//Point3F p to store them.  Doing the right-hand/left-hand swap at the same time, so Y
+				//in bvh file means -Z here, and vice versa.
+				//if (kCfg.joints[j].chanrots[0]==0) p.x = eulQ.x;
+				//else if (kCfg.joints[j].chanrots[0]==1) p.x = eulQ.y;//eulQ.y;
+				//else if (kCfg.joints[j].chanrots[0]==2) p.x = eulQ.z;//eulQ.z;
+				//if (kCfg.joints[j].chanrots[1]==0) p.y = eulQ.x;
+				//else if (kCfg.joints[j].chanrots[1]==1) p.y = eulQ.y;//eulQ.y;
+				//else if (kCfg.joints[j].chanrots[1]==2) p.y = eulQ.z;//eulQ.z;
+				//if (kCfg.joints[j].chanrots[2]==0) p.z = eulQ.x;
+				//else if (kCfg.joints[j].chanrots[2]==1) p.z = eulQ.y;//eulQ.y;
+				//else if (kCfg.joints[j].chanrots[2]==2) p.z = eulQ.z;//eulQ.z;
+
+				if ((kCfg.joints[j].chanrots[0]==0)&&(kCfg.joints[j].chanrots[1]==1)&&(kCfg.joints[j].chanrots[2]==2))
+					p.set(eulQ.x,-eulQ.y,-eulQ.z);//p.set(eulQ.x,-eulQ.z,-eulQ.y);
+				else if ((kCfg.joints[j].chanrots[0]==0)&&(kCfg.joints[j].chanrots[1]==2)&&(kCfg.joints[j].chanrots[2]==1))
+					p.set(eulQ.x,-eulQ.y,-eulQ.z);//p.set(eulQ.x,-eulQ.z,-eulQ.y);
+				else if ((kCfg.joints[j].chanrots[0]==1)&&(kCfg.joints[j].chanrots[1]==0)&&(kCfg.joints[j].chanrots[2]==2))
+					p.set(-eulQ.x,eulQ.y,-eulQ.z);//p.set(-eulQ.z,eulQ.y,-eulQ.x);
+				else if ((kCfg.joints[j].chanrots[0]==1)&&(kCfg.joints[j].chanrots[1]==2)&&(kCfg.joints[j].chanrots[2]==0))
+					p.set(-eulQ.x,-eulQ.y,eulQ.z);//p.set(-eulQ.y,-eulQ.x,eulQ.z);
+				else if ((kCfg.joints[j].chanrots[0]==2)&&(kCfg.joints[j].chanrots[1]==0)&&(kCfg.joints[j].chanrots[2]==1))
+					p.set(-eulQ.x,eulQ.y,-eulQ.z);//p.set(-eulQ.z,eulQ.y,-eulQ.x);
+				else if ((kCfg.joints[j].chanrots[0]==2)&&(kCfg.joints[j].chanrots[1]==1)&&(kCfg.joints[j].chanrots[2]==0))
+					p.set(-eulQ.x,-eulQ.y,eulQ.z);//p.set(-eulQ.y,-eulQ.x,eulQ.z);
+				fprintf(fpw,"%3.2f %3.2f %3.2f ",mRadToDeg(p.x),mRadToDeg(p.y),mRadToDeg(p.z));
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",mRadToDeg(eulQ.x),mRadToDeg(eulQ.y),mRadToDeg(eulQ.z));
+				
+				
+				//eul = mat.toEuler();
+				//Con::errorf("chanrots %d %d, %d, %d",i,kCfg.joints[j].chanrots[0],kCfg.joints[j].chanrots[1],kCfg.joints[j].chanrots[2]);
+				//if (kCfg.joints[j].chanrots[0]==0) p.x = eul.x;
+				//else if (kCfg.joints[j].chanrots[0]==1) p.x = -eul.z;
+				//else if (kCfg.joints[j].chanrots[0]==2) p.x = -eul.y;
+				//if (kCfg.joints[j].chanrots[1]==0) p.y = eul.x;
+				//else if (kCfg.joints[j].chanrots[1]==1) p.y = -eul.z;
+				//else if (kCfg.joints[j].chanrots[1]==2) p.y = -eul.y;
+				//if (kCfg.joints[j].chanrots[2]==0) p.z = eul.x;
+				//else if (kCfg.joints[j].chanrots[2]==1) p.z = -eul.z;
+				//else if (kCfg.joints[j].chanrots[2]==2) p.z = -eul.y;
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",mRadToDeg(p.x),mRadToDeg(p.y),mRadToDeg(p.z));
+
+
+				//m = mat;
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",-mRadToDeg(eul.z),mRadToDeg(eul.x),-mRadToDeg(eul.y));
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",-mRadToDeg(eul.y),-mRadToDeg(eul.z),mRadToDeg(eul.x));
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",-mRadToDeg(eul.z),-mRadToDeg(eul.y),mRadToDeg(eul.x));
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",mRadToDeg(eul.x),-mRadToDeg(eul.z),-mRadToDeg(eul.y));
+				//fprintf(fpw,"%3.2f %3.2f %3.2f ",mRadToDeg(eul.x),-mRadToDeg(eul.y),-mRadToDeg(eul.z));
+			}
+			fprintf(fpw,"\n");
+		}
+	}
+	fclose(fpw);
+
+}
+
+
+
+DefineEngineMethod( PhysicsShape, saveBvh, void, (U32 seq,const char *outputname,const char *outputformat,bool global),,
+   "@brief.\n\n")
+{ 
+
+	object->saveBvh(seq,outputname,outputformat,global);
+
+	return;
+}
+
+
 
 
 
@@ -4040,6 +5892,7 @@ DefineEngineMethod( PhysicsShape, playSeqByNum, void, (S32 index),,
    "@brief.\n\n")
 {  
 	object->setDynamic(0);
+	Con::printf("playing seq by num: %d sequences size %d",index,object->mShape->sequences.size());
 	object->setCurrentSeq(index);
 }
 
@@ -4065,7 +5918,6 @@ DefineEngineMethod( PhysicsShape, showSeqs, void, (),,
 DefineEngineMethod( PhysicsShape, getNumSeqs, S32, (),,
    "@brief.\n\n")
 {  
-
 	return object->mShape->sequences.size();
 }
 
@@ -4220,6 +6072,19 @@ DefineEngineMethod( PhysicsShape, getSceneID, S32, (),,
    "@brief \n\n")
 {  
 	return object->mSceneID;
+}
+
+DefineEngineMethod( PhysicsShape, setSkeletonID, void, (S32 id),,
+   "@brief \n\n")
+{  
+	if (id>0)
+		object->mSkeletonID = id;
+}
+
+DefineEngineMethod( PhysicsShape, getSkeletonID, S32, (),,
+   "@brief \n\n")
+{  
+	return object->mSkeletonID;
 }
 
 
@@ -4959,6 +6824,123 @@ DefineEngineMethod(PhysicsShape,setOpenSteerDetectNavMeshEdgeRange,void, (F32 va
 		object->mVehicle->mDetectNavMeshEdgeRange = value;//Warning, might want to sanity check.
 }
 
+EulerAngles Eul_(float ai, float aj, float ah, int order)
+{
+    EulerAngles ea;
+    ea.x = ai; ea.y = aj; ea.z = ah;
+    ea.w = order;
+    return (ea);
+}
+/* Construct quaternion from Euler angles (in radians). */
+Quat Eul_ToQuat(EulerAngles ea)
+{
+    Quat qu;
+    double a[3], ti, tj, th, ci, cj, ch, si, sj, sh, cc, cs, sc, ss;
+    int i,j,k,h,n,s,f;
+    EulGetOrd(ea.w,i,j,k,h,n,s,f);
+    if (f==EulFrmR) {float t = ea.x; ea.x = ea.z; ea.z = t;}
+    if (n==EulParOdd) ea.y = -ea.y;
+    ti = ea.x*0.5; tj = ea.y*0.5; th = ea.z*0.5;
+    ci = cos(ti);  cj = cos(tj);  ch = cos(th);
+    si = sin(ti);  sj = sin(tj);  sh = sin(th);
+    cc = ci*ch; cs = ci*sh; sc = si*ch; ss = si*sh;
+    if (s==EulRepYes) {
+	a[i] = cj*(cs + sc);	/* Could speed up with */
+	a[j] = sj*(cc + ss);	/* trig identities. */
+	a[k] = sj*(cs - sc);
+	qu.w = cj*(cc - ss);
+    } else {
+	a[i] = cj*sc - sj*cs;
+	a[j] = cj*ss + sj*cc;
+	a[k] = cj*cs - sj*sc;
+	qu.w = cj*cc + sj*ss;
+    }
+    if (n==EulParOdd) a[j] = -a[j];
+    qu.x = a[X]; qu.y = a[Y]; qu.z = a[Z];
+    return (qu);
+}
+
+/* Construct matrix from Euler angles (in radians). */
+void Eul_ToHMatrix(EulerAngles ea, HMatrix M)
+{
+    double ti, tj, th, ci, cj, ch, si, sj, sh, cc, cs, sc, ss;
+    int i,j,k,h,n,s,f;
+    EulGetOrd(ea.w,i,j,k,h,n,s,f);
+    if (f==EulFrmR) {float t = ea.x; ea.x = ea.z; ea.z = t;}
+    if (n==EulParOdd) {ea.x = -ea.x; ea.y = -ea.y; ea.z = -ea.z;}
+    ti = ea.x;	  tj = ea.y;	th = ea.z;
+    ci = cos(ti); cj = cos(tj); ch = cos(th);
+    si = sin(ti); sj = sin(tj); sh = sin(th);
+    cc = ci*ch; cs = ci*sh; sc = si*ch; ss = si*sh;
+    if (s==EulRepYes) {
+	M[i][i] = cj;	  M[i][j] =  sj*si;    M[i][k] =  sj*ci;
+	M[j][i] = sj*sh;  M[j][j] = -cj*ss+cc; M[j][k] = -cj*cs-sc;
+	M[k][i] = -sj*ch; M[k][j] =  cj*sc+cs; M[k][k] =  cj*cc-ss;
+    } else {
+	M[i][i] = cj*ch; M[i][j] = sj*sc-cs; M[i][k] = sj*cc+ss;
+	M[j][i] = cj*sh; M[j][j] = sj*ss+cc; M[j][k] = sj*cs-sc;
+	M[k][i] = -sj;	 M[k][j] = cj*si;    M[k][k] = cj*ci;
+    }
+    M[W][X]=M[W][Y]=M[W][Z]=M[X][W]=M[Y][W]=M[Z][W]=0.0; M[W][W]=1.0;
+}
+
+/* Convert matrix to Euler angles (in radians). */
+EulerAngles Eul_FromHMatrix(HMatrix M, int order)
+{
+    EulerAngles ea;
+    int i,j,k,h,n,s,f;
+    EulGetOrd(order,i,j,k,h,n,s,f);
+    if (s==EulRepYes) {
+	double sy = sqrt(M[i][j]*M[i][j] + M[i][k]*M[i][k]);
+	if (sy > 16*FLT_EPSILON) {
+	    ea.x = atan2(M[i][j], M[i][k]);
+	    ea.y = atan2((float)sy, M[i][i]);
+	    ea.z = atan2(M[j][i], -M[k][i]);
+	} else {
+	    ea.x = atan2(-M[j][k], M[j][j]);
+	    ea.y = atan2((float)sy, M[i][i]);
+	    ea.z = 0;
+	}
+    } else {
+	double cy = sqrt(M[i][i]*M[i][i] + M[j][i]*M[j][i]);
+	if (cy > 16*FLT_EPSILON) {
+	    ea.x = atan2(M[k][j], M[k][k]);
+	    ea.y = atan2(-M[k][i], (float)cy);
+	    ea.z = atan2(M[j][i], M[i][i]);
+	} else {
+	    ea.x = atan2(-M[j][k], M[j][j]);
+	    ea.y = atan2(-M[k][i], (float)cy);
+	    ea.z = 0;
+	}
+    }
+    if (n==EulParOdd) {ea.x = -ea.x; ea.y = - ea.y; ea.z = -ea.z;}
+    if (f==EulFrmR) {float t = ea.x; ea.x = ea.z; ea.z = t;}
+    ea.w = order;
+    return (ea);
+}
+
+/* Convert quaternion to Euler angles (in radians). */
+EulerAngles Eul_FromQuat(Quat q, int order)
+{
+    HMatrix M;
+    double Nq = q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w;
+    double s = (Nq > 0.0) ? (2.0 / Nq) : 0.0;
+    double xs = q.x*s,	  ys = q.y*s,	 zs = q.z*s;
+    double wx = q.w*xs,	  wy = q.w*ys,	 wz = q.w*zs;
+    double xx = q.x*xs,	  xy = q.x*ys,	 xz = q.x*zs;
+    double yy = q.y*ys,	  yz = q.y*zs,	 zz = q.z*zs;
+    M[X][X] = 1.0 - (yy + zz); M[X][Y] = xy - wz; M[X][Z] = xz + wy;
+    M[Y][X] = xy + wz; M[Y][Y] = 1.0 - (xx + zz); M[Y][Z] = yz - wx;
+    M[Z][X] = xz - wy; M[Z][Y] = yz + wx; M[Z][Z] = 1.0 - (xx + yy);
+    M[W][X]=M[W][Y]=M[W][Z]=M[X][W]=M[Y][W]=M[Z][W]=0.0; M[W][W]=1.0;
+    return (Eul_FromHMatrix(M, order));
+}
+
+EulerAngles someOtherNewFunction()
+{
+	EulerAngles ea;
+	return (ea);
+}
 
 
 /*

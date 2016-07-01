@@ -144,6 +144,7 @@ class GuiTabBookCtrl : public GuiContainer
       void onChildAdded( GuiControl *child );
       bool reOrder(SimObject* obj, SimObject* target);
       bool acceptsAsChild( SimObject* object ) const;
+		void reArrange();//Reorder tabs based on mTabIndex values.
       
       /// @}
 
