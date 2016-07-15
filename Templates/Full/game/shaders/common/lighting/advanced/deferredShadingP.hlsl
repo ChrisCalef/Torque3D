@@ -20,22 +20,22 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
-#include "shadergen:/autogenConditioners.h"
+#include "../../shaderModelAutoGen.hlsl"
 #include "../../postfx/postFx.hlsl"
 #include "shaders/common/torque.hlsl"
 
+TORQUE_UNIFORM_SAMPLER2D(colorBufferTex,0);
+TORQUE_UNIFORM_SAMPLER2D(lightPrePassTex,1);
+TORQUE_UNIFORM_SAMPLER2D(matInfoTex,2);
+TORQUE_UNIFORM_SAMPLER2D(prepassTex,3);
 
-float4 main( PFXVertToPix IN, 
-             uniform sampler2D colorBufferTex : register(S0),
-             uniform sampler2D lightPrePassTex : register(S1),
-             uniform sampler2D matInfoTex : register(S2),
-             uniform sampler2D prepassTex : register(S3)) : COLOR0
+float4 main( PFXVertToPix IN ) : TORQUE_TARGET0
 {        
-   float4 lightBuffer = tex2D( lightPrePassTex, IN.uv0 );
-   float4 colorBuffer = tex2D( colorBufferTex, IN.uv0 );
-   float4 matInfo = tex2D( matInfoTex, IN.uv0 );
+   float4 lightBuffer = TORQUE_TEX2D( lightPrePassTex, IN.uv0 );
+   float4 colorBuffer = TORQUE_TEX2D( colorBufferTex, IN.uv0 );
+   float4 matInfo = TORQUE_TEX2D( matInfoTex, IN.uv0 );
    float specular = saturate(lightBuffer.a);
-   float depth = prepassUncondition( prepassTex, IN.uv0 ).w;
+   float depth = TORQUE_PREPASS_UNCONDITION( prepassTex, IN.uv0 ).w;
 
    if (depth>0.9999)
       return float4(0,0,0,0);

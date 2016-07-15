@@ -160,7 +160,7 @@ void AIPlayer::initPersistFields()
       addField("allowDrop", TypeBool, Offset(mLinkTypes.drop, AIPlayer),
          "Allow the character to use drop links.");
       addField("allowSwim", TypeBool, Offset(mLinkTypes.swim, AIPlayer),
-         "Allow the character tomove in water.");
+         "Allow the character to move in water.");
       addField("allowLedge", TypeBool, Offset(mLinkTypes.ledge, AIPlayer),
          "Allow the character to jump ledges.");
       addField("allowClimb", TypeBool, Offset(mLinkTypes.climb, AIPlayer),
@@ -291,6 +291,30 @@ void AIPlayer::clearAim()
    mAimObject = 0;
    mAimLocationSet = false;
    mAimOffset = Point3F(0.0f, 0.0f, 0.0f);
+}
+
+/**
+ * Sets the correct aim for the bot to the target
+ */
+void AIPlayer::getMuzzleVector(U32 imageSlot,VectorF* vec)
+{
+   MatrixF mat;
+   getMuzzleTransform(imageSlot,&mat);
+
+   MountedImage& image = mMountedImageList[imageSlot];
+
+   if (image.dataBlock->correctMuzzleVector)
+   {
+      disableHeadZCalc();
+      if (getCorrectedAim(mat, vec))
+      {
+         enableHeadZCalc();
+         return;
+      }
+      enableHeadZCalc();
+
+   }
+   mat.getColumn(1,vec);
 }
 
 /**
@@ -582,7 +606,7 @@ bool AIPlayer::getAIMove(Move *movePtr)
    // Replicate the trigger state into the move so that
    // triggers can be controlled from scripts.
    for( U32 i = 0; i < MaxTriggerKeys; i++ )
-      movePtr->trigger[ i ] = mMoveTriggers[ i ];
+      movePtr->trigger[ i ] = getImageTriggerState( i );
 
 #ifdef TORQUE_NAVIGATION_ENABLED
    if(mJump == Now)

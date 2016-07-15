@@ -20,17 +20,24 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
+#include "../../shaderModel.hlsl"
+
+struct Conn
+{
+   float4 hpos : TORQUE_POSITION;
+};
+
 struct Fragout
 {
-   float4 col : COLOR0;
-   float4 col1 : COLOR1;
-   float4 col2 : COLOR2;
+   float4 col : TORQUE_TARGET0;
+   float4 col1 : TORQUE_TARGET1;
+   float4 col2 : TORQUE_TARGET2;
 };
 
 //-----------------------------------------------------------------------------
 // Main                                                                        
 //-----------------------------------------------------------------------------
-Fragout main( )
+Fragout main( Conn IN )
 {
    Fragout OUT;
    
