@@ -2656,8 +2656,13 @@ DefineEngineFunction( getClock, S32, (),,
 	return clock();
 }
 
+
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 //Okay, now, this stuff REALLY needs to go into a new code file for MegaMotion/openSimEarth.
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 DefineEngineFunction( addSceneShapeBlock, bool, (S32 sceneId,S32 shapeId,S32 groupId),,
    "MegaMotion: adds a block of scene shapes to the database." )
 {
@@ -2665,8 +2670,8 @@ DefineEngineFunction( addSceneShapeBlock, bool, (S32 sceneId,S32 shapeId,S32 gro
 	
 	GuiWindowCtrl* window = NULL;
 	GuiTextEditCtrl* textedit = NULL;
-	window = dynamic_cast<GuiWindowCtrl*>(Sim::findObject("addMMSceneShapeWindow"));
-	Con::printf("found my window: %s",window->getClassName());
+	window = dynamic_cast<GuiWindowCtrl*>(Sim::findObject("mmAddSceneShapeWindow"));
+
 	if (window)
 	{
 		//Well, this is ugly, but apparently the only way.
@@ -2839,9 +2844,14 @@ DefineEngineFunction( addSceneShapeBlock, bool, (S32 sceneId,S32 shapeId,S32 gro
 		}		
 		kSQL->ExecuteSQL(shapeQuery.str().c_str());
 		shapeQuery.str("");
-	}
 
-	return true;
+		return true;
+	} 
+	else  //Didn't find the window.
+	{
+		return false;
+	}
+	
 }
 
 /*
