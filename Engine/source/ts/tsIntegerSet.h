@@ -41,7 +41,7 @@
 
 class Stream;
 
-/// The standard mathmatical set, where there are no duplicates.  However,
+/// The standard mathematical set, where there are no duplicates.  However,
 /// this set uses bits instead of numbers.
 class TSIntegerSet
 {

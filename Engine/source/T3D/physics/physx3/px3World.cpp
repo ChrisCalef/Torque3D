@@ -63,8 +63,8 @@ Px3ConsoleStream* Px3World::smErrorCallback = NULL;
 physx::PxVisualDebuggerConnection* Px3World::smPvdConnection=NULL;
 physx::PxDefaultAllocator Px3World::smMemoryAlloc;
 //Physics timing - fairly low, consider using 1/60.f
-F32 Px3World::smPhysicsStepTime = 1.0f/32.0f;
-U32 Px3World::smPhysicsMaxIterations = 4;
+F32 Px3World::smPhysicsStepTime = 1.0f/60.0f;//32.0f;
+U32 Px3World::smPhysicsMaxIterations = 20;
 
 //filter shader with support for CCD pairs
 static physx::PxFilterFlags sCcdFilterShader(
@@ -76,8 +76,9 @@ static physx::PxFilterFlags sCcdFilterShader(
         const void* constantBlock,
         physx::PxU32 constantBlockSize)
 {
-        pairFlags = physx::PxPairFlag::eRESOLVE_CONTACTS;
-        pairFlags |= physx::PxPairFlag::eCCD_LINEAR;
+        //pairFlags = physx::PxPairFlag::eRESOLVE_CONTACTS;
+        //pairFlags |= physx::PxPairFlag::eCCD_LINEAR;
+		  pairFlags = physx::PxPairFlag::eSOLVE_CONTACT;
         return physx::PxFilterFlags();
 }
 
@@ -110,6 +111,7 @@ void Px3World::setTiming(F32 stepTime,U32 maxIterations)
 {
    smPhysicsStepTime = stepTime;
    smPhysicsMaxIterations = maxIterations;
+	Con::printf("setting physics step time: %f  maxIterations %d",smPhysicsStepTime,smPhysicsMaxIterations);
 }
 
 bool Px3World::restartSDK( bool destroyOnly, Px3World *clientWorld, Px3World *serverWorld)
@@ -199,11 +201,12 @@ bool Px3World::restartSDK( bool destroyOnly, Px3World *clientWorld, Px3World *se
 	}
 
    //just for testing-must remove, should really be enabled via console like physx 2 plugin
-#ifdef TORQUE_DEBUG
+	//TEMP: openSimEarth having major visualization problems (no joint limits at all). Trying visual debugger.
+//#ifdef TORQUE_DEBUG
 	physx::PxVisualDebuggerConnectionFlags connectionFlags(physx::PxVisualDebuggerExt::getAllConnectionFlags());
 	smPvdConnection = physx::PxVisualDebuggerExt::createConnection(gPhysics3SDK->getPvdConnectionManager(), 
 				"localhost", 5425, 100, connectionFlags);	
-#endif
+//#endif
 
 	return true;
 }
@@ -263,6 +266,7 @@ bool Px3World::initWorld( bool isServer, ProcessList *processList )
  	
 	sceneDesc.flags |= physx::PxSceneFlag::eENABLE_CCD;
 	sceneDesc.flags |= physx::PxSceneFlag::eENABLE_ACTIVETRANSFORMS;
+	sceneDesc.flags |= physx::PxSceneFlag::eENABLE_PCM;
 
 	sceneDesc.filterShader  = sCcdFilterShader;
 
@@ -283,7 +287,7 @@ bool Px3World::initWorld( bool isServer, ProcessList *processList )
 // Most of this borrowed from bullet physics library, see btDiscreteDynamicsWorld.cpp
 bool Px3World::_simulate(const F32 dt)
 {
-	int numSimulationSubSteps = 0;
+	int numSimulationSubSteps = 5;
    //fixed timestep with interpolation
    mAccumulator += dt;
    if (mAccumulator >= smPhysicsStepTime)
@@ -615,17 +619,30 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
    if ( !mScene )
       return;
 
-   mScene->setVisualizationParameter(physx::PxVisualizationParameter::eSCALE,0.2f);
-   //mScene->setVisualizationParameter(physx::PxVisualizationParameter::eBODY_AXES,1.0f);
-   mScene->setVisualizationParameter(physx::PxVisualizationParameter::eCOLLISION_SHAPES,1.0f);
-   mScene->setVisualizationParameter(physx::PxVisualizationParameter::eJOINT_LOCAL_FRAMES,1.0f);//
-   mScene->setVisualizationParameter(physx::PxVisualizationParameter::eJOINT_LIMITS,1.0f);//eBODY_JOINT_GROUPS
+	mScene->setVisualizationParameter(physx::PxVisualizationParameter::eSCALE,0.15f);//(For reasonable sized joint limit cones.)
+   
+	if (PhysicsPlugin::smDebugRenderCollisions)
+		mScene->setVisualizationParameter(physx::PxVisualizationParameter::eCOLLISION_SHAPES,1.0f);
+	else 
+		mScene->setVisualizationParameter(physx::PxVisualizationParameter::eCOLLISION_SHAPES,0.0f);
+
+		
+	if (PhysicsPlugin::smDebugRenderJointLimits)
+		mScene->setVisualizationParameter(physx::PxVisualizationParameter::eJOINT_LIMITS,1.0f);//eBODY_JOINT_GROUPS
+	else
+		mScene->setVisualizationParameter(physx::PxVisualizationParameter::eJOINT_LIMITS,0.0f);//eBODY_JOINT_GROUPS
+
+	if (PhysicsPlugin::smDebugRenderBodyAxes)
+		mScene->setVisualizationParameter(physx::PxVisualizationParameter::eBODY_AXES,1.0f);
+	else
+		mScene->setVisualizationParameter(physx::PxVisualizationParameter::eBODY_AXES,0.0f);
+
+
+   //mScene->setVisualizationParameter(physx::PxVisualizationParameter::eJOINT_LOCAL_FRAMES,1.0f);//
    //mScene->setVisualizationParameter(physx::PxVisualizationParameter::eBODY_JOINT_GROUPS,1.0f);
 
    const physx::PxRenderBuffer *renderBuffer = &mScene->getRenderBuffer();
    
-
-
    //TEMP, trying to figure out how to limit scope of debug rendering instead of dumping all physics objects into it, 
    //but this isn't the place, it's too late.
    Vector<SceneObject*> kCameras;
@@ -665,20 +682,22 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
    // Render points
    {
       physx::PxU32 numPoints = renderBuffer->getNbPoints();
-	  if (numPoints>0)
-	  {
-		  const physx::PxDebugPoint *points = renderBuffer->getPoints();
-		  PrimBuild::begin( GFXPointList, numPoints );
+		if (numPoints>0)
+		{
+			const physx::PxDebugPoint *points = renderBuffer->getPoints();
+			//Con::printf("debug drawing %d points",numPoints);
+			PrimBuild::begin( GFXPointList, numPoints );
 
-		  while ( numPoints-- )
-		  {
-			  PrimBuild::color( color );//( getDebugColor(points->color) );
-			  PrimBuild::vertex3fv(px3Cast<Point3F>(points->pos));
-			  points++;
-		  }
+			while ( numPoints-- )
+			{
+				//PrimBuild::color( color );//( getDebugColor(points->color) );
+				PrimBuild::color( getDebugColor(points->color) );
+				PrimBuild::vertex3fv(px3Cast<Point3F>(points->pos));
+				points++;
+			}
 
-		  PrimBuild::end();
-	  }
+			PrimBuild::end();
+		}
    }
 
    // Render lines
@@ -686,7 +705,7 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
       physx::PxU32 numLines = renderBuffer->getNbLines();
       const physx::PxDebugLine *lines = renderBuffer->getLines();
 	  
-	  //Con::printf("debug drawing %d lines",numLines);
+		//Con::printf("debug drawing %d lines",numLines);
       PrimBuild::begin( GFXLineList, numLines * 2 );
 	  
       while ( numLines-- )
@@ -716,6 +735,7 @@ void Px3World::onDebugDraw( const SceneRenderState *state, ColorI color )
 
       PrimBuild::begin( GFXTriangleList, numTris * 3 );
       
+		//Con::printf("debug drawing %d tris",numTris);
       while ( numTris-- )
       {
          PrimBuild::color( getDebugColor( triangles->color0 )  );//( color );
@@ -800,6 +820,22 @@ void Px3World::shutdownOpenSteer()
 {
 	OpenSteer::OpenSteerDemo::exit(1);
 }
+
+///////////////////////////////////////////////////////////////////////
+
+
+void Px3World::loadJointData()
+{
+	 static_cast<Px3Plugin *>(PHYSICSMGR)->loadJointData();
+}
+
+DefineEngineFunction( loadJointData, void, (),, "" )
+{
+	Px3World *kWorld = static_cast<Px3World *>(PHYSICSMGR->getWorld( "client" ));
+   kWorld->loadJointData();
+	return;
+}
+
 
 /*
 void PhysicsForce::attach( const Point3F &start, const Point3F &direction, F32 maxDist )

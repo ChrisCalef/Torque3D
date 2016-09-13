@@ -168,7 +168,7 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 		physx::PxRevoluteJoint* revoluteJoint = physx::PxRevoluteJointCreate(*gPhysics3SDK,A,localTrans0,B,localTrans1);
 		mJoint = dynamic_cast<physx::PxJoint*>(revoluteJoint);
 
-		revoluteJoint->setLimit(physx::PxJointAngularLimitPair(-mJD.swingLimit/2.0f, mJD.swingLimit/2.0f, 0.1f)); 
+		revoluteJoint->setLimit(physx::PxJointAngularLimitPair(mJD.swingLimit, mJD.swingLimit2, 0.1f)); 
 		revoluteJoint->setRevoluteJointFlag(physx::PxRevoluteJointFlag::eLIMIT_ENABLED, true);
 
 	} else if  (mJD.jointType==PHYS_JOINT_PRISMATIC) {
@@ -216,14 +216,17 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 		//d6Joint->set
 
 		//HERE: is this the only way to do it? How do I set an upper and lower amount per axis??
-	   const physx::PxJointLimitCone cone(mJD.swingLimit, mJD.swingLimit2,physx::PxSpring(mJD.swingSpring,mJD.springDamper));
+	   const physx::PxJointLimitCone cone(mJD.swingLimit, mJD.swingLimit2,0.1f);//physx::PxSpring(mJD.swingSpring,mJD.springDamper));
 		//Con::printf("limit cone, soft=%d swingLimit %f yAngle %f  swing2 %f zAngle %f",cone.isSoft(),mJD.swingLimit,cone.yAngle,mJD.swingLimit2,cone.zAngle);
 		//d6Joint->setSwingLimit(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, 0.1f));
 		//d6Joint->setSwingLimit(physx::PxJointLimitCone(mJD.swingLimit, mJD.swingLimit2, physx::PxSpring(mJD.swingSpring,mJD.springDamper)));
 		d6Joint->setSwingLimit(cone);
 		d6Joint->setTwistLimit(physx::PxJointAngularLimitPair(-mJD.twistLimit,mJD.twistLimit,1.0f));
+		d6Joint->setProjectionLinearTolerance(0.1f);
 		mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::ePROJECTION ,true);
 		mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::ePROJECT_TO_ACTOR0 ,true);
+		//mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::eDISABLE_PREPROCESSING ,true);
+		
 	
 		//d6Joint->setProjectionAngularTolerance(M_PI/360.0f);//This property has no visible effect on my joint instability problem.
 		//float angTol = d6Joint->getProjectionAngularTolerance();
@@ -239,7 +242,9 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	mJoint->setBreakForce(mJD.maxForce,mJD.maxTorque);
 
+	Con::printf("Setting constraint flag to true! jointType %d",mJD.jointType);
 	mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::eVISUALIZATION,true);
+
 	
 }
 

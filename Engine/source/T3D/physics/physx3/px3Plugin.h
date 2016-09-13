@@ -63,8 +63,8 @@ public:
 
    // Chris Calef - MegaMotion/openSimEarth
    virtual PhysicsJoint* createJoint(PhysicsBody* A,PhysicsBody* B,U32 jointID,Point3F origin,Point3F jointRots,Point3F jointRots2,MatrixF shapeTrans);
-   virtual void loadJointData(U32 jointID, physicsJointData *jD);
-
+   //virtual void loadJointData(U32 jointID, physicsJointData *jD);
+	virtual void loadJointData();
 };
 
 #endif  // _PX3PLUGIN_H_

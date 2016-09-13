@@ -110,6 +110,8 @@ public:
 	void initOpenSteer();
 	void updateOpenSteer();
 	void shutdownOpenSteer();
+
+	void loadJointData();
 };
 
 #endif // _PX3WORLD_H_

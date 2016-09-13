@@ -220,8 +220,8 @@ public: //protected:
    PhysicsWorld *mWorld;
 
    /// The abstracted physics actor.
-   PhysicsBody *mPhysicsRep;//OpenSimEarth: need to declare this redundant, and use mPhysicsBodies[0] instead.
-   //However This might get confusing and touch on a lot of other files that refer to mPhysicsRep. Needs major refactor.
+   PhysicsBody *mPhysicsRep;//MegaMotion: would like to declare this redundant, and use mPhysicsBodies[0] instead.
+   //However this will get confusing and touch on a lot of other files that refer to mPhysicsRep. Needs major refactor.
    
    Vector<PhysicsBody*> mPhysicsBodies; //For articulated shapes. Currently clientside only.
    PhysicsJoint *mJoint;
@@ -390,6 +390,7 @@ public:
 
    PhysicsBody *getPhysicsRep();
    PhysicsJoint *getPhysicsJoint();
+
    void setJointTarget(QuatF &target);
    void setHasGravity(bool hasGrav);
    void setPartHasGravity(S32 partID,bool hasGrav);
@@ -398,6 +399,7 @@ public:
    void setPartDynamic(S32 partID,bool isDynamic);
    bool getPartDynamic(S32 partID);
    S32 getContactBody();
+	S32 getBodyNum(String name);
 
    void setPosition(Point3F pos);
 
@@ -492,13 +494,14 @@ public:
 	//////OpenSteer////////////
 
 	///// MegaMotion Keyframe Edits //////	
-	ultraframeSet mUFSet;
+	ultraframeSet mUFSet;//RUH ROH! This needs to be a vector.
 
 	void addUltraframeSet(const char *name);
 	void addUltraframeSeries(S32 type,S32 node);
 	void addUltraframe(S32 frame,F32 x,F32 y,F32 z);
 
 	void applyUltraframeSet();
+	void clearUltraframeSet();
 
 	void cropSequence(U32 seq,F32 start,F32 stop,const char *name);
 	

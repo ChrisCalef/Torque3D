@@ -88,7 +88,7 @@ bool Px3Body::init(   PhysicsCollision *shape,
    AssertFatal( shape, "Px3Body::init - Got a null collision shape!" );
    AssertFatal( dynamic_cast<Px3Collision*>( shape ), "Px3Body::init - The collision shape is the wrong type!" );
    AssertFatal( !((Px3Collision*)shape)->getShapes().empty(), "Px3Body::init - Got empty collision shape!" );
-	 
+	
    // Cleanup any previous actor.
    _releaseActor();
 
@@ -105,11 +105,11 @@ bool Px3Body::init(   PhysicsCollision *shape,
    {
 	   mActor = gPhysics3SDK->createRigidDynamic(physx::PxTransform(physx::PxIDENTITY()));
 	   physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
-
+		Con::printf("creating rigid dynamic shape, mass=%f",mass);
 	   if ( isKinematic )
 	   {		
 		   actor->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
-		   actor->setMass(getMax( mass, 0.001f ));//? Locking mass at a minimal stable value, not sure if this is it or not.
+		   //actor->setMass(getMax( mass, 0.001f ));//? Locking mass at a minimal stable value, not sure if this is it or not.
 	   }
    } else {
 	   mActor = gPhysics3SDK->createRigidStatic(physx::PxTransform(physx::PxIDENTITY()));
@@ -156,11 +156,14 @@ bool Px3Body::init(   PhysicsCollision *shape,
       //set local pose - actor->createShape with a local pose is deprecated in physx 3.3
       pShape->setLocalPose(desc->pose);
       //set the skin width
-      pShape->setContactOffset(0.01f);
-      pShape->setFlag(physx::PxShapeFlag::eSIMULATION_SHAPE, !isTrigger);
+      pShape->setContactOffset(0.15f);//0.01f//HMM, going from 0.01 to 0.1 definitely seemed to help. But how big can we go?
+      pShape->setRestOffset(0.01f);
+		pShape->setFlag(physx::PxShapeFlag::eSIMULATION_SHAPE, !isTrigger);
       pShape->setFlag(physx::PxShapeFlag::eSCENE_QUERY_SHAPE,true);
       pShape->setSimulationFilterData(colData);
       pShape->setQueryFilterData(colData);
+
+		Con::printf("contact offset: %f, rest offset %f",pShape->getContactOffset(),pShape->getRestOffset());
    }
 
    //Con::printf("creating new physics body, mass %f, classname %s",mass,obj->getClassName());
@@ -493,16 +496,17 @@ void Px3Body::setHasGravity( bool hasGrav )
    }  
 }
 
-void Px3Body::setDynamic( bool isDynam )
+void Px3Body::setDynamic( bool isDynamic )
 { 
 	bool isKinematic = mBodyFlags & BF_KINEMATIC;
-	if (isDynam==isKinematic)//Test whether we're changing states, if (isDynam==isKinematic) then we're changing.
+	if (isDynamic==isKinematic)//Test whether we're changing states, if (isDynam==isKinematic) then we're changing.
 	{ //ie we're switching states, we were kinematic and now we want to be dynamic, or vice versa.
 		physx::PxRigidDynamic *kBody = static_cast<physx::PxRigidDynamic*>(mActor);
 		mWorld->lockScene();
-		if (isDynam)
+		if (isDynamic)
 		{
 			kBody->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, false);
+			kBody->addForce(physx::PxVec3(0,0,0));
 			mBodyFlags &= ~PhysicsBody::BF_KINEMATIC;
 		} else {
 			kBody->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);

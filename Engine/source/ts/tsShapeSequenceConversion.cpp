@@ -1399,6 +1399,8 @@ S32 TSShape::findSequenceByPath(const char *path)
 
 void TSShape::applyUltraframeSet(ultraframeSet *ufs)
 {
+	Con::printf("TSShape applying ultraframe set!"); 
+
 	//Tthe first thing we need to do is check to see whether we have a backup of this sequence. If so, that
 	//means we have already altered it, and therefore we need to restore it before we alter it again.
 	//If not, then we need to make one.
@@ -1432,6 +1434,9 @@ void TSShape::applyUltraframeSet(ultraframeSet *ufs)
 				nodeRotations[kSeq->baseRotation+(j*kSeq->numKeyframes)+k] = mSequenceBackups[backupSeq].nodeRotations[(j*kSeq->numKeyframes)+k];
 			}
 		}
+		//And now... if we're actually just trying to restore the sequence, then make the set empty, and bail here.
+		if (ufs->series.size()==0)
+			return;
 	}
 	else 
 	{
@@ -1452,7 +1457,9 @@ void TSShape::applyUltraframeSet(ultraframeSet *ufs)
 		}
 		mSequenceBackups.push_back(seqBackup);
 	}
-
+	
+	Con::printf("TSShape made backupSequence %d, going on to modify frames! series size %d frames %d",
+		backupSeq,ufs->series.size(),ufs->series[0].frames.size());
 	//Now, we should be ready to apply a full set of changes to the (once again) virginal sequence data.
 	Point3F newPos,basePos;
 	Quat16 newQuat,baseQuat;
@@ -1521,10 +1528,13 @@ void TSShape::applyUltraframeSet(ultraframeSet *ufs)
 				endFrame = ef->frame;
 				endVal = ef->value;
 				
+				//Con::printf("keyframe %d, startFrame %d endFrame %d startVal %f %f %f endVal %f %f %f",
+				//	j,startFrame,endFrame,startVal.x,startVal.y,startVal.z,endVal.x,endVal.y,endVal.z);
+
 				for (U32 k=startFrame;k<=endFrame;k++)
 				{
 					curVal = startVal + ((endVal - startVal)*((F32)(k-startFrame)/(F32)(endFrame-startFrame)));
-					//Con::printf("curval %f %f %f nodeRots %d",curVal.x,curVal.y,curVal.z,seqBackup.nodeRotations.size());
+					//Con::printf("curval %f %f %f seqBackup nodeRots %d",curVal.x,curVal.y,curVal.z,seqBackup.nodeRotations.size());
 					if ((type==ADJUST_NODE_POS) || (type==SET_NODE_POS))
 					{
 						basePos = seqBackup.nodeTranslations[k];
@@ -1661,8 +1671,7 @@ void TSShape::adjustNodeRotRegion(U32 seq, U32 node, EulerF &rot, F32 start, F32
 	  return;
 
 	TSShape::Sequence *kSeq = &(sequences[seq]);
-
-
+	
 
 	startFrame = (S32)((F32)kSeq->numKeyframes * start);
 	stopFrame = (S32)((F32)kSeq->numKeyframes * stop);

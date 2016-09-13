@@ -43,6 +43,10 @@ PhysicsResetSignal PhysicsPlugin::smPhysicsResetSignal;
 bool PhysicsPlugin::smSinglePlayer = false;
 U32 PhysicsPlugin::smThreadCount = 2;
 
+bool PhysicsPlugin::smDebugRenderCollisions = true;
+bool PhysicsPlugin::smDebugRenderJointLimits = false;
+bool PhysicsPlugin::smDebugRenderBodyAxes = false;
+
 //Chris Calef - MegaMotion/openSimEarth
 SQLiteObject* PhysicsPlugin::mSQL = NULL;
 std::map<int,physicsJointData> PhysicsPlugin::mJointData;
@@ -59,6 +63,15 @@ AFTER_MODULE_INIT( Sim )
    Con::addVariable( "$pref::Physics::threadCount", TypeS32, &PhysicsPlugin::smThreadCount, 
       "@brief Number of threads to use in a single pass of the physics engine.\n\n"
       "Defaults to 2 if not set.\n\n"
+	   "@ingroup Physics\n");
+	Con::addVariable( "$Physics::debugRenderCollisions", TypeBool, &PhysicsPlugin::smDebugRenderCollisions, 
+      "@brief Draw collision hulls in debug renderer.\n\n"
+	   "@ingroup Physics\n");
+	Con::addVariable( "$Physics::debugRenderJointLimits", TypeBool, &PhysicsPlugin::smDebugRenderJointLimits, 
+      "@brief Draw joint limits in debug renderer.\n\n"
+	   "@ingroup Physics\n");
+	Con::addVariable( "$Physics::debugRenderBodyAxes", TypeBool, &PhysicsPlugin::smDebugRenderBodyAxes, 
+      "@brief Draw body axes in debug renderer.\n\n"
 	   "@ingroup Physics\n");
 }
 
@@ -138,7 +151,11 @@ void PhysicsPlugin::_debugDraw( SceneManager *graph, const SceneRenderState *sta
 	   clientWorld = PHYSICSMGR->getWorld( smClientWorldName );
 
 	   if ( clientWorld )
-		   clientWorld->onDebugDraw( state, ColorI("blue"));
+		{
+			PHYSICSMGR->enableSimulation( smClientWorldName, false );
+		   clientWorld->onDebugDraw( state, ColorI("green"));
+			PHYSICSMGR->enableSimulation( smClientWorldName, true );
+		}
    }
 }
 
@@ -215,10 +232,12 @@ DefineConsoleFunction( physicsStoreState, void, (), , "physicsStoreState()")
 {
    PhysicsPlugin::getPhysicsResetSignal().trigger( PhysicsResetEvent_Store );
 }
+
 DefineConsoleFunction( pss, void, (), , "physicsStoreState()")
 {
    PhysicsPlugin::getPhysicsResetSignal().trigger( PhysicsResetEvent_Store );
 }
+
 // Used to send a signal to objects in the
 // physics simulation that they should restore
 // their saved state, such as when the editor is opened.
@@ -227,6 +246,7 @@ DefineConsoleFunction( physicsRestoreState, void, (), , "physicsRestoreState()")
    if ( PHYSICSMGR )
       PHYSICSMGR->reset();
 }
+
 DefineConsoleFunction( prs, void, (), , "physicsRestoreState()")
 {
    if ( PHYSICSMGR )
@@ -238,6 +258,7 @@ DefineConsoleFunction( physicsDebugDraw, void, (bool enable), , "physicsDebugDra
    if ( PHYSICSMGR )
       PHYSICSMGR->enableDebugDraw( enable );
 }
+
 DefineConsoleFunction( pdd, void, (bool enable), , "physicsDebugDraw( bool enable )")
 {
    if ( PHYSICSMGR )

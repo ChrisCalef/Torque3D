@@ -99,14 +99,14 @@ ConsoleDocClass( PhysicsShapeData,
 
 PhysicsShapeData::PhysicsShapeData()
    :  shapeName( NULL ),
-      mass( 1.0f ),
+      mass( 0.01f ),//1.0f
       dynamicFriction( 0.0f ),
       staticFriction( 0.0f ),
       restitution( 0.0f ),
       linearDamping( 0.0f ),
       angularDamping( 0.0f ),
-      linearSleepThreshold( 0.1f ),
-      angularSleepThreshold( 0.1f ),
+      linearSleepThreshold( 0.0f ),//0.1f
+      angularSleepThreshold( 0.0f ),//0.1f
       waterDampingScale( 1.0f ),
       buoyancyDensity( 0.0f ),
       ccdEnabled( false ),
@@ -493,7 +493,17 @@ PhysicsShape::PhysicsShape()
 
 PhysicsShape::~PhysicsShape()
 {
-	Con::printf("calling physicsShape destructor, sceneShapeID %d",mSceneShapeID);
+	Con::printf("calling physicsShape destructor, sceneShapeID %d physicsBodies %d",mSceneShapeID,mPhysicsBodies.size());
+	if (mPhysicsBodies.size()>1)
+	{
+		U32 bodies = mPhysicsBodies.size();
+		for (U32 i=bodies-1;i>1;i++)
+		{
+			//delete mPhysicsBodies[i];
+			//mPhysicsBodies.decrement();
+			//Con::printf("deleting physicsbody %d, total: %d",i,mPhysicsBodies.size());
+		}
+	}
 }
 
 void PhysicsShape::consoleInit()
@@ -676,7 +686,6 @@ void PhysicsShape::unpackUpdate( NetConnection *con, BitStream *stream )
 			  mPhysicsRep->setLinVelocity( state.linVelocity ); 
 			  mPhysicsRep->setAngVelocity( state.angVelocity ); 
 		  }
-
 		  mPhysicsRep->getState( &mState );
       }
 
@@ -753,6 +762,10 @@ void PhysicsShape::onRemove()
    removeFromScene();
 
    SAFE_DELETE( mPhysicsRep );
+	if (mPhysicsBodies.size()>1)
+			for (U32 i=1;i<mPhysicsBodies.size();i++)
+				SAFE_DELETE( mPhysicsBodies[i] );
+
    SAFE_DELETE( mShapeInstance );
    mAmbientThread = NULL;
    mAmbientSeq = -1;
@@ -802,11 +815,16 @@ bool PhysicsShape::onNewDataBlock( GameBaseData *dptr, bool reload )
 bool PhysicsShape::_createShape()
 {
    SAFE_DELETE( mPhysicsRep );
+	if (mPhysicsBodies.size()>1)
+			for (U32 i=1;i<mPhysicsBodies.size();i++)
+				SAFE_DELETE( mPhysicsBodies[i] );
    SAFE_DELETE( mShapeInstance );
    mAmbientThread = NULL;
    mWorld = NULL;
    mAmbientSeq = -1;
    mCurrentSeq = -1;
+	F32 partVolume,partMass;
+
 
    if ( !mDataBlock )
       return false;
@@ -906,19 +924,20 @@ bool PhysicsShape::_createShape()
 		mPhysicsRep = PHYSICSMGR->createBody();//Later this could be made smarter, but not needed at the moment.	
 		colShape = PHYSICSMGR->createCollision();//At least we can check for dataBlock->colShape though.
 		MatrixF localTrans = MatrixF::Identity;
-		colShape->addBox(Point3F(0.03,0.02,0.015),localTrans);//This box could be replaced with a capsule or a character controller.
+		colShape->addBox(Point3F(1.0,1.0,1.0),localTrans);
+		//colShape->addBox(Point3F(0.03,0.02,0.015),localTrans);//This box could be replaced with a capsule or a character controller.
 		//}
 	   //Oops, just realized this would break everything not articulated, or at least replace it with a colshape
 	   if (bool(mDataBlock->colShape))
 	   {
 			mPhysicsRep->init(   mDataBlock->colShape, 
-							mDataBlock->mass, 
+							mDataBlock->mass/100.0f,//TEMP, what am I even doing here? Why do I want my collision shape to have a rigid body? 
 							bodyFlags,  
 							this, 
 							mWorld );
 		} else {
 		   mPhysicsRep->init(   colShape, 
-							mDataBlock->mass, 
+							mDataBlock->mass * (0.03*0.02*0.015), 
 							bodyFlags,  
 							this, 
 							mWorld );	   
@@ -1071,6 +1090,8 @@ bool PhysicsShape::_createShape()
 
 				Point3F halfDim = PD->dimensions * 0.5;
 
+				Con::printf("adding box bodypart %s: %f %f %f",baseNode,PD->dimensions.x,PD->dimensions.y,PD->dimensions.z);
+
 				if (PD->shapeType==physicsShapeType::PHYS_SHAPE_BOX)
 					colShape->addBox(halfDim,localTrans);
 				else if (PD->shapeType==physicsShapeType::PHYS_SHAPE_CAPSULE)
@@ -1115,9 +1136,13 @@ bool PhysicsShape::_createShape()
 				else
 					bodyFlags &= ~PhysicsBody::BF_GRAVITY;
 
+				
+				partVolume = PD->dimensions.x * PD->dimensions.y * PD->dimensions.z;
+				partMass = partVolume * PD->mass;
+
 				//MASS: get this from shapeParts in database, or better yet use density = 1.0 and make physx figure it out (?)
 				partBody->init(   colShape, 
-					PD->mass, 
+					partMass, 
 					bodyFlags,  
 					this, 
 					mWorld );	 
@@ -1170,7 +1195,7 @@ bool PhysicsShape::_createShape()
 						mPhysicsBodies[mPhysicsBodies.size()-1]->setParentNodeIndex(parentNode);//Set parent node for body we just created.
 						notForever++;//(Just to make sure we don't get bodypart order mixed up and wind up in forever loop.)
 					}
-					if (notForever==100) break;
+					if (notForever==200) break;
 
 					MatrixF partTrans,parentTrans;
 					partBody->getTransform(&partTrans);
@@ -2526,8 +2551,7 @@ void PhysicsShape::processTick( const Move *move )
 		F32 runThreshold = 0.3;
 		if ((pedVelLen <= mWalkSpeed - walkThreshold)&&(mCurrentSeq!=mActionSeqs["ambient"]))
 		{
-			//Con::printf("setting current sequence to idle!  pedVel %f",pedVelLen);
-			setCurrentSeq(mActionSeqs["ambient"]);	//moveSeq = "walk";
+			setCurrentSeq(mActionSeqs["ambient"]);
 		}
 		else if ((pedVelLen > mWalkSpeed + walkThreshold)&&
 					(pedVelLen <= mRunSpeed - runThreshold)&&
@@ -2537,92 +2561,36 @@ void PhysicsShape::processTick( const Move *move )
 			if (mCurrentSeq==mActionSeqs["run"])
 				threadPos = mAmbientThread->getPos();
 
-			//Con::printf("setting current sequence walk! currentSeq %d pedVel %f server %d theadPos %f",
-			//	mCurrentSeq,pedVelLen,isServerObject(),threadPos);
-
-			setCurrentSeq(mActionSeqs["walk"]);	//moveSeq = "walk";
+			setCurrentSeq(mActionSeqs["walk"]);
 
 			if (threadPos>0.0)
 				mAmbientThread->setPos(threadPos);
-
 		}
 		else if ((pedVelLen > mRunSpeed + runThreshold)&&(mCurrentSeq!=mActionSeqs["run"]))
 		{
-			//Con::printf("setting current sequence run!  currentSeq %d pedVel %f server %d",
-			//	mCurrentSeq,pedVelLen,isServerObject());
 			F32 threadPos = 0.0f;
 			if (mCurrentSeq==mActionSeqs["walk"])
 				threadPos = mAmbientThread->getPos();
 
-			setCurrentSeq(mActionSeqs["run"]);	//moveSeq = "run";
+			setCurrentSeq(mActionSeqs["run"]);
 						
 			if (threadPos>0.0)
 				mAmbientThread->setPos(threadPos);
-
 		}
-		//Con::printf("PedVelLen: %f",pedVelLen);
 		const TSShape::Sequence *kSeq = &(mShape->sequences[mCurrentSeq]);
 		//FIX: add shape scale to groundTranslations!!
-		
 		Point3F gfPos = mShape->groundTranslations[kSeq->firstGroundFrame + (kSeq->numGroundFrames-1)];
 		F32 groundSpeed = (gfPos.len() * mObjScale.z) / kSeq->duration ;//Scaling groundSpeed by object scale.
 		F32 speedRatio = pedVelLen / groundSpeed;
-		//F32 speedRatio = 1.0;
 		TSThread *th = mShapeInstance->getThread(0);
 		mShapeInstance->setTimeScale(th,speedRatio);
-
 	}
-
-	////// From EM  //////
-	//String moveSeq;
-		//if (mFlexBody->mMoveSequence.length()>0) 
-		//{
-		//	moveSeq = mFlexBody->mMoveSequence;
-		//} else {
-		//Con::printf("trying to pick an anim, pedVelLen %f server %d action walk %d action run %d",
-		//				pedVelLen,isServerObject(),mActionSeqs["walk"],mActionSeqs["run"]);
-			//}
-		//mFlexBody->mMoveSequence = moveSeq;
-		//Con::printf("move seq: %s, pedVel %f",moveSeq.c_str(),pedVelLen);
-		//setSeqCyclic(mShape->findSequence(moveSeq.c_str()),true);
-		//mIsGroundAnimating = false;
-		//mFlexBody->playThread(0,moveSeq.c_str());
-		//mFlexBody->setThreadPos(0,gRandom.randF(0.0,1.0));//random staggering of anims.
-
-	/////
-	//if (isServerObject())
-	//	Con::printf("Server physics shape ticking! datablock %s position %f %f %f",mDataBlock->getName(),pos.x,pos.y,pos.z);
-	//if (mCurrentTick==0)
-	//{//TEMP: dealing with situations where we start with momentum and dynamic = true. Clear bodyparts and add forces.
-		//if (!isServerObject())
-		//{//Although perhaps if we go through and set mLastTrans[] to appropriate values, we can have initial velocities and not have
-			//Con::printf("Client physics shape ticking! isArticulated %d pos %f %f %f",mIsArticulated,pos.x,pos.y,pos.z);
-			//for (U32 i=0;i<mPhysicsBodies.size();i++)
-			//{
-			//	mCurrentForce = dynamic_cast<PhysicsShape*>(getServerObject())->mCurrentForce;
-			//	Point3F forceModifier = mCurrentForce * -10;//Times minus 1 to flip it, and then reduce to taste. TEMP TEMP TEMP, testing.
-			//	MatrixF tempTrans;
-			//	mPhysicsBodies[i]->getTransform(&tempTrans);
-			//	mLastTrans[i].setPosition(tempTrans.getPosition() + forceModifier);//maybe?
-			//	Con::printf("last trans pos %f %f %f",mLastTrans[i].getPosition().x,mLastTrans[i].getPosition().y,mLastTrans[i].getPosition().z);
-			//}
-			//setDynamic(true);//to bother with adding forces to body parts explicitly.
-			//Con::printf("Client physics shape ticking! datablock %s position %f %f %f bodyparts %d currentTick %d",mDataBlock->getName(),
-			//				pos.x,pos.y,pos.z,mPhysicsBodies.size(),mCurrentTick);
-			//for (U32 i=0;i<mPhysicsBodies.size();i++)
-			//	Con::printf("physicsBody[%d] isDynamic %d",i,mPhysicsBodies[i]->getMass(),mPhysicsBodies[i]->isDynamic());
-		//}
-	//} else {
-	//if (!isServerObject()) Con::printf("client object %d ticking %d physicsrep isDynamic %d isArticulated %d",
-	//									getId(),mCurrentTick,mPhysicsRep->isDynamic(),mIsArticulated);
-	//}
-
+	
    mCurrentTick++;
 
    //Now, this also only makes sense on the client, for articulated shapes at least...
    if (mIsRecording)
 	   recordTick();
-
 
 	 ////////////////////////////////////////////////////////////////////////////////////////////////////
    //GroundMove: really belongs in the ts directory, or somewhere else, not related to physics, but testing it here.
@@ -2653,14 +2621,6 @@ void PhysicsShape::processTick( const Move *move )
 		mLastThreadPos = mAmbientThread->getPos();
    } 
 
-	// OpenSteer - don't know where to put this, just testing...  //////
-	//if (mVehicle)
-	//{
-	//	OpenSteer::Vec3 vec = mVehicle->position();
-	//	pos = Point3F(-vec.x,vec.z,vec.y);
-	//	Con::printf("PhysicsShape OpenSteer Vehicle Pos: %f %f %f",pos.x,pos.y,pos.z);
-	//}
-
 
 	//HERE: NOW. We need to banish forever the switch between "isDynamic" and "not isDynamic", as a whole body property.
 	//Instead, bodyparts are going to be dynamic or not, and in terms of the whole body, if we need to know our state, it
@@ -2672,9 +2632,9 @@ void PhysicsShape::processTick( const Move *move )
 			updateNodeFromBody(i);
 		else
 			updateBodyFromNode(i);
-	}//And, that should really be all there is to it...?
+	}//And, that should really be all there is to it...?  HA HA, NOPE. Still working on it...
 
-	
+	///////////////////////////////////
 	//Except, we still need to deal with fingers/toes/etc, anything that isn't a physics body needs to be set according to its parent.
 	Point3F defTrans,newPos;
 	MatrixF m1,m2;
@@ -2695,39 +2655,11 @@ void PhysicsShape::processTick( const Move *move )
 			}
 		}
 	}
-	/*
-   ///////////////////////////////////////////////////////////////////
-   //If kinematic, we need to drive physics bodyparts with nodeTransforms data.
-   if ( !mPhysicsRep->isDynamic() )
-   {												
-		//Con::printf("mPhysicsRep is kinematic!");
-	   if ( isClientObject() )//&& mIsArticulated ) 
-	   {
-			updateBodiesFromNodes();
-	   }
-	   return;
-   }
-   ///////////////////////////////////////////////////////////////////
-   // Else if dynamic, we need to drive nodeTransforms with physics.
-	
-	if (  isClientObject() )// && getServerObject() )//PHYSICSMGR->isSinglePlayer() &&
-   {  //SINGLE PLAYER HACK!!!!
-     // PhysicsShape *servObj = (PhysicsShape*)getServerObject();
-	  //if (!mIsDynamic)//relevant in any way?? this is our own bool, not testing physics body directly as above...
-	  //{   //???
-	//	  setTransform( servObj->mState.getTransform() ); 
-	//	  mRenderState[0] = servObj->mRenderState[0];
-	//	  mRenderState[1] = servObj->mRenderState[1];
-	  //}
-	  //if (mIsArticulated)
-	  //{//need to do nodeTransform (ragdoll) work on client side, unless we can get them passed over from the server?
-		updateNodesFromBodies();
-	  //} 
-      return;
-   }
-	*/
+	///////////////////////////////////
+
 	//NOW, what the hell are we doing here? It would seem that whether we're dynamic or not, we will have returned before
 	//now, unless we're A) dynamic, and B) on the server.
+	//But actually, we are getting here on the client, as witnessed by 
 
    // Store the last render state.
    mRenderState[0] = mRenderState[1];
@@ -2773,26 +2705,103 @@ void PhysicsShape::processTick( const Move *move )
 		   if (isServerObject())
 			{
 			   Parent::setTransform( mState.getTransform() );
-				//Con::printf("setting parent transform!");
+				//Con::printf("server setting parent transform!");
 			}
 		   else 
-		   {
-			   mPhysicsBodies[0]->getState( &mState );
+		   {	//HMMM not sure why we're getting here, and what we're trying to do...? Is this to set the game position
+			   mPhysicsBodies[0]->getState( &mState );//of the object to our ragdolled hip position? I think so.
 			   Parent::setTransform( mState.getTransform() );
-				//Con::printf("setting parent transform!");
+				Point3F pos = mState.getTransform().getPosition();
+				//Con::printf("client setting parent transform! %f %f %f",pos.x,pos.y,pos.z);
 		   }
 
 		   // If we're doing server simulation then we need
 		   // to send the client a state update.
-		   if ( isServerObject() && mPhysicsRep && !smNoCorrections &&
-
-			   !PHYSICSMGR->isSinglePlayer() // SINGLE PLAYER HACK!!!!
-
-			   )
+		   if ( isServerObject() && mPhysicsRep && !smNoCorrections && !PHYSICSMGR->isSinglePlayer() ) // SINGLE PLAYER HACK!!!!
+			{
 			   setMaskBits( StateMask );
+				Con::printf("server sending client state update");
+			}
 	   }
    }   
 }
+
+	////// From EM  //////
+	//String moveSeq;
+		//if (mFlexBody->mMoveSequence.length()>0) 
+		//{
+		//	moveSeq = mFlexBody->mMoveSequence;
+		//} else {
+		//Con::printf("trying to pick an anim, pedVelLen %f server %d action walk %d action run %d",
+		//				pedVelLen,isServerObject(),mActionSeqs["walk"],mActionSeqs["run"]);
+			//}
+		//mFlexBody->mMoveSequence = moveSeq;
+		//Con::printf("move seq: %s, pedVel %f",moveSeq.c_str(),pedVelLen);
+		//setSeqCyclic(mShape->findSequence(moveSeq.c_str()),true);
+		//mIsGroundAnimating = false;
+		//mFlexBody->playThread(0,moveSeq.c_str());
+		//mFlexBody->setThreadPos(0,gRandom.randF(0.0,1.0));//random staggering of anims.
+
+	/////
+	//if (isServerObject())
+	//	Con::printf("Server physics shape ticking! datablock %s position %f %f %f",mDataBlock->getName(),pos.x,pos.y,pos.z);
+	//if (mCurrentTick==0)
+	//{//TEMP: dealing with situations where we start with momentum and dynamic = true. Clear bodyparts and add forces.
+		//if (!isServerObject())
+		//{//Although perhaps if we go through and set mLastTrans[] to appropriate values, we can have initial velocities and not have
+			//Con::printf("Client physics shape ticking! isArticulated %d pos %f %f %f",mIsArticulated,pos.x,pos.y,pos.z);
+			//for (U32 i=0;i<mPhysicsBodies.size();i++)
+			//{
+			//	mCurrentForce = dynamic_cast<PhysicsShape*>(getServerObject())->mCurrentForce;
+			//	Point3F forceModifier = mCurrentForce * -10;//Times minus 1 to flip it, and then reduce to taste. TEMP TEMP TEMP, testing.
+			//	MatrixF tempTrans;
+			//	mPhysicsBodies[i]->getTransform(&tempTrans);
+			//	mLastTrans[i].setPosition(tempTrans.getPosition() + forceModifier);//maybe?
+			//	Con::printf("last trans pos %f %f %f",mLastTrans[i].getPosition().x,mLastTrans[i].getPosition().y,mLastTrans[i].getPosition().z);
+			//}
+			//setDynamic(true);//to bother with adding forces to body parts explicitly.
+			//Con::printf("Client physics shape ticking! datablock %s position %f %f %f bodyparts %d currentTick %d",mDataBlock->getName(),
+			//				pos.x,pos.y,pos.z,mPhysicsBodies.size(),mCurrentTick);
+			//for (U32 i=0;i<mPhysicsBodies.size();i++)
+			//	Con::printf("physicsBody[%d] isDynamic %d",i,mPhysicsBodies[i]->getMass(),mPhysicsBodies[i]->isDynamic());
+		//}
+	//} else {
+	//if (!isServerObject()) Con::printf("client object %d ticking %d physicsrep isDynamic %d isArticulated %d",
+	//									getId(),mCurrentTick,mPhysicsRep->isDynamic(),mIsArticulated);
+	//}
+
+	//
+ //  ///////////////////////////////////////////////////////////////////
+ //  //If kinematic, we need to drive physics bodyparts with nodeTransforms data.
+ //  if ( !mPhysicsRep->isDynamic() )
+ //  {												
+	//	//Con::printf("mPhysicsRep is kinematic!");
+	//   if ( isClientObject() )//&& mIsArticulated ) 
+	//   {
+	//		updateBodiesFromNodes();
+	//   }
+	//   return;
+ //  }
+ //  ///////////////////////////////////////////////////////////////////
+ //  // Else if dynamic, we need to drive nodeTransforms with physics.
+	//
+	//if (  isClientObject() )// && getServerObject() )//PHYSICSMGR->isSinglePlayer() &&
+ //  {  //SINGLE PLAYER HACK!!!!
+ //    // PhysicsShape *servObj = (PhysicsShape*)getServerObject();
+	//  //if (!mIsDynamic)//relevant in any way?? this is our own bool, not testing physics body directly as above...
+	//  //{   //???
+	////	  setTransform( servObj->mState.getTransform() ); 
+	////	  mRenderState[0] = servObj->mRenderState[0];
+	////	  mRenderState[1] = servObj->mRenderState[1];
+	//  //}
+	//  //if (mIsArticulated)
+	//  //{//need to do nodeTransform (ragdoll) work on client side, unless we can get them passed over from the server?
+	//	updateNodesFromBodies();
+	//  //} 
+ //     return;
+ //  }
+	
+
 
 void PhysicsShape::updateBodyFromNode(S32 i)
 {
@@ -2857,7 +2866,7 @@ void PhysicsShape::updateNodeFromBody(S32 i)
 {	
 	if (mBodyNodes.size()==0)
 		return;
-	
+
 	Point3F defTrans,newPos,globalPos,mulPos;
 	MatrixF m1,m2;
 
@@ -2870,6 +2879,10 @@ void PhysicsShape::updateNodeFromBody(S32 i)
 	mPhysicsBodies[i]->getState(&mStates[i]);
 	m1 = mStates[i].getTransform();
 	globalPos = m1.getPosition();
+
+	//if (i==0)
+	//	Con::printf("Updating base node global pos %f %f %f  server %d",globalPos.x,globalPos.y,globalPos.z,isServerObject());
+
 	if (i==0) //hip node, or base node on non biped model, the only node with no joint.
 	{
 		//Point3F mulDefTrans;
@@ -2883,6 +2896,7 @@ void PhysicsShape::updateNodeFromBody(S32 i)
 		finalPos.zero();
 		m1.setPosition(finalPos);
 		mShapeInstance->mNodeTransforms[mBodyNodes[i]] = m1;
+		//Con::printf("Updating base node position from body %f %f %f  server %d",finalPos.x,finalPos.y,finalPos.z,isServerObject());
 
 	} else { //all other nodes, position is relative to parent
 
@@ -3000,6 +3014,8 @@ void PhysicsShape::destroy()
 {
    if ( mDestroyed )
       return;
+
+	Con::printf("Destroying physics shape! bodies %d  server %d",mPhysicsBodies.size(),isServerObject());
 
    mDestroyed = true;
    setMaskBits( DamageMask );
@@ -3130,6 +3146,7 @@ void PhysicsShape::setDynamic(bool isDynamic)
 
 		if (isServerObject())
 		{   //SINGLE PLAYER HACK - really we need to do it to all ghosts of this object.
+			mPhysicsBodies[0]->setDynamic(isDynamic);
 			PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());
 			clientShape->setDynamic(isDynamic);
 			return;
@@ -3182,14 +3199,13 @@ void PhysicsShape::setDynamic(bool isDynamic)
 	}
 }
 
-
 bool PhysicsShape::getDynamic()
 {
 	return mIsDynamic;
 }
 
 void PhysicsShape::setPartDynamic(S32 partID,bool isDynamic)
-{
+{//Note, this is *not* a Database ID! Just an index. FIX!
 	//set or clear dynamic for partID bodypart, NOTE this is NOT database partID, it is index into this shape's bodies.
 	if ( partID<0 )
 		return;
@@ -3203,7 +3219,7 @@ void PhysicsShape::setPartDynamic(S32 partID,bool isDynamic)
 
 	if (partID >= mPhysicsBodies.size())
 		return;
-
+	
 	if (mPhysicsBodies[partID]->isDynamic() != isDynamic)
 	{
 		mPhysicsBodies[partID]->setDynamic(isDynamic);
@@ -3213,10 +3229,12 @@ void PhysicsShape::setPartDynamic(S32 partID,bool isDynamic)
 			mShapeInstance->mDynamicNodes.set(mPhysicsBodies[partID]->getNodeIndex());
 			QuatF q;  q.identity();
 			mShapeInstance->mDynamicNodeRotations[mPhysicsBodies[partID]->getNodeIndex()] = q;
+			//HERE: also need to apply existing linear/rotational velocity, as above.
 		}
 		else
 		{
 			mShapeInstance->mDynamicNodes.clear(mPhysicsBodies[partID]->getNodeIndex());
+			//Con::printf("clearing part dynamic! %d",partID);
 		}
 	}
 }
@@ -3585,7 +3603,6 @@ DefineEngineMethod( PhysicsShape, unGroundCaptureSeq, void, (S32 seq),,"")
 }
 
 
-
 //////////////////////////////////////////////////////////////
 //ultraframe types: 0=ADJUST_NODE_POS, 1=SET_NODE_POS, 2=ADJUST_NODE_ROT, 3=SET_NODE_ROT
 
@@ -3626,6 +3643,11 @@ void PhysicsShape::applyUltraframeSet()
 	mShape->applyUltraframeSet(&mUFSet);
 }
 
+void PhysicsShape::clearUltraframeSet()
+{
+	mUFSet.series.clear();
+}
+
 //////////////////////////////////////////////////////////////
 
 DefineEngineMethod( PhysicsShape, addKeyframeSet, void, (const char *path),,"")
@@ -3648,6 +3670,10 @@ DefineEngineMethod( PhysicsShape, applyKeyframeSet, void, (),,"")
 	object->applyUltraframeSet();
 }
 
+DefineEngineMethod( PhysicsShape, clearKeyframeSet, void, (),,"")
+{  
+	object->clearUltraframeSet();
+}
 
 ////////////////////////////////////////////////////////////////////
 
@@ -4742,7 +4768,7 @@ void PhysicsShape::saveBvh(U32 seqNum, const char *bvh_file, const char *bvh_for
 	pi_over_180 = M_PI/180.0;
 	pi_under_180 = 180.0/M_PI;
 
-	Con::printf("saving BVH - format: %s, isGlobal %d",bvh_format,isGlobal);
+	Con::printf("saving BVH - format: %s, isGlobal %d, seqnum %d",bvh_format,isGlobal,seqNum);
 
 	U32 bvhFormat = 0;
 	
@@ -4796,7 +4822,7 @@ void PhysicsShape::saveBvh(U32 seqNum, const char *bvh_file, const char *bvh_for
 	if (!dStrstr(bvhFile.c_str(),".bvh")) bvhFile += bvhExt;
 	
 	Con::errorf("opening filename: %s, original %s  scale_factor %f",bvhFile.c_str(),bvh_file,scale_factor);
-
+	
 	fpw = fopen(bvhFile.c_str(),"w");
 
 	//////////////////////////////////////
@@ -5435,7 +5461,8 @@ void PhysicsShape::saveBvh(U32 seqNum, const char *bvh_file, const char *bvh_for
 		}
 	}
 	fclose(fpw);
-
+	
+	
 }
 
 
@@ -5626,16 +5653,38 @@ void PhysicsShape::showRotorDisc()
 
 
 
+S32 PhysicsShape::getBodyNum(String name)
+{
+	if (mPhysicsBodies.size()<=0)
+		return -1;
+
+	S32 nodeIndex,bodyIndex=-1;
+	nodeIndex = mShape->findNode(name);
+	if (nodeIndex<0)
+		return -1;
+
+	for (U32 i=0;i<mPhysicsBodies.size();i++)
+	{
+		if (mPhysicsBodies[i]->getNodeIndex()==nodeIndex)
+			bodyIndex = i;
+	}
+	
+	return bodyIndex;
+}
 
 
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
-DefineEngineMethod( PhysicsShape, loadSequence, void, (const char *path),,
+DefineEngineMethod( PhysicsShape, loadSequence, bool, (const char *path),,
    "@brief.\n\n")
 {  
-	S32 seqID = object->loadSequence(path);
+	bool success = object->loadSequence(path);
+	
 	//object->setCurrentSeq(seqID);
+
+	return success;
+	
 }
 
 DefineEngineMethod( PhysicsShape, getPath, const char *, (),,
@@ -5717,6 +5766,13 @@ DefineEngineMethod( PhysicsShape, setJointTarget, void, (F32 x,F32 y,F32 z,F32 w
    "@brief Sets this object's joint motor drive to the target quat.\n\n")
 {
 	object->setJointTarget(QuatF(x,y,z,w));
+}
+
+
+DefineEngineMethod( PhysicsShape, getNumBodies, S32, (),,
+   "@brief Get number of physics bodyparts.\n\n")
+{
+   return object->mPhysicsBodies.size();
 }
 
 DefineEngineMethod( PhysicsShape, applyImpulse, void, (Point3F pos,Point3F vec),,
@@ -5941,13 +5997,18 @@ DefineEngineMethod( PhysicsShape, getSeqFilename, const char*, (S32 index),,
 	TSShape::Sequence & seq = object->mShape->sequences[index];
 
 	char filename[512];
-	String fromStr(seq.sourceData.from.c_str()); 
-	Vector<String> justFilename;//(throwing away the second half of the split)
-	fromStr.split("\t",justFilename);
-	dSprintf(filename,256,"%s",justFilename[0].c_str());
+	sprintf(filename,"");
 
-	if (dStrlen(filename)>0)
-		return filename;
+	String fromStr(seq.sourceData.from.c_str()); 
+	if (fromStr.length()>0)
+	{
+		Vector<String> justFilename;//(throwing away the second half of the split)
+		fromStr.split("\t",justFilename);
+		dSprintf(filename,256,"%s",justFilename[0].c_str());
+	}
+
+	//if (dStrlen(filename)>0)
+	return filename;
 }
 
 DefineEngineMethod( PhysicsShape, getSeqPath, const char*, (S32 index),,
@@ -6100,6 +6161,13 @@ DefineEngineMethod( PhysicsShape, showNodes, void, (),,
 			object->mShape->defaultTranslations[i].x,object->mShape->defaultTranslations[i].y,
 			object->mShape->defaultTranslations[i].z,q.x,q.y,q.z,q.w,object->mShape->defaultTranslations[i].len());
 	}
+}
+
+DefineEngineMethod( PhysicsShape, getBodyNum, S32, (const char *name),,
+   "@brief \n\n")
+{  
+	String nameString = name;
+	return object->getBodyNum(nameString);
 }
 
 DefineEngineMethod( PhysicsShape, getNumNodes, S32, (),,

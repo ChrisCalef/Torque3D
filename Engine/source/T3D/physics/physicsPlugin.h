@@ -113,8 +113,15 @@ protected:
 
 public:
 
+	//MegaMotion/openSimEarth
    static SQLiteObject* mSQL;//Hmmm
 	static std::map<int,physicsJointData> mJointData;
+
+	static bool smDebugRenderCollisions;
+	static bool smDebugRenderJointLimits;
+	static bool smDebugRenderBodyAxes;
+	//MegaMotion/openSimEarth
+
    /// Note this should go away when we have "real" singleplayer.
    static bool smSinglePlayer;
    static bool isSinglePlayer() { return smSinglePlayer; }
