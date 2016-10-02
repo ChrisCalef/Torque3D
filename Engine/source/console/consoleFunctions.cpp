@@ -2656,8 +2656,16 @@ DefineEngineFunction( getClock, S32, (),,
 	return clock();
 }
 
+DefineEngineFunction( getExecutablePath, const char*, (),,
+   "Returns path to game executable." )
+{
+	wchar_t buffer[MAX_PATH]; 
+	String execPath;
+   GetModuleFileName(NULL, buffer, MAX_PATH) ;
+	execPath = buffer;
 
-
+	return execPath.c_str();
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 //Okay, now, this stuff REALLY needs to go into a new code file for MegaMotion/openSimEarth.

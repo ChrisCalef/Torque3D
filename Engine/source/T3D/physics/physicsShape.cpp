@@ -852,11 +852,13 @@ bool PhysicsShape::_createShape()
       _initAmbient();
    }
 	
-	SQLiteObject *kSQL = PHYSICSMGR->mSQL;//openSimEarth
+	/////////////////////////////////////////////////////////////
+	SQLiteObject *kSQL = PHYSICSMGR->mSQL;//MegaMotion/openSimEarth
 	char part_query[512],datablock_query[512],joint_query[512];
 	S32 result,result2,file_id;
 	sqlite_resultset *resultSet,*resultSet2;
-	S32 shape_id = mDataBlock->shapeID;
+	mShapeID = mDataBlock->shapeID;//HERE, this is weird and I still don't like it, but we're going to automate datablock production 
+													//so it will no longer be as onerous as requiring the user to look up and enter the ID manually.
 
    // If the shape has a mass then it's dynamic... else
    // its a kinematic shape. [Edit: now allowing mIsDynamic to be set from console at 
@@ -903,9 +905,9 @@ bool PhysicsShape::_createShape()
 
 	//NOW: instead of using mIsArticulated as our main switch, we need to move the parts query up here and let the results decide.
 	S32  shapeBodyParts = 0;
-	if (shape_id>0)
+	if (mShapeID>0)
 	{
-		sprintf(part_query,"SELECT * FROM physicsShapePart WHERE physicsShape_id=%d;",shape_id);
+		sprintf(part_query,"SELECT * FROM physicsShapePart WHERE physicsShape_id=%d;",mShapeID);
 		result = kSQL->ExecuteSQL(part_query);
 		if (result>0)
 		{
@@ -1090,7 +1092,7 @@ bool PhysicsShape::_createShape()
 
 				Point3F halfDim = PD->dimensions * 0.5;
 
-				Con::printf("adding box bodypart %s: %f %f %f",baseNode,PD->dimensions.x,PD->dimensions.y,PD->dimensions.z);
+				//Con::printf("adding box bodypart %s: %f %f %f",baseNode,PD->dimensions.x,PD->dimensions.y,PD->dimensions.z);
 
 				if (PD->shapeType==physicsShapeType::PHYS_SHAPE_BOX)
 					colShape->addBox(halfDim,localTrans);
@@ -1136,9 +1138,10 @@ bool PhysicsShape::_createShape()
 				else
 					bodyFlags &= ~PhysicsBody::BF_GRAVITY;
 
-				
+				//Apparently PhysX3 no longer has a density property (?) so we have to calculate bodypart mass ourselves. 
+				//Fortunately I'm just using box primitives at this point, so volume is very easy to determine.
 				partVolume = PD->dimensions.x * PD->dimensions.y * PD->dimensions.z;
-				partMass = partVolume * PD->mass;
+				partMass = partVolume * PD->mass;//datablock mass = 1000.0f so that small parts will still weigh in at ~ 1.0.
 
 				//MASS: get this from shapeParts in database, or better yet use density = 1.0 and make physx figure it out (?)
 				partBody->init(   colShape, 
@@ -1166,6 +1169,7 @@ bool PhysicsShape::_createShape()
 				mLastTrans.push_back(MatrixF(true));// During kinematic animation we use these
 
 				mStates.increment();
+
 				if (mIsDynamic) partBody->getState(&(mStates.last()));
 
 				mBodyNodes.push_back(PD->baseNode);//Store node index for below, when we need to define parent objects.
@@ -1241,7 +1245,7 @@ bool PhysicsShape::_createShape()
 		String rudderNodes,elevNodes,rightAilerNodes,leftAilerNodes,propNodes,rotorNodesA,rotorNodesB,
 					tailRotorNodes;
 
-		sprintf(vehicle_query,"SELECT vehicle_id FROM physicsShape WHERE id=%d;",shape_id);
+		sprintf(vehicle_query,"SELECT vehicle_id FROM physicsShape WHERE id=%d;",mShapeID);
 		result = kSQL->ExecuteSQL(vehicle_query);
 		resultSet = kSQL->GetResultSet(result);
 		if (resultSet->iNumRows==1)
@@ -1433,115 +1437,7 @@ bool PhysicsShape::_createShape()
 			kSQL->ClearResultSet(result);
 		}		
 	}
-
-	//shapeMount
-	if (isServerObject())//Wish I had a one line insta-scan of the database here to find out if any mounts exist for this shape...
-	{
-	   sprintf(part_query,"SELECT id FROM shapeFile WHERE path IN ('%s');",mDataBlock->shapeName);
-	   result = kSQL->ExecuteSQL(part_query);
-		if (result==0) goto EXIT; 				
-		resultSet = kSQL->GetResultSet(result);
-	   if (resultSet->iNumRows<=0) goto EXIT; 	
-		file_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
-
-	   sprintf(part_query,"SELECT * FROM shapeMount WHERE parent_shape_id=%d;",file_id);
-	   result = kSQL->ExecuteSQL(part_query);
-	   if (result==0)
-		   goto EXIT; 				
-
-	   resultSet = kSQL->GetResultSet(result);
-	   if (resultSet->iNumRows<=0)
-		   goto EXIT; 	
-
-		TSStatic *mountObj;
-
-	   for (U32 i=0;i<resultSet->iNumRows;i++)
-	   {
-		   S32 j=0;//column counter
-		   char baseNode[255],childNode[255];
-
-		   //////////////////////////////////////////
-		   // Mount Data
-		   physicsMountData* MD = new physicsMountData;
-
-		   S32 ID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-		   j++;//We already know parent_shape, so skip it.		
-
-		   MD->childShape = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-		   S32 offset_id = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-		   S32 orient_id = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-		   MD->jointID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);			
-		   MD->parentNode = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);	
-		   MD->childNode = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
-						
-		   sprintf(datablock_query,"SELECT path FROM shapeFile WHERE id=%d;",MD->childShape);
-			result2 = kSQL->ExecuteSQL(datablock_query);
-			resultSet2 = kSQL->GetResultSet(result2);
-			char shapeFile[255];
-			sprintf(shapeFile,resultSet2->vRows[0]->vColumnValues[0]);
-			kSQL->ClearResultSet(result2);
-
-			sprintf(datablock_query,"SELECT x,y,z FROM vector3 WHERE id=%d;",offset_id);
-			result2 = kSQL->ExecuteSQL(datablock_query);
-			resultSet2 = kSQL->GetResultSet(result2);//Sure do wish I had a cleaner interface to sql results...
-			MD->offset = Point3F(dAtof(resultSet2->vRows[0]->vColumnValues[0]),
-										dAtof(resultSet2->vRows[0]->vColumnValues[1]),
-										dAtof(resultSet2->vRows[0]->vColumnValues[2]));
-			kSQL->ClearResultSet(result2);
-			
-			sprintf(datablock_query,"SELECT x,y,z FROM vector3 WHERE id=%d;",orient_id);
-			result2 = kSQL->ExecuteSQL(datablock_query);
-			resultSet2 = kSQL->GetResultSet(result2);
-			MD->orient = Point3F(dAtof(resultSet2->vRows[0]->vColumnValues[0]),
-										dAtof(resultSet2->vRows[0]->vColumnValues[1]),
-										dAtof(resultSet2->vRows[0]->vColumnValues[2]));
-			kSQL->ClearResultSet(result2);
-
-			//Con::printf("found a shape mount! childShape %d, offset %f %f %f orient %f %f %f path %s",
-			//	MD->childShape,MD->offset.x,MD->offset.y,MD->offset.z,MD->orient.x,MD->orient.y,MD->orient.z,shapeFile);
-		   
-
-			SimSet* missionGroup = NULL;
-			missionGroup = dynamic_cast<SimSet*>(Sim::findObject("MissionGroup"));
-			/*
-			SimDataBlockGroup* pGroup = Sim::getDataBlockGroup();
-			SimDataBlock* pDataBlock = NULL;
-			pDataBlock = dynamic_cast<SimDataBlock*>(Sim::findObject(dbName));
-			if (pDataBlock)
-				Con::printf("Found the datablock with Sim::findObject! %s %d",pDataBlock->getClassName(),pDataBlock->getId());
-			else 
-			{
-				Con::printf("FAILED to find a datablock with name %s",dbName);	
-				continue;
-			}*/
-
-			EulerF kOrient = EulerF(mDegToRad(MD->orient.x),mDegToRad(MD->orient.y),mDegToRad(MD->orient.z));
-			MatrixF mat(kOrient);
-			mat.setPosition(MD->offset);
-
-         //PhysicsShape *mountObj = new PhysicsShape();
-			mountObj = new TSStatic();
-         //mountObj->setDataBlock( dynamic_cast<GameBaseData *>(pDataBlock) );
-
-         ////mountObj->setTransform( mat );
-			char objName[255];
-			sprintf(objName,"obj_%d_mount_%d",getId(),i);		
-			mountObj->mShapeName = StringTable->insert(shapeFile);
-         mountObj->registerObject(objName);
-			missionGroup->addObject(mountObj);	
-			Con::printf("object %d using shapefile: %s, parent node %d  child node %d",
-				mountObj->getId(),mountObj->mShapeName,MD->parentNode,MD->childNode);
-			this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj),MD->parentNode,MD->childNode,mat);
-         //this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj),-1,-1,mat);
-			
-			//this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj),MD->parentNode,MD->childNode,mat);
-        // this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj2),0,0,mat);
-			//mountObj->registerObject();
-		}
-
-EXIT:
-		kSQL->ClearResultSet(result);
-	}
+	
 
 
    return true;
@@ -2254,8 +2150,31 @@ void PhysicsShape::interpolateTick( F32 delta )
 	
    AssertFatal( !mDestroyed, "PhysicsShape::interpolateTick - Shouldn't be processing a destroyed shape!" );
 	
+
+	
+	if ( isMounted() && !mIsDynamic )
+   {
+      MatrixF mat( true );
+      MatrixF xfmMat = mMount.xfm;
+      if ( mMount.fromNode != -1 )
+      {
+         MatrixF mulTransform, mountTransform = mShapeInstance->mNodeTransforms[mMount.fromNode];
+         const Point3F& scale = getScale();
+         Point3F position = mountTransform.getPosition();
+         position.convolve( scale );
+         xfmMat.mulV(position);
+         mountTransform.setPosition( position );
+         mulTransform = mountTransform.affineInverse();
+         xfmMat.mulL(mulTransform);
+      }
+		//MatrixF nodeMat = dynamic_cast<PhysicsShape*>(mMount.object)->mShapeInstance->mNodeTransforms[mMount.node];
+		//mat = mMount.object->getWorldTransform() * nodeMat * xfmMat;
+      mMount.object->getNodeTransform(mMount.node, xfmMat, &mat );
+      setTransform( mat );
+   }
+
 	/////////////////////////////////////////////////
-	//openSimEarth, if mUseDataSource then we need to update vehicle position and node orientations.
+	//MegaMotion/openSimEarth, if mUseDataSource then we need to update vehicle position and node orientations.
 	if (mUseDataSource)
 	{		
 		if (!mDataSource)
@@ -2335,17 +2254,17 @@ void PhysicsShape::interpolateTick( F32 delta )
 		//rotPerTick = (rotorRPM / (60 * 32)) * (2 * M_PI);//Hmm... I thought this would be right, but it's way too fast. 
 		rotPerTick = (rotorRPM / (60 * 32)) * (M_PI/2);//Commence trial and error... but this appears to work.
 		//And now, a remaining bit of hard coding I don't know what to do with. On the ka50, rotors and blades are 
-		//a separate mounted object, on other helicopters they are part of the helicopter model. For now just checking
+		//separate mounted objects, on other helicopters they are part of the helicopter model. For now just checking
 		//for the MainRotor.dts being mounted.
 		bool isKa50 = false;//TEMP, gotta work out a generalized system for whether we have mounted rotors or not.
 		for (U32 i=0;i<getMountedObjectCount();i++)
 		{
-			TSStatic *mountObj = dynamic_cast<TSStatic*>(getMountedObject(i));
+			PhysicsShape *mountObj = dynamic_cast<PhysicsShape*>(getMountedObject(i));
 			if (!mountObj) 
 				continue;
-			if (strstr(mountObj->getShapeFileName(),"MainRotor.dts")>0)
+			if (mountObj->mShapeID==5)//FIX!! Need a way to generalize this behavior. 5 is ka50 MainRotor
 			{
-				TSShapeInstance *rotorShapeInst = mountObj->getShapeInstance();
+				TSShapeInstance *rotorShapeInst = mountObj->mShapeInstance;
 
 				rotorRot = EulerF(0,0,rotPerTick); 
 				for (U32 c=0;c<mRotorNodesA.size();c++)
@@ -2369,19 +2288,23 @@ void PhysicsShape::interpolateTick( F32 delta )
 				mShapeInstance->addNodeTransform(mTailRotorNodes[c].c_str(),mTailRotorOffset,rotorRot);
 		}
 		//////////////////////
+		
 		//Meanwhile anyone can use propeller/rotor blur.
 		if ((rotorRPM < mPropBlurSpeed) && (mPropStatus!=0))
 		{
+			Con::printf("showRotorBlades");
 			showRotorBlades();
 			mPropStatus = 0;
 		}
 		else if ((rotorRPM > mPropBlurSpeed) && (rotorRPM < mPropDiscSpeed) && (mPropStatus!=1))
 		{
+			Con::printf("showRotorBlur");
 			showRotorBlur();
 			mPropStatus = 1;
 		}
 		else if ((rotorRPM > mPropDiscSpeed) && (mPropStatus!=2))
 		{
+			Con::printf("showRotorDisc");
 			showRotorDisc();
 			mPropStatus = 2;
 		}
@@ -2513,6 +2436,27 @@ void PhysicsShape::processTick( const Move *move )
    // need to play the ambient animation because even if the animation were
    // to move collision shapes it would not affect the physx representation.
 	Point3F pos = getPosition();
+
+	if ( isMounted() && !mIsDynamic )
+   {
+      MatrixF mat( true );
+      MatrixF xfmMat = mMount.xfm;
+      if ( mMount.fromNode != -1 )
+      {
+         MatrixF mulTransform, mountTransform = mShapeInstance->mNodeTransforms[mMount.fromNode];
+         const Point3F& scale = getScale();
+         Point3F position = mountTransform.getPosition();
+         position.convolve( scale );
+         xfmMat.mulV(position);
+         mountTransform.setPosition( position );
+         mulTransform = mountTransform.affineInverse();
+         xfmMat.mulL(mulTransform);
+      }
+		MatrixF nodeMat = dynamic_cast<PhysicsShape*>(mMount.object)->mShapeInstance->mNodeTransforms[mMount.node];
+      //mMount.object->getNodeTransform(mMount.node, xfmMat, &mat );
+		mat = mMount.object->getWorldTransform() * nodeMat * xfmMat;
+      setTransform( mat );
+   }
 
 	//TEMP! TESTING! Hope this works out. OpenSteer.
 	if (mVehicle)
@@ -3397,6 +3341,29 @@ void PhysicsShape::orientToPosition(Point3F pos)
 	}
 }
 
+
+void PhysicsShape::getNodeTransform( S32 nodeIndex, const MatrixF &xfm, MatrixF *outMat )
+{
+   // Returns mount point to world space transform
+   if ( nodeIndex >= 0 && nodeIndex < mShapeInstance->getShape()->nodes.size()) {
+      MatrixF mountTransform = mShapeInstance->mNodeTransforms[nodeIndex];
+      mountTransform.mul( xfm );
+      const Point3F& scale = getScale();
+
+      // The position of the mount point needs to be scaled.
+      Point3F position = mountTransform.getPosition();
+      position.convolve( scale );
+      mountTransform.setPosition( position );
+
+      // Also we would like the object to be scaled to the model.
+      outMat->mul(mObjToWorld, mountTransform);
+      return;
+   }
+
+   // Then let SceneObject handle it.
+   Parent::getNodeTransform( nodeIndex, xfm, outMat );      
+}
+
 Point3F PhysicsShape::getClientPosition()
 {
 	if (isServerObject())
@@ -3674,6 +3641,211 @@ DefineEngineMethod( PhysicsShape, clearKeyframeSet, void, (),,"")
 {  
 	object->clearUltraframeSet();
 }
+
+void PhysicsShape::importShapeNodes()
+{	
+	QuatF q;
+	Point3F p;
+	
+	S32 result,defTransID,defRotID,parentID;
+	sqlite_resultset *resultSet;
+	SQLiteObject *kSQL = PHYSICSMGR->mSQL;
+	Vector<S32> IDs;
+
+	//Hmm, okay, this is one of those places where we're going to have a LOT of queries all piled
+	//on top of each other. Where it might be nice to combine them, and execute them all in
+	//one call. We'll want to use ostrstream for that, but haven't used it yet here at all. Maybe wait.
+	for (U32 i=0;i<mShape->nodes.size();i++)
+	{
+		char name[512];
+		char query[512];
+
+		q = mShape->defaultRotations[i].getQuatF();
+		p = mShape->defaultTranslations[i];
+		strcpy(name,mShape->getName(mShape->nodes[i].nameIndex).c_str());
+		//Con::printf("importing shape node: %d %s",i,name);
+		
+		//First, check for shape existing already. Either bail or delete existing nodes then reload.
+		sprintf(query,"INSERT INTO vector3 (x,y,z) VALUES (%f,%f,%f);",p.x,p.y,p.z);
+		kSQL->ExecuteSQL(query);
+		sprintf(query,"SELECT last_insert_rowid() AS id;");
+		result = kSQL->ExecuteSQL(query);
+		resultSet = kSQL->GetResultSet(result);
+		defTransID = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+		kSQL->ClearResultSet(result);
+
+		sprintf(query,"INSERT INTO rotation (x,y,z,angle) VALUES (%f,%f,%f,%f);",q.x,q.y,q.z,q.w);
+		kSQL->ExecuteSQL(query);
+		sprintf(query,"SELECT last_insert_rowid() AS id;");
+		result = kSQL->ExecuteSQL(query);
+		resultSet = kSQL->GetResultSet(result);
+		defRotID = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+		kSQL->ClearResultSet(result);
+
+		parentID = 0;
+		if ((mShape->nodes[i].parentIndex >= 0)&&(IDs.size()>0))
+			parentID = IDs[mShape->nodes[i].parentIndex];
+
+		sprintf(query,"INSERT INTO shapeNode (physicsShape_id,parent_id,node_index,parent_index,name,defaultTrans_id,defaultRot_id) VALUES (%d,%d,%d,%d,'%s',%d,%d);",
+			mShapeID,parentID,i,mShape->nodes[i].parentIndex,name,defTransID,defRotID);
+		kSQL->ExecuteSQL(query);
+		sprintf(query,"SELECT last_insert_rowid() AS id;");
+		result = kSQL->ExecuteSQL(query);
+		resultSet = kSQL->GetResultSet(result);
+		IDs.push_back(dAtoi(resultSet->vRows[0]->vColumnValues[0]));
+		kSQL->ClearResultSet(result);
+	}
+
+	Con::printf("Imported %d shape nodes!",IDs.size());
+	
+}
+
+DefineEngineMethod( PhysicsShape, importShapeNodes, void, (),,"")
+{  
+	object->importShapeNodes();
+}
+
+
+void PhysicsShape::mountShapes()
+{
+	if (isServerObject())
+	{
+		
+		char mount_query[512],sub_query[512];
+		S32 result,result2;
+		sqlite_resultset *resultSet,*resultSet2;
+		SQLiteObject *kSQL = PHYSICSMGR->mSQL;
+		
+	   sprintf(mount_query,"SELECT * FROM shapeMount WHERE parent_shape_id=%d;",mSceneShapeID);
+	   result = kSQL->ExecuteSQL(mount_query);
+	   if (result==0)
+		   goto EXIT;
+
+	   resultSet = kSQL->GetResultSet(result);
+	   if (resultSet->iNumRows<=0)
+		   goto EXIT; 	
+
+		
+		Con::printf("PhysicsShape found %d shapeMounts",resultSet->iNumRows);
+
+		PhysicsShape *mountObj;
+
+	   for (U32 i=0;i<resultSet->iNumRows;i++)
+	   {
+		   S32 j=0;//column counter
+		   char baseNode[255],childNode[255];
+
+		   //////////////////////////////////////////
+		   // Mount Data
+		   physicsMountData MD;//physicsMountData *MD = new physicsMountData;//Wait, why make this a pointer? And then forget to delete it?
+
+		   S32 ID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   j++;//We already know parent_shape, so skip it.		
+
+		   MD.childShape = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   S32 offset_id = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   S32 orient_id = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   MD.jointID = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);			
+		   MD.parentNode = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);	
+		   MD.childNode = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+		   S32 scale_id = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
+						
+
+		   //sprintf(datablock_query,"SELECT datablock,path FROM physicsShape WHERE id=%d;",MD.childShape);
+			//result2 = kSQL->ExecuteSQL(datablock_query);
+			//resultSet2 = kSQL->GetResultSet(result2);
+			//char datablock_name[255],shapeFile[255];
+			//sprintf(datablock_name,resultSet2->vRows[0]->vColumnValues[0]);
+			//sprintf(shapeFile,resultSet2->vRows[0]->vColumnValues[1]);
+			//kSQL->ClearResultSet(result2);
+
+			sprintf(sub_query,"SELECT x,y,z FROM vector3 WHERE id=%d;",offset_id);
+			result2 = kSQL->ExecuteSQL(sub_query);
+			resultSet2 = kSQL->GetResultSet(result2);//Sure do wish I had a cleaner interface to sql results...
+			MD.offset = Point3F(dAtof(resultSet2->vRows[0]->vColumnValues[0]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[1]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[2]));
+			kSQL->ClearResultSet(result2);
+			
+			sprintf(sub_query,"SELECT x,y,z FROM vector3 WHERE id=%d;",orient_id);
+			result2 = kSQL->ExecuteSQL(sub_query);
+			resultSet2 = kSQL->GetResultSet(result2);
+			MD.orient = Point3F(dAtof(resultSet2->vRows[0]->vColumnValues[0]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[1]),
+										dAtof(resultSet2->vRows[0]->vColumnValues[2]));
+			kSQL->ClearResultSet(result2);
+
+			//Scale
+
+
+			Con::printf("found a SHAPE MOUNT! childShape %d, parent node %d, offset %f %f %f orient %f %f %f ",
+				MD.childShape,MD.parentNode,MD.offset.x,MD.offset.y,MD.offset.z,MD.orient.x,MD.orient.y,MD.orient.z);
+		   
+
+			SimSet* sceneShapes = NULL;
+			sceneShapes = dynamic_cast<SimSet*>(Sim::findObject("SceneShapes"));
+		
+			mountObj = NULL;
+			for (U32 i=0;i<sceneShapes->size();i++)
+			{
+				PhysicsShape *pShape = dynamic_cast<PhysicsShape*>(sceneShapes->at(i));
+				if (pShape->mSceneShapeID==MD.childShape)
+					mountObj = pShape;
+
+			}
+			
+			EulerF kOrient = EulerF(mDegToRad(MD.orient.x),mDegToRad(MD.orient.y),mDegToRad(MD.orient.z));
+			MatrixF mat(kOrient);
+			mat.setPosition(MD.offset);
+
+			if (mountObj)
+				this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj),MD.parentNode,MD.childNode,mat);
+				//this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj),MD.childNode,MD.parentNode,mat);//?
+		}
+
+EXIT:
+		kSQL->ClearResultSet(result);
+	}
+}
+
+DefineEngineMethod( PhysicsShape, mountShapes, void, (),,"")
+{  
+	object->mountShapes();
+}
+
+			////////////////////////////////////////////////////////////////
+			//HERE: Cut this block and make it find child shapes by sceneShapeID, because they will already exist.
+			
+			//SimDataBlockGroup* pGroup = Sim::getDataBlockGroup();
+			//SimDataBlock* pDataBlock = NULL;
+			//pDataBlock = dynamic_cast<SimDataBlock*>(Sim::findObject(datablock_name));
+			//if (pDataBlock)
+			//	Con::printf("Found the datablock with Sim::findObject! %s %d",pDataBlock->getClassName(),pDataBlock->getId());
+			//else 
+			//{
+			//	Con::printf("FAILED to find a datablock with name %s",datablock_name);	
+			//	continue;
+			//}
+
+			//EulerF kOrient = EulerF(mDegToRad(MD.orient.x),mDegToRad(MD.orient.y),mDegToRad(MD.orient.z));
+			//MatrixF mat(kOrient);
+			//mat.setPosition(MD.offset);
+
+			//mountObj = new PhysicsShape();//TSStatic();
+   //      mountObj->setDataBlock( dynamic_cast<GameBaseData *>(pDataBlock) );
+
+   //      //mountObj->setTransform( mat );//??
+			//char objName[255];
+			//sprintf(objName,"obj_%d_mount_%d",getId(),i);		
+			////mountObj->mShapeName = StringTable->insert(shapeFile);
+   //      mountObj->registerObject(objName);
+			//missionGroup->addObject(mountObj);	
+			//Con::printf("object %d mounting shape, parent node %d  child node %d",
+			//	mountObj->getId(),MD.parentNode,MD.childNode);
+				
+			////////////////////////////////////////////////////////////////
+
+
 
 ////////////////////////////////////////////////////////////////////
 
@@ -6148,7 +6320,6 @@ DefineEngineMethod( PhysicsShape, getSkeletonID, S32, (),,
 	return object->mSkeletonID;
 }
 
-
 DefineEngineMethod( PhysicsShape, showNodes, void, (),,
    "@brief prints all nodes\n\n")
 {  
@@ -6161,6 +6332,20 @@ DefineEngineMethod( PhysicsShape, showNodes, void, (),,
 			object->mShape->defaultTranslations[i].x,object->mShape->defaultTranslations[i].y,
 			object->mShape->defaultTranslations[i].z,q.x,q.y,q.z,q.w,object->mShape->defaultTranslations[i].len());
 	}
+}
+
+DefineEngineMethod( PhysicsShape, showNodeTransform, void, (S32 index),,
+   "@brief prints all nodes\n\n")
+{  
+	if ((index < 0)||(index >= object->mShape->nodes.size()))
+		return;
+	
+   MatrixF mat( true ),xfm( true );
+	Point3F pos;
+	object->getNodeTransform(index,xfm,&mat);
+	pos = mat.getPosition();
+
+	Con::printf("node %d pos %f %f %f",index,pos.x,pos.y,pos.z);
 }
 
 DefineEngineMethod( PhysicsShape, getBodyNum, S32, (const char *name),,
@@ -6446,22 +6631,6 @@ DefineEngineMethod( PhysicsShape, write, void,  (const char *filename),,
 	}	
 }
 
-DefineEngineMethod( PhysicsShape, addNodeTransform, void, (const char *nodeName, Point3F offset, Point3F rot),,
-   "@brief Sets the node rotation for (nodeName) node to (rot - degrees), around a point (offset) from the center.\n\n")
-{ 
-	TSStatic *clientShape = dynamic_cast<TSStatic *>(object->getClientObject());
-	if (clientShape)
-		clientShape->getShapeInstance()->addNodeTransform(nodeName,offset,EulerF(mDegToRad(rot.x),mDegToRad(rot.y),mDegToRad(rot.z)));
-}
-
-DefineEngineMethod( PhysicsShape, setNodeTransform, void, (const char *nodeName, Point3F offset, Point3F rot),,
-   "@brief Sets the node rotation for (nodeName) node to (rot - degrees), around a point (offset) from the center.\n\n")
-{ 
-	TSStatic *clientShape = dynamic_cast<TSStatic *>(object->getClientObject());
-	if (clientShape)
-		clientShape->getShapeInstance()->setNodeTransform(nodeName,offset,EulerF(mDegToRad(rot.x),mDegToRad(rot.y),mDegToRad(rot.z)));
-}
-
 F32 PhysicsShape::getSeqDeltaSum(S32 seq,S32 currFrame,S32 baseFrame)
 {
 	Vector<MatrixF> baseGlobalRotations,currGlobalRotations;
@@ -6643,11 +6812,44 @@ bool PhysicsShape::setNavPathTo(Point3F toPos)
 
 	return true;
 }
+
 DefineEngineMethod(PhysicsShape,setNavPathTo,bool, (Point3F toPos),,"")
 {//HERE: this should be calling the client object.
 	return object->setNavPathTo(toPos);
 }
 
+void PhysicsShape::setMeshHidden(S32 index,bool hide)
+{
+	if (isServerObject())
+	{
+		PhysicsShape *clientShape = NULL;
+		clientShape = dynamic_cast<PhysicsShape *>(getClientObject());//SINGLE PLAYER HACK
+		clientShape->setMeshHidden(index,hide);
+	} else {
+		if (index < mShape->meshes.size())
+			mShapeInstance->setMeshForceHidden(index,hide);
+	}
+}
+
+DefineEngineMethod( PhysicsShape, setMeshHidden, void, (S32 index,bool hide),,
+   "@brief hides/unhides a mesh\n\n")
+{  
+	object->setMeshHidden(index,hide);
+}
+
+DefineEngineMethod( PhysicsShape, setNodeTransform, void, (const char *nodeName, Point3F offset, Point3F rot),,
+   "@brief .\n\n")
+{ 
+	PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(object->getClientObject());
+	clientShape->mShapeInstance->setNodeTransform(nodeName,offset,EulerF(mDegToRad(rot.x),mDegToRad(rot.y),mDegToRad(rot.z)));
+}
+
+DefineEngineMethod( PhysicsShape, addNodeTransform, void, (const char *nodeName, Point3F offset, Point3F rot),,
+   "@brief .\n\n")
+{ 
+	PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(object->getClientObject());
+	clientShape->mShapeInstance->addNodeTransform(nodeName,offset,EulerF(mDegToRad(rot.x),mDegToRad(rot.y),mDegToRad(rot.z)));
+}
 
 /////////////////////////////////////////////////////////////////////
 //OpenSteer

@@ -242,10 +242,9 @@ Px3Joint::Px3Joint(physx::PxRigidActor* A, physx::PxRigidActor* B,Px3World* worl
 
 	mJoint->setBreakForce(mJD.maxForce,mJD.maxTorque);
 
-	Con::printf("Setting constraint flag to true! jointType %d",mJD.jointType);
+	//Con::printf("Setting constraint flag to true! jointType %d",mJD.jointType);
 	mJoint->setConstraintFlag(physx::debugger::PxConstraintFlag::eVISUALIZATION,true);
 
-	
 }
 
 Px3Joint::~Px3Joint()

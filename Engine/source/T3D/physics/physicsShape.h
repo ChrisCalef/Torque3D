@@ -387,6 +387,8 @@ public:
    void storeRestorePos();
 
    void orientToPosition(Point3F pos);
+	
+   virtual void getNodeTransform( S32 nodeIndex, const MatrixF &xfm, MatrixF *outMat );
 
    PhysicsBody *getPhysicsRep();
    PhysicsJoint *getPhysicsJoint();
@@ -516,6 +518,10 @@ public:
 	U32 importBvhSkeleton(const char *bvhFile,const char *profileName);
 	void importBvh(bool importGround,const char *bvhFile,const char *bvhProfile,bool cache_dsqs);
 	void saveBvh(U32 seqNum, const char *bvh_file, const char *bvh_format, bool isGlobal);
+
+	void setMeshHidden(S32 index,bool hide);
+	void importShapeNodes();
+	void mountShapes();
 
 //#endif // TORQUE_NAVIGATION_ENABLED
 };

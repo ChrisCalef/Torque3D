@@ -105,7 +105,6 @@ bool Px3Body::init(   PhysicsCollision *shape,
    {
 	   mActor = gPhysics3SDK->createRigidDynamic(physx::PxTransform(physx::PxIDENTITY()));
 	   physx::PxRigidDynamic *actor = mActor->is<physx::PxRigidDynamic>();
-		Con::printf("creating rigid dynamic shape, mass=%f",mass);
 	   if ( isKinematic )
 	   {		
 		   actor->setRigidDynamicFlag(physx::PxRigidDynamicFlag::eKINEMATIC, true);
@@ -163,7 +162,7 @@ bool Px3Body::init(   PhysicsCollision *shape,
       pShape->setSimulationFilterData(colData);
       pShape->setQueryFilterData(colData);
 
-		Con::printf("contact offset: %f, rest offset %f",pShape->getContactOffset(),pShape->getRestOffset());
+		//Con::printf("contact offset: %f, rest offset %f",pShape->getContactOffset(),pShape->getRestOffset());
    }
 
    //Con::printf("creating new physics body, mass %f, classname %s",mass,obj->getClassName());
@@ -240,6 +239,8 @@ void Px3Body::setDamping( F32 linear, F32 angular )
 
 void Px3Body::getState( PhysicsState *outState )
 {
+	if (!isDynamic())
+		S32 myPain=0;
    AssertFatal( mActor, "Px3Body::getState - The actor is null!" );
    AssertFatal( isDynamic(), "Px3Body::getState - This call is only for dynamics!" );
 

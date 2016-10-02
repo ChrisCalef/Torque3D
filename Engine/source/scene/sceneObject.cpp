@@ -44,7 +44,7 @@
 #include "T3D/gameBase/gameProcess.h"
 #include "T3D/gameBase/gameConnection.h"
 #include "T3D/accumulationVolume.h"
-#include "T3D/tsStatic.h"
+#include "T3D/physics/physicsShape.h"//TEMP - MegaMotion/openSimEarth, need to move vehicle rotor/propeller functions away from here!
 
 IMPLEMENT_CONOBJECT(SceneObject);
 
@@ -1231,8 +1231,8 @@ void SceneObject::mountObjectEx( SceneObject *obj, S32 toNode, S32 fromNode, con
 
       obj->onMount( this, nodeIdxToMountNum(toNode) );
 		Point3F pos = xfm.getPosition();
-		//Con::printf("Scene object class %s mounted on scene object class %s position %f %f %f",
-		//	obj->getClassName(),this->getClassName(),pos.x,pos.y,pos.z);
+		Con::printf("Scene object class %s mounted on scene object class %s position %f %f %f toNode %d fromNode %d",
+			obj->getClassName(),this->getClassName(),pos.x,pos.y,pos.z,toNode,fromNode);
    }
 	//Con::printf("made it through mountobjectex");
    if ( isServerObject() )
@@ -1609,14 +1609,14 @@ void SceneObject::showRotorBlades()
 	{
 		for (U32 i=0;i<getMountedObjectCount();i++)
 		{
-			TSStatic *rotor = dynamic_cast<TSStatic *>(getMountedObject(i));
+			PhysicsShape *rotor = dynamic_cast<PhysicsShape *>(getMountedObject(i));
 			if (rotor)
 			{
-				if (strstr(rotor->mShapeName,"MainRotor")>0)
+				if (strstr(rotor->mDataBlock->shapeName,"MainRotor")>0)
 				{
 					for (U32 j=0;j<rotor->getMountedObjectCount();j++)
 					{
-						TSStatic *blade = dynamic_cast<TSStatic *>(rotor->getMountedObject(j));
+						PhysicsShape *blade = dynamic_cast<PhysicsShape *>(rotor->getMountedObject(j));
 						if (blade)
 						{
 							for (U32 k=0;k<8;k++)
@@ -1641,14 +1641,14 @@ void SceneObject::showRotorBlur()
 	{
 		for (U32 i=0;i<getMountedObjectCount();i++)
 		{
-			TSStatic *rotor = dynamic_cast<TSStatic *>(getMountedObject(i));
+			PhysicsShape *rotor = dynamic_cast<PhysicsShape *>(getMountedObject(i));
 			if (rotor)
 			{
-				if (strstr(rotor->mShapeName,"MainRotor")>0)
+				if (strstr(rotor->mDataBlock->shapeName,"MainRotor")>0)
 				{
 					for (U32 j=0;j<rotor->getMountedObjectCount();j++)
 					{
-						TSStatic *blade = dynamic_cast<TSStatic *>(rotor->getMountedObject(j));
+						PhysicsShape *blade = dynamic_cast<PhysicsShape *>(rotor->getMountedObject(j));
 						if (blade)
 						{
 							for (U32 k=0;k<4;k++)
@@ -1677,14 +1677,14 @@ void SceneObject::showRotorDisc()
 	{
 		for (U32 i=0;i<getMountedObjectCount();i++)
 		{
-			TSStatic *rotor = dynamic_cast<TSStatic *>(getMountedObject(i));
+			PhysicsShape *rotor = dynamic_cast<PhysicsShape *>(getMountedObject(i));
 			if (rotor)
 			{
-				if (strstr(rotor->mShapeName,"MainRotor")>0)
+				if (strstr(rotor->mDataBlock->shapeName,"MainRotor")>0)
 				{
 					for (U32 j=0;j<rotor->getMountedObjectCount();j++)
 					{
-						TSStatic *blade = dynamic_cast<TSStatic *>(rotor->getMountedObject(j));
+						PhysicsShape *blade = dynamic_cast<PhysicsShape *>(rotor->getMountedObject(j));
 						if (blade)
 						{
 							for (U32 k=0;k<4;k++)
@@ -1724,6 +1724,7 @@ DefineEngineMethod( SceneObject, showPropDisc, void, (),,
 DefineEngineMethod( SceneObject, showRotorBlades, void, (),,
    "@brief .\n\n")
 {  
+	Con::printf("calling showRotorBlades!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	object->showRotorBlades();
 }
 

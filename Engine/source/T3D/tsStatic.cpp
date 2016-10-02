@@ -394,18 +394,18 @@ bool TSStatic::_createShape()
     if ( mClothEnabled )
         _enableCloth();
 
-	 Con::printf("creating tsstatic, shapeName %s strcmp %d",mShapeName,strcmp(mShapeName,"art/shapes/fg_convert/ka50/Models/ka50.dts"));
-	 //TEMP!!! Gotta make a new db structure to deal with this new reality. Tie it to shapeName instead of physicsShape ID.
-	if (isServerObject())//Wish I had a one line insta-scan of the database here to find out if any mounts exist for this shape...
-	{//Damn, this is totally crashing, and I think I should wait till I get my debug build sorted out to fix it.
+	 //No longer supporting MegaMotion/openSimEarth shapeMounts here, only in physicsShape.
+	 /*
+	if (isServerObject())
+	{
 		SQLiteObject *kSQL = PHYSICSMGR->mSQL;
 
 	   char file_query[512],part_query[512],datablock_query[512];
 	   S32 result,result2;
 	   sqlite_resultset *resultSet,*resultSet2;
-		S32 file_id;
+		S32 shape_id;
 
-		sprintf(file_query,"SELECT id FROM shapeFile WHERE path IN ('%s')",mShapeName);
+		sprintf(file_query,"SELECT id FROM physicsShape WHERE path = '%s';",mShapeName);
 	   result = kSQL->ExecuteSQL(file_query);
 		if (result==0)
 			goto EXIT;
@@ -414,13 +414,13 @@ bool TSStatic::_createShape()
 			resultSet = kSQL->GetResultSet(result);
 			if (resultSet->iNumRows<=0)
 				goto EXIT; 	
-			file_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
+			shape_id = dAtoi(resultSet->vRows[0]->vColumnValues[0]);
 			kSQL->ClearResultSet(result);
 		}
-		Con::printf("found a file_Id: %d",file_id);
+		Con::printf("found a shape ID: %d",shape_id);
 		
 
-	   sprintf(part_query,"SELECT * FROM shapeMount WHERE parent_shape_id=%d;",file_id);
+	   sprintf(part_query,"SELECT * FROM shapeMount WHERE parent_shape_id=%d;",shape_id);
 	   result = kSQL->ExecuteSQL(part_query);
 	   if (result==0)
 		   goto EXIT; 				
@@ -429,7 +429,7 @@ bool TSStatic::_createShape()
 	   if (resultSet->iNumRows<=0)
 		   goto EXIT; 	
 		
-		Con::printf("didn't exit out, going for a mounting loop! parent id %d, numResults %d",file_id,resultSet->iNumRows);
+		Con::printf("didn't exit out, going for a mounting loop! parent id %d, numResults %d",shape_id,resultSet->iNumRows);
 
 	   TSShape *kShape = mShapeInstance->getShape();
 		TSStatic *mountObj;
@@ -453,7 +453,7 @@ bool TSStatic::_createShape()
 		   MD->parentNode = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);	
 		   MD->childNode = dAtoi(resultSet->vRows[i]->vColumnValues[j++]);
 						
-		   sprintf(file_query,"SELECT path FROM shapeFile WHERE id=%d;",MD->childShape);
+		   sprintf(file_query,"SELECT path FROM physicsShape WHERE id=%d;",MD->childShape);
 			result2 = kSQL->ExecuteSQL(file_query);
 			resultSet2 = kSQL->GetResultSet(result2);
 			char childShape[255];
@@ -509,7 +509,7 @@ bool TSStatic::_createShape()
          mountObj->registerObject(objName);
 			missionGroup->addObject(mountObj);	
 			Point3F tempPos = mat.getPosition();
-			Con::printf("object %d using shapefile: %s position %f %f %f",mountObj->getId(),mountObj->mShapeName,
+			Con::printf("tsStatic physicsShape ID %d mounting  %s position %f %f %f",mountObj->getId(),mountObj->mShapeName,
 								tempPos.x,tempPos.y,tempPos.z);
 			this->mountObjectEx(dynamic_cast<SceneObject *>(mountObj),MD->parentNode,MD->childNode,mat);
 		}
@@ -517,6 +517,7 @@ EXIT:
 
 		kSQL->ClearResultSet(result);
 	}
+	*/
     return true;
 }
 
@@ -1585,7 +1586,7 @@ void TSStatic::spitM4s(Point3F pos,Point3F normal,S32 numBodies)
 {
 	//So, this is a temporary function just to test how to do this more efficiently in the future, and to
 	//accomplish the helicopter skyscraper attack scene for the Portlingrad trailer.
-	//Every hit needs to spit numBodies M4 ragdolls, along the normal vector, give or take a variance.
+	//Every hit needs to spit numBodies M4 ragdolls, +/- variance, along the normal vector, +/- variance.
 	normal.normalize();
 	//Con::printf("trying to spit %d bodies out of %s at %f %f %f, normal %f %f %f",numBodies,getName(),pos.x,pos.y,pos.z,
 	//																		normal.x,normal.y,normal.z);
