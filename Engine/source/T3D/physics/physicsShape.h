@@ -484,13 +484,14 @@ public:
 	S32 mPedId;
 	//OpenSteer::Vec3 mNavPoints[MAX_NAV_NODES];//wasteful?  better way?//OBSOLETE? use navPaths?
 	NavClient *mVehicle;
+	bool mUseSteering;
 
 	F32 mWalkSpeed;
 	F32 mJogSpeed;
 	F32 mRunSpeed;
 	F32 mSprintSpeed;
 
-	void assignVehicleNavPath();
+	//void assignVehicleNavPath();
 	void assignLastVehicle();
 	void updateToVehicle();
 	//////OpenSteer////////////
@@ -522,6 +523,9 @@ public:
 	void setMeshHidden(S32 index,bool hide);
 	void importShapeNodes();
 	void mountShapes();
+
+	void updateFromOpenSteer();
+	void updateToOpenSteer();
 
 //#endif // TORQUE_NAVIGATION_ENABLED
 };

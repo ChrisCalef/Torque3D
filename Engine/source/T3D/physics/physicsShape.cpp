@@ -481,7 +481,8 @@ PhysicsShape::PhysicsShape()
 		mWalkSpeed( 0.05 ),
 		mJogSpeed( 1.5 ),
 		mRunSpeed( 3.0 ),
-		mSprintSpeed( 4.0 )
+		mSprintSpeed( 4.0 ),
+		mUseSteering( false )
 {
    mNetFlags.set( Ghostable | ScopeAlways );
    mTypeMask |= DynamicShapeObjectType;
@@ -2145,13 +2146,111 @@ void PhysicsShape::applyRadialImpulseToPart(  S32 partIndex, const Point3F &orig
 
 }
 
+
+void PhysicsShape::updateFromOpenSteer()
+{//Can I cut all of this into a separate function, and call it from both interpolateTick and processTick?
+
+	Point3F steerPos,steerVel;
+
+	OpenSteer::Vec3 vec = mVehicle->position();
+	OpenSteer::Vec3 vel = mVehicle->velocity();
+
+	steerPos.set(Point3F(-vec.x,vec.z,vec.y));
+	steerVel.set(Point3F(-vel.x,vel.z,vel.y));
+
+	MatrixF pedMat,currMat;
+
+	QuatF pedQuat,currQuat;
+	Point3F pedVelNorm = steerVel;
+	pedVelNorm.normalize();
+	F32 pedVelLen = steerVel.len();
+	//Con::printf("sceneShape %d  vector: %f  %f  %f   speed %f",
+	//		mSceneShapeID,steerVel.x,steerVel.y,steerVel.z,pedVelLen);
+	pedQuat.rotationArc(pedVelNorm,Point3F(0,1,0));
+	pedQuat.setMatrix(&pedMat);
+
+	setTransform(pedMat);
+	setPosition(steerPos);
+
+	//NOW: deal with walking.  First, turn on walk anim, make it cyclic, turn off ground animate. 
+	//Second, adjust anim playback speed to the ratio of:
+	//   OpenSteer velocity  ? (ground animate distance / sequence duration)
+	//ground animate distance is the key point.  If we always start our ground animation 
+	//locally at (0,0,0), which we should, then the length of the last ground frame 
+	//translation should be all we need.
+
+	//FIX: DB-ize gait velocities (per PhysicsShape?) 
+	// Decide between "walk", "jog", and "run" based on pedVel.	
+	F32 walkThreshold = 0.02;//FIX!!! Use database, for speeds and action names.
+	F32 runThreshold = 0.3;
+	if ((pedVelLen <= mWalkSpeed - walkThreshold)&&(mCurrentSeq!=mActionSeqs["ambient"]))
+	{
+		setCurrentSeq(mActionSeqs["ambient"]);
+	}
+	else if ((pedVelLen > mWalkSpeed + walkThreshold)&&
+		(pedVelLen <= mRunSpeed - runThreshold)&&
+		(mCurrentSeq!=mActionSeqs["walk"]))
+	{
+		F32 threadPos = 0.0f;
+		if (mCurrentSeq==mActionSeqs["run"])
+			threadPos = mAmbientThread->getPos();
+
+		setCurrentSeq(mActionSeqs["walk"]);
+
+		if (threadPos>0.0)
+			mAmbientThread->setPos(threadPos);
+	}
+	else if ((pedVelLen > mRunSpeed + runThreshold)&&(mCurrentSeq!=mActionSeqs["run"]))
+	{
+		F32 threadPos = 0.0f;
+		if (mCurrentSeq==mActionSeqs["walk"])
+			threadPos = mAmbientThread->getPos();
+
+		setCurrentSeq(mActionSeqs["run"]);
+
+		if (threadPos>0.0)
+			mAmbientThread->setPos(threadPos);
+	}
+
+	const TSShape::Sequence *kSeq = &(mShape->sequences[mCurrentSeq]);
+	//FIX: add shape scale to groundTranslations!!
+	Point3F gfPos = mShape->groundTranslations[kSeq->firstGroundFrame + (kSeq->numGroundFrames-1)];
+	F32 groundSpeed = (gfPos.len() * mObjScale.z) / kSeq->duration ;//Scaling groundSpeed by object scale.
+	F32 speedRatio = pedVelLen / groundSpeed;
+	TSThread *th = mShapeInstance->getThread(0);
+	mShapeInstance->setTimeScale(th,speedRatio);
+
+}
+
+
+void PhysicsShape::updateToOpenSteer()
+{
+
+	//MatrixF trans = getTransform();
+	//Point3F pos = trans.getPosition();
+	//Point3F forward = trans.getForwardVector();
+	//mVehicle->setPosition(pos.x,pos.y,pos.z);
+	//mVehicle->setForward(forward.x,forward.y,forward.z);
+
+}
+
 void PhysicsShape::interpolateTick( F32 delta )
 {
 	
    AssertFatal( !mDestroyed, "PhysicsShape::interpolateTick - Shouldn't be processing a destroyed shape!" );
 	
+	if (mVehicle)
+	{
+		if ((mUseSteering)&&(!mIsDynamic))
+			updateFromOpenSteer();
+		else
+		{
+			//if (mVehicle->isThinking)
+			//	mVehicle->isThinking = false;//NOPE
+			//updateToOpenSteer();
+		}
+	}
 
-	
 	if ( isMounted() && !mIsDynamic )
    {
       MatrixF mat( true );
@@ -2430,7 +2529,18 @@ void PhysicsShape::processTick( const Move *move )
 
 	if ((mBodyNodes.size()==0)||(mNodeBodies.size()==0))
 		return;//I think we're calling this before we've created the shape...
-
+	
+	if (mVehicle)
+	{
+		if ((mUseSteering)&&(!mIsDynamic))
+			updateFromOpenSteer();
+		else
+		{
+			//if (mVehicle->isThinking)
+			//	mVehicle->isThinking = false;//NOPE
+			//updateToOpenSteer();
+		}
+	}
 
    // Note that unlike TSStatic, the serverside PhysicsShape does not
    // need to play the ambient animation because even if the animation were
@@ -2458,78 +2568,7 @@ void PhysicsShape::processTick( const Move *move )
       setTransform( mat );
    }
 
-	//TEMP! TESTING! Hope this works out. OpenSteer.
-	if (mVehicle)
-	{
-		Point3F steerPos,steerVel;
 
-		OpenSteer::Vec3 vec = mVehicle->position();
-		OpenSteer::Vec3 vel = mVehicle->velocity();
-
-		steerPos.set(Point3F(-vec.x,vec.z,vec.y));
-		steerVel.set(Point3F(-vel.x,vel.z,vel.y));
-
-		MatrixF pedMat,currMat;
-
-		QuatF pedQuat,currQuat;
-		Point3F pedVelNorm = steerVel;
-		pedVelNorm.normalize();
-		F32 pedVelLen = steerVel.len();
-		//Con::printf("sceneShape %d  vector: %f  %f  %f   speed %f",
-		//		mSceneShapeID,steerVel.x,steerVel.y,steerVel.z,pedVelLen);
-		pedQuat.rotationArc(pedVelNorm,Point3F(0,1,0));
-		pedQuat.setMatrix(&pedMat);
-		setTransform(pedMat);
-		setPosition(steerPos);
-
-		//NOW: deal with walking.  First, turn on walk anim, make it cyclic, turn off ground animate. 
-		//Second, adjust anim playback speed to the ratio of:
-		//   OpenSteer velocity  ? (ground animate distance / sequence duration)
-		//ground animate distance is the key point.  If we always start our ground animation 
-		//locally at (0,0,0), which we should, then the length of the last ground frame 
-		//translation should be all we need.
-
-		//FIX: DB-ize gait velocities (per PhysicsShape?) 
-		// Decide between "walk", "jog", and "run" based on pedVel.	
-		F32 walkThreshold = 0.02;
-		F32 runThreshold = 0.3;
-		if ((pedVelLen <= mWalkSpeed - walkThreshold)&&(mCurrentSeq!=mActionSeqs["ambient"]))
-		{
-			setCurrentSeq(mActionSeqs["ambient"]);
-		}
-		else if ((pedVelLen > mWalkSpeed + walkThreshold)&&
-					(pedVelLen <= mRunSpeed - runThreshold)&&
-					(mCurrentSeq!=mActionSeqs["walk"]))
-		{
-			F32 threadPos = 0.0f;
-			if (mCurrentSeq==mActionSeqs["run"])
-				threadPos = mAmbientThread->getPos();
-
-			setCurrentSeq(mActionSeqs["walk"]);
-
-			if (threadPos>0.0)
-				mAmbientThread->setPos(threadPos);
-		}
-		else if ((pedVelLen > mRunSpeed + runThreshold)&&(mCurrentSeq!=mActionSeqs["run"]))
-		{
-			F32 threadPos = 0.0f;
-			if (mCurrentSeq==mActionSeqs["walk"])
-				threadPos = mAmbientThread->getPos();
-
-			setCurrentSeq(mActionSeqs["run"]);
-						
-			if (threadPos>0.0)
-				mAmbientThread->setPos(threadPos);
-		}
-		const TSShape::Sequence *kSeq = &(mShape->sequences[mCurrentSeq]);
-		//FIX: add shape scale to groundTranslations!!
-		Point3F gfPos = mShape->groundTranslations[kSeq->firstGroundFrame + (kSeq->numGroundFrames-1)];
-		F32 groundSpeed = (gfPos.len() * mObjScale.z) / kSeq->duration ;//Scaling groundSpeed by object scale.
-		F32 speedRatio = pedVelLen / groundSpeed;
-		TSThread *th = mShapeInstance->getThread(0);
-		mShapeInstance->setTimeScale(th,speedRatio);
-	}
-	
    mCurrentTick++;
 
    //Now, this also only makes sense on the client, for articulated shapes at least...
@@ -2538,31 +2577,35 @@ void PhysicsShape::processTick( const Move *move )
 
 	 ////////////////////////////////////////////////////////////////////////////////////////////////////
    //GroundMove: really belongs in the ts directory, or somewhere else, not related to physics, but testing it here.
-   if ( (mIsGroundMoving) && (mCurrentSeq>=0) && !isServerObject() && (!mIsDynamic) && (!mUseDataSource))
+   if ((mIsGroundMoving) && (mCurrentSeq>=0) && !isServerObject() && (!mIsDynamic) && (!mUseDataSource))
    {
 	   TSSequence currSeq = mShape->sequences[mCurrentSeq];
-	   //Rots: maybe later, maybe not even necessary this time around.
-	   //Quat16 groundRot = mShape->groundRotations[ambSeq.firstGroundFrame+(S32)(mAmbientThread->getPos()*(F32)(ambSeq.numGroundFrames))];
-	   //QuatF groundQuat;
-	   //groundRot.getQuatF(&groundQuat);
-	   Point3F groundTrans = mShape->groundTranslations[currSeq.firstGroundFrame+(S32)(mAmbientThread->getPos()*(F32)(currSeq.numGroundFrames))];
-	   Point3F mulGroundTrans;
-	   mStartMat.mulP(groundTrans,&mulGroundTrans);
-	   MatrixF m1 = getTransform();
-	   Point3F pos = m1.getPosition();	  	   
-	   if (mLastThreadPos > mAmbientThread->getPos())
-	   {
-		   mLastGroundTrans = Point3F::Zero;
-		   //mLastGroundRot = MatrixF::Identity;
-	   }
-		
-	   Point3F tempPos,finalPos,groundPos;
-	   tempPos = pos + mulGroundTrans - mLastGroundTrans;
-	   groundPos = findGroundPosition(tempPos + Point3F(0,0,1));
-	   m1.setPosition(groundPos);
-	   setTransform(m1);
-	   mLastGroundTrans = mulGroundTrans;
-		mLastThreadPos = mAmbientThread->getPos();
+		if (currSeq.numGroundFrames>0)
+		{
+			//Rots: maybe later, maybe not even necessary this time around.
+			//Quat16 groundRot = mShape->groundRotations[ambSeq.firstGroundFrame+(S32)(mAmbientThread->getPos()*(F32)(ambSeq.numGroundFrames))];
+			//QuatF groundQuat;
+			//groundRot.getQuatF(&groundQuat);
+			Point3F groundTrans = mShape->groundTranslations[currSeq.firstGroundFrame+(S32)(mAmbientThread->getPos()*(F32)(currSeq.numGroundFrames))];
+			Point3F mulGroundTrans;
+			mStartMat.mulP(groundTrans,&mulGroundTrans);
+			MatrixF m1 = getTransform();
+			Point3F pos = m1.getPosition();	  	   
+			if (mLastThreadPos > mAmbientThread->getPos())
+			{
+				mLastGroundTrans = Point3F::Zero;
+				//mLastGroundRot = MatrixF::Identity;
+			}
+
+			Point3F tempPos,finalPos,groundPos;
+			tempPos = pos + mulGroundTrans - mLastGroundTrans;
+			//Con::printf("processTick, finding ground position from: %f %f %f",tempPos.x,tempPos.y,tempPos.z);
+			groundPos = findGroundPosition(tempPos + Point3F(0,0,1));
+			m1.setPosition(groundPos);
+			setTransform(m1);
+			mLastGroundTrans = mulGroundTrans;
+			mLastThreadPos = mAmbientThread->getPos();
+		}
    } 
 
 
@@ -3271,11 +3314,10 @@ bool PhysicsShape::setAmbientSeq(S32 seq)
 	}
 }
 
-////////////////////////////////////////////////
+////////////////////////////////////////////////////
 
 
 ////////////////////////////////////////////////////
-
 
 bool PhysicsShape::setAmbientSeq(const char *name)
 {
@@ -3376,7 +3418,7 @@ Point3F PhysicsShape::getClientPosition()
 Point3F PhysicsShape::findGroundPosition(Point3F pos)
 {
 	RayInfo ri;
-	bool raySuccess = mWorld->castGroundRay(pos + Point3F(0,0,30),pos + Point3F(0,0,-1000),&ri);
+	bool raySuccess = mWorld->castGroundRay(pos,pos + Point3F(0,0,-1000),&ri);
 
 	if (raySuccess)
 		return ri.point;
@@ -6020,8 +6062,16 @@ DefineEngineMethod( PhysicsShape, groundMove, void, (),,
 {  
 	object->mIsGroundMoving = true;
 	PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(object->getClientObject());
-	clientShape->mIsGroundMoving = true;
-	Con::printf("ground moving is set!");
+	if (clientShape) clientShape->mIsGroundMoving = true;
+}
+
+DefineEngineMethod( PhysicsShape, clearGroundMove, void, (),,
+   "@brief stops movement via ground transforms.\n\n")
+{  
+	object->mIsGroundMoving = false;
+	PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(object->getClientObject());
+	if (clientShape) clientShape->mIsGroundMoving = false;
+	Con::printf("ground moving is cleared!");
 }
 
 DefineEngineMethod( PhysicsShape, getSceneShapeID, S32, (),,
@@ -6211,6 +6261,14 @@ DefineEngineMethod( PhysicsShape, getSeqGroundFrames, S32, (S32 index),,
 	TSShape::Sequence & seq = object->mShape->sequences[index];
 
 	return seq.numGroundFrames;
+}
+
+DefineEngineMethod( PhysicsShape, getSeqDuration, F32, (S32 index),,
+   "@brief.\n\n")
+{  
+	TSShape::Sequence & seq = object->mShape->sequences[index];
+
+	return seq.duration;
 }
 
 DefineEngineMethod( PhysicsShape, pauseSeq, void, (),,
@@ -6715,7 +6773,8 @@ bool PhysicsShape::setNavMesh()
 	if (mNavMesh)
 	{ 
 		if (mNavPath)
-			delete mNavPath;//Is this at all safe?
+			return false;
+			//delete mNavPath;//Is this at all safe?//A: NOPE. "Object still linked in reference lists!"
 
 		mNavPath = new NavPath();
 		mNavPath->mMesh = mNavMesh;//This is not the normal way, supposed to use SetProtectedMesh...
@@ -6789,8 +6848,10 @@ bool PhysicsShape::setNavPathTo(Point3F toPos)
 	//Con::printf("Setting Nav Path To: %f %f %f",toPos.x,toPos.y,toPos.z);
 	//HERE: we are on server, this should be client, since everything else is.
 	if (mNavPath==NULL)
+	{
+		Con::printf("Nav path is null, cannot set nav path!");
 		return false;
-
+	}
 	mNavPath->mFrom = getClientPosition();
 	mNavPath->mTo = toPos;
 	mNavPath->mFromSet = mNavPath->mToSet = true;		
@@ -6806,9 +6867,10 @@ bool PhysicsShape::setNavPathTo(Point3F toPos)
 		clientShape->mNavPath = mNavPath;
 		if (clientShape->mVehicle)
 			clientShape->mVehicle->mDetourNavPath = mNavPath;
-	} //Con::printf("Navpath apparently successful! from %f %f %f, to %f %f %f, length %f  nodes %d",
-	//		mNavPath->mFrom.x,mNavPath->mFrom.y,mNavPath->mFrom.z,mNavPath->mTo.x,mNavPath->mTo.y,mNavPath->mTo.z,
-	//		mNavPath->getLength(),mNavPath->size());
+	} //
+	Con::printf("Navpath apparently successful! from %f %f %f, to %f %f %f, length %f  nodes %d",
+			mNavPath->mFrom.x,mNavPath->mFrom.y,mNavPath->mFrom.z,mNavPath->mTo.x,mNavPath->mTo.y,mNavPath->mTo.z,
+			mNavPath->getLength(),mNavPath->size());
 
 	return true;
 }
@@ -6867,7 +6929,7 @@ DefineEngineMethod(PhysicsShape,createVehicle,bool, (Point3F pos,float rot),,"")
 	OpenSteer::Vec3 vec(-pos.x,pos.z,pos.y);
 	OpenSteer::OpenSteerDemo::createVehicle(vec,rot);
 	object->assignLastVehicle();
-	Con::printf("engine, created vehicle %f %f %f",vec.x,vec.y,vec.z);
+	
 	return true;
 }
 
@@ -6882,7 +6944,7 @@ void PhysicsShape::assignLastVehicle()
 	if ((mVehicle)&&(mNavPath))
 		mVehicle->mDetourNavPath = mNavPath;
 	else if (mNavPath==NULL)
-		Con::printf("whoops, we don't have a navpath yet! server %d",isServerObject());
+		Con::printf("Vehicle is not using a nav path.");
 }
 
 DefineEngineMethod(PhysicsShape,assignVehicle,bool, (),,"")
@@ -6899,7 +6961,15 @@ DefineEngineMethod(PhysicsShape,assignVehicle,bool, (),,"")
 	return false;
 }
 
+DefineEngineMethod(PhysicsShape,getVehicleID,S32, (),,"")
+{
+	if (object->mVehicle)
+		return object->mVehicle->id;
+	else
+		return 0;
+}
 
+/*
 void PhysicsShape::assignVehicleNavPath()
 {//OBSOLETE, use recast navpath instead.
 	if ((mVehicle)&&(mNavPath))
@@ -6913,7 +6983,7 @@ void PhysicsShape::assignVehicleNavPath()
 		//MEGAMOTION: Fix this, declaration of NavPoints was breaking due to inability to predeclare inside the
 		//OpenSteer namespace, and including openSteerDemo.h in physicsShape.h causes all kinds of winsock conflicts
 		//and other weird behavior, due probably to inclusion of windows.h too early or something. Bypassing for now.
-		/*
+		
 		for (U32 i=0;i<mNavPath->size();i++)
 		{
 			Point3F pos = mNavPath->getNode(i);
@@ -6926,28 +6996,48 @@ void PhysicsShape::assignVehicleNavPath()
 			mNavPoints,
 			pathRadius,
 			false);
-			*/
+			
 	}
-}
+}*/
 
 //WAIT... Do all of these need to be client instead of server???
-DefineEngineMethod(PhysicsShape,assignVehicleNavPath,void, (),,"")
-{
-	if (object->mVehicle)
-		return;
+//DefineEngineMethod(PhysicsShape,assignVehicleNavPath,void, (),,"")
+//{
+//	if (object->mVehicle)
+//		return;
 
-	object->assignVehicleNavPath();
+//	object->assignVehicleNavPath();
+
+//	return;
+//}
+
+//Really need to decide once and for all: should openSteer stuff all be on the client?
+DefineEngineMethod(PhysicsShape,setUseSteering,void, (bool value),,"")
+{
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	clientObject->mUseSteering = value;
 
 	return;
 }
 
 DefineEngineMethod(PhysicsShape,getVehiclePos,Point3F, (),,"")
 {
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
 	Point3F pos;
-	if (object->mVehicle)
+	if (clientObject->mVehicle)
 	{
 		OpenSteer::Vec3 vec;
-		vec = object->mVehicle->position();
+		vec = clientObject->mVehicle->position();
 		pos = Point3F(-vec.x,vec.z,vec.y);
 	}
 	return pos;
@@ -6955,21 +7045,33 @@ DefineEngineMethod(PhysicsShape,getVehiclePos,Point3F, (),,"")
 
 DefineEngineMethod(PhysicsShape,setVehiclePos,void, (Point3F pos),,"")
 {
-	if (object->mVehicle)
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
 	{
 		OpenSteer::Vec3 vec(-pos.x,pos.z,pos.y);
-		object->mVehicle->setPosition(vec);
+		clientObject->mVehicle->setPosition(vec);
 	}
 	return;
 }
 
 DefineEngineMethod(PhysicsShape,getVehicleVel,Point3F, (),,"")
 {
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
 	Point3F pos;
-	if (object->mVehicle)
+	if (clientObject->mVehicle)
 	{
 		OpenSteer::Vec3 vel;
-		vel = object->mVehicle->velocity();
+		vel = clientObject->mVehicle->velocity();
 		pos = Point3F(-vel.x,vel.z,vel.y);
 	}
 	return pos;
@@ -6977,121 +7079,235 @@ DefineEngineMethod(PhysicsShape,getVehicleVel,Point3F, (),,"")
 
 DefineEngineMethod(PhysicsShape,setOpenSteerMoveTarget,void, (Point3F pos),,"")
 {
-	if (object->mVehicle)
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
 	{
 		OpenSteer::Vec3 vec(-pos.x,pos.z,pos.y);
-		object->mVehicle->setMoveTarget(vec);
+		clientObject->mVehicle->setMoveTarget(vec);
 	}
 	return;
 }
 
 DefineEngineMethod(PhysicsShape,getOpenSteerMass,F32, (),,"")
 {
-	if (object->mVehicle)
-		return object->mVehicle->mass();
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		return clientObject->mVehicle->mass();
 	else 
 		return 0.0;
 }
 
 DefineEngineMethod(PhysicsShape,setOpenSteerMass,void, (F32 value),,"")
 {
-	if (object->mVehicle)
-		object->mVehicle->setMass(value);
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->setMass(value);
 }
 
 DefineEngineMethod(PhysicsShape,getOpenSteerRadius,F32, (),,"")
 {
-	if (object->mVehicle)
-		return object->mVehicle->radius();
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		return clientObject->mVehicle->radius();
 	else 
 		return 0.0;
 }
 
 DefineEngineMethod(PhysicsShape,setOpenSteerRadius,void, (F32 value),,"")
 {
-	if (object->mVehicle)
-		object->mVehicle->setRadius(value);
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->setRadius(value);
 }
 
 DefineEngineMethod(PhysicsShape,getOpenSteerMaxSpeed,F32, (),,"")
 {
-	if (object->mVehicle)
-		return object->mVehicle->maxSpeed();
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		return clientObject->mVehicle->maxSpeed();
 	else 
 		return 0.0;
 }
 
 DefineEngineMethod(PhysicsShape,setOpenSteerMaxSpeed,void, (F32 value),,"")
 {
-	if (object->mVehicle)
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
 	{
 		//object->mVehicle->mMaxSpeed = dAtof(argv[2]);//Any reason at all to have these variables?
-		object->mVehicle->setMaxSpeed(value);//This is how you change the real value.
+		clientObject->mVehicle->setMaxSpeed(value);//This is how you change the real value.
 		//Con::printf("setting opensteer max speed: %f",object->mVehicle->mMaxSpeed);
 	}
 }
 
 DefineEngineMethod(PhysicsShape,getOpenSteerMaxForce,F32, (),,"")
 {
-	if (object->mVehicle)
-		return object->mVehicle->maxForce();
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		return clientObject->mVehicle->maxForce();
 	else 
 		return 0.0;
 }
 
 DefineEngineMethod(PhysicsShape,setOpenSteerMaxForce,void, (F32 value),,"")
 {
-	if (object->mVehicle)
-		object->mVehicle->setMaxForce(value);
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->setMaxForce(value);
 }
 
 
 DefineEngineMethod(PhysicsShape,setOpenSteerWanderChance,void, (F32 value),,"")
 {
-	if (object->mVehicle)
-		object->mVehicle->mWanderChance = value;//Warning, might want to sanity check.
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->mWanderChance = value;//Warning, might want to sanity check.
 }
 
 DefineEngineMethod(PhysicsShape,setOpenSteerWanderWeight,void, (F32 value),,"")
 {
-	if (object->mVehicle)
-		object->mVehicle->mWanderWeight = value;//Warning, might want to sanity check.
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->mWanderWeight = value;//Warning, might want to sanity check.
 }
 
 DefineEngineMethod(PhysicsShape,setOpenSteerSeekTargetWeight,void, (F32 value),,"")
 {
-	if (object->mVehicle)
-		object->mVehicle->mSeekTargetWeight = value;//Warning, might want to sanity check.
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->mSeekTargetWeight = value;//Warning, might want to sanity check.
 }
 
 DefineEngineMethod(PhysicsShape,setOpenSteerAvoidTargetWeight,void, (F32 value),,"")
 {
-	if (object->mVehicle)
-		object->mVehicle->mAvoidTargetWeight = value;//Warning, might want to sanity check.
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->mAvoidTargetWeight = value;//Warning, might want to sanity check.
 }
 
 DefineEngineMethod(PhysicsShape,setOpenSteerSeekNeighborWeight,void, (F32 value),,"")
 {
-	if (object->mVehicle)
-		object->mVehicle->mSeekNeighborWeight = value;//Warning, might want to sanity check.
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->mSeekNeighborWeight = value;//Warning, might want to sanity check.
 }
 
 DefineEngineMethod(PhysicsShape,setOpenSteerAvoidNeighborWeight,void, (F32 value),,"")
 {
-	if (object->mVehicle)
-		object->mVehicle->mAvoidNeighborWeight = value;//Warning, might want to sanity check.
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->mAvoidNeighborWeight = value;//Warning, might want to sanity check.
 }
 
 DefineEngineMethod(PhysicsShape,setOpenSteerAvoidNavMeshEdgeWeight,void, (F32 value),,"")
 {
-	if (object->mVehicle)
-		object->mVehicle->mAvoidNavMeshEdgeWeight = value;//Warning, might want to sanity check.
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->mAvoidNavMeshEdgeWeight = value;//Warning, might want to sanity check.
 }
 
 DefineEngineMethod(PhysicsShape,setOpenSteerDetectNavMeshEdgeRange,void, (F32 value),,"")
 {
-	if (object->mVehicle)
-		object->mVehicle->mDetectNavMeshEdgeRange = value;//Warning, might want to sanity check.
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->mDetectNavMeshEdgeRange = value;//Warning, might want to sanity check.
+}
+
+DefineEngineMethod(PhysicsShape,setOpenSteerSpeed,void, (F32 value),,"")
+{
+	PhysicsShape *clientObject;
+	if (object->isServerObject())
+		clientObject = dynamic_cast<PhysicsShape*>(object->getClientObject());
+	else
+		clientObject = object;
+
+	if (clientObject->mVehicle)
+		clientObject->mVehicle->setSpeed(value);//Warning, might want to sanity check.
 }
 
 EulerAngles Eul_(float ai, float aj, float ah, int order)

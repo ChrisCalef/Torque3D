@@ -513,9 +513,14 @@ File::FileStatus File::setStatus(File::FileStatus status)
 //-----------------------------------------------------------------------------
 File::FileStatus File::read(U32 size, char *dst, U32 *bytesRead)
 {
+	 if (NULL == dst)
+	 {
+		 S32 myPain=0;
+		 myPain++;
+	 }
     AssertFatal(Closed != currentStatus, "File::read: file closed");
     AssertFatal(INVALID_HANDLE_VALUE != (HANDLE)handle, "File::read: invalid file handle");
-    AssertFatal(NULL != dst, "File::read: NULL destination pointer");
+    AssertWarn(NULL != dst, "File::read: NULL destination pointer");
     AssertFatal(true == hasCapability(FileRead), "File::read: file lacks capability");
     AssertWarn(0 != size, "File::read: size of zero");
 

@@ -151,6 +151,12 @@ SceneObject::SceneObject()
 
 SceneObject::~SceneObject()
 {
+	
+	if (mZoneRefHead == NULL || mBinRefHead == NULL)
+	{
+		int myPain=0;
+		myPain++;
+	}
    AssertFatal( mZoneRefHead == NULL && mBinRefHead == NULL,
       "SceneObject::~SceneObject - Object still linked in reference lists!");
    AssertFatal( !mSceneObjectLinks,
@@ -446,6 +452,11 @@ void SceneObject::resetWorldBox()
    mWorldBox.maxExtents.convolve(mObjScale);
    mObjToWorld.mul(mWorldBox);
 
+	if (!mWorldBox.isValidBox())
+	{
+		int myPain=0;
+		myPain++;
+	}
    AssertFatal(mWorldBox.isValidBox(), "SceneObject::resetWorldBox - Bad world box!");
 
    // Create mWorldSphere from mWorldBox
@@ -463,6 +474,11 @@ void SceneObject::resetWorldBox()
 
 void SceneObject::resetObjectBox()
 {
+	if (!mWorldBox.isValidBox())
+	{
+		int myPain=0;
+		myPain++;
+	}
    AssertFatal( mWorldBox.isValidBox(), "SceneObject::resetObjectBox - Bad world box!" );
 
    mObjBox = mWorldBox;
@@ -509,7 +525,12 @@ void SceneObject::resetRenderWorldBox()
    mRenderWorldBox.minExtents.convolve( mObjScale );
    mRenderWorldBox.maxExtents.convolve( mObjScale );
    mRenderObjToWorld.mul( mRenderWorldBox );
-
+	
+	if (!mWorldBox.isValidBox())
+	{
+		int myPain=0;
+		myPain++;
+	}
    AssertFatal( mRenderWorldBox.isValidBox(), "Bad world box!" );
 
    // Create mRenderWorldSphere from mRenderWorldBox.
