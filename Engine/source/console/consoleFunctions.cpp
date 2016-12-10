@@ -2656,6 +2656,15 @@ DefineEngineFunction( getClock, S32, (),,
 	return clock();
 }
 
+DefineEngineFunction( getTime, S32, (),,
+   "Returns epoch time in seconds." )
+{
+	time_t myTime;
+	time(&myTime);
+	S32 seconds = (S32)myTime;
+	return seconds;
+}
+
 DefineEngineFunction( getExecutablePath, const char*, (),,
    "Returns path to game executable." )
 {

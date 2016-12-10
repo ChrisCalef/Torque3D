@@ -1617,7 +1617,6 @@ DefineEngineMethod( PhysicsShape, getRecordingSize, S32, (),,
 	return object->getRecordingSize();
 }
 
-
 void PhysicsShape::recordTick()
 {
 	if (isServerObject())
@@ -1665,23 +1664,24 @@ void PhysicsShape::recordTick()
 		Point3F tempTrans[200];// be plenty for quite a while...
 		QuatF kRot = mRecordInitialOrientation;
 		kRot.inverse();
-		//NOW: make the conversion to global position happen 
-		  //ONLY at export time.
+		//NOW: make the conversion to global position happen ONLY at export time.
 		//bool kRelativePosition = dynamic_cast<nxPhysManager*>(mPM)->mSceneRecordLocal;
 		MatrixF bodyTransform;
-		mPhysicsBodies[0]->getTransform(&bodyTransform);
+		mPhysicsBodies[0]->getTransform(&bodyTransform);//Normally just this.
+
 		if (kRelativePosition)
 		{//TEMP - kRelativePosition: trying to figure out what will work for iClone.  Doesn't rotate  
 			//bvh position when you rotate actor.			
 			kDiff = bodyTransform.getPosition() - mRecordInitialPosition;
 			kRot.mulP(kDiff,&kPos);
-			//Con::printf("kPos recording relative: %3.2f %3.2f %3.2f, initial %3.2f %3.2f %3.2f",kPos.x,kPos.y,kPos.z,
-			//	mRecordInitialPosition.x,mRecordInitialPosition.y,mRecordInitialPosition.z);
+			Point3F temp = bodyTransform.getPosition();
+			//Con::printf("kPos recording tick,  pos: %f %f %f   relative: %3.2f %3.2f %3.2f ",temp.x,temp.y,temp.z,kPos.x,kPos.y,kPos.z);
 		} else {
 			kPos = bodyTransform.getPosition();
 			//Con::printf("kPos recording: %3.2f %3.2f %3.2f",kPos.x,kPos.y,kPos.z);
 		}
 		kPos /= mObjScale;
+		//Con::printf("kPos after scale: %3.2f %3.2f %3.2f",kPos.x,kPos.y,kPos.z);
 		mNodeTranslations[mNodeTranslations.size()-1] = kPos;
 
 		for (U32 i=0;i<mPhysicsBodies.size();i++)
@@ -1713,7 +1713,6 @@ void PhysicsShape::recordTick()
 			kPos -= getPosition();
 			kPos /= mObjScale;//HERE: also rotate! inverse of flexbody transform?
 			tempTrans[i] = kPos;
-
 		}
 
 		for (U32 i=0;i<mPhysicsBodies.size();i++)
@@ -1767,12 +1766,12 @@ void PhysicsShape::setupOrderNodes()
 
 }
 
-void PhysicsShape::makeSequence(const char *seqName)
+void PhysicsShape::makeSequence(const char *seqPath)
 {
 	if (isServerObject())
 	{
 		PhysicsShape *clientShape = dynamic_cast<PhysicsShape *>(getClientObject());//SINGLE PLAYER HACK
-		clientShape->makeSequence(seqName);
+		clientShape->makeSequence(seqPath);
 		return;
 	}
 	
@@ -1796,25 +1795,28 @@ void PhysicsShape::makeSequence(const char *seqName)
 	//}
 	
 	const String dsqExt(".dsq");
-	/*
-	String seqDir(seqName);
+	
+	String sequenceDir(seqPath);
 	//remove ".dsq" from filename if it's there
 	//if (dStrlen(seqDir.find(dsqExt.c_str(),0))) 
 	//	seqDir.erase(seqDir.length()-dsqExt.length(),dsqExt.length());
-	if (dStrstr((const char *)seqDir.c_str(),".dsq"))
-		seqDir.erase(seqDir.length()-dsqExt.length(),dsqExt.length());
+	if (dStrstr((const char *)sequenceDir.c_str(),".dsq"))
+		sequenceDir.erase(sequenceDir.length()-dsqExt.length(),dsqExt.length());
 	//if (strpos(seqDir.c_str(),dsqExt.c_str())>-1)         // seqDir.find(dsqExt.c_str(),0,String::Case|String::Left) > -1) 
 	//	seqDir.erase(seqDir.length()-dsqExt.length(),dsqExt.length());
 
 	//then separate the sequence name, to get it by itself and the path by itself.
-	U32 nameLength = dStrlen(dStrrchr(seqDir.c_str(),'/'))-1;
-	String sequenceName(seqDir);
-	sequenceName.erase(0,seqDir.length()-nameLength);
-	seqDir.erase(seqDir.length()-nameLength,nameLength);
-	*/
-	String sequenceName(seqName);
-	//and make sure there's no spaces
+	U32 nameLength = dStrlen(dStrrchr(sequenceDir.c_str(),'/'))-1;
+	String sequenceName(sequenceDir);
+	sequenceName.erase(0,sequenceDir.length()-nameLength);
+	sequenceDir.erase(sequenceDir.length()-nameLength,nameLength);
+	
+
+	String sequencePath(seqPath);
+
+	//make sure there's no spaces
 	sequenceName.replace(' ','_');
+	sequencePath.replace(' ','_');
 
 	//Now, make the new sequence.
 	mShape->sequences.increment();
@@ -1878,9 +1880,9 @@ void PhysicsShape::makeSequence(const char *seqName)
 	//seq.iflMatters.clearAll();
 
 	mShape->names.increment();
-	mShape->names.last() = StringTable->insert(seqName);
+	mShape->names.last() = StringTable->insert(sequenceName.c_str());
 
-	seq.nameIndex = mShape->findName(seqName);
+	seq.nameIndex = mShape->findName(sequenceName.c_str());
 
 	//if ((!kRelativePosition)&&(!importGround))
 	//{
@@ -1918,14 +1920,17 @@ void PhysicsShape::makeSequence(const char *seqName)
 				mShape->groundTranslations[mShape->groundTranslations.size()-1].x = mNodeTranslations[i].x;
 				mShape->groundTranslations[mShape->groundTranslations.size()-1].y = mNodeTranslations[i].y;
 				mShape->groundTranslations[mShape->groundTranslations.size()-1].z = 0.0;
+				Con::printf("groundTranslations: %f %f %f",mShape->groundTranslations[mShape->groundTranslations.size()-1].x,
+					mShape->groundTranslations[mShape->groundTranslations.size()-1].y,mShape->groundTranslations[mShape->groundTranslations.size()-1].z);
+
 			} else {
-				
 				
 				mShape->nodeTranslations.increment();
 				mShape->nodeTranslations[mShape->nodeTranslations.size()-1] = mNodeTranslations[i];
 			
 				//nodeTranslations[i].z = 0.0;//iClone, see above. [Nope - didn't work either.]
-				//Con::errorf("nodeTranslations: %f %f %f",nodeTranslations[i].x,nodeTranslations[i].y,nodeTranslations[i].z);
+				Con::printf("nodeTranslations: %f %f %f",
+					mShape->nodeTranslations[i].x,mShape->nodeTranslations[i].y,mShape->nodeTranslations[i].z);					
 			}
 		}
 	} else {//Non-normal situation, destructible buildings, avalanche, etc. - no joints, all node translations stored.
@@ -1997,16 +2002,15 @@ void PhysicsShape::makeSequence(const char *seqName)
 
 	//HERE: It's working, but we do need to find the directory the model lives in first.
 	FileStream *outstream;
-	String dsqPath(seqName);
-	if (!dStrstr(dsqPath.c_str(),".dsq")) dsqPath += dsqExt;
+	if (!dStrstr(sequencePath.c_str(),".dsq")) sequencePath += dsqExt;
 	//if (!gResourceManager->openFileForWrite(outstream,dsqPath.c_str())) {
-	if ((outstream = FileStream::createAndOpen( dsqPath.c_str(), Torque::FS::File::Write))==NULL) {
-		Con::printf("whoops, name no good: %s!",dsqPath.c_str()); 
+	if ((outstream = FileStream::createAndOpen( sequencePath.c_str(), Torque::FS::File::Write))==NULL) {
+		Con::printf("whoops, name no good: %s!",sequencePath.c_str()); 
 	} else {
 		//mShape->exportSequences((Stream *)outstream);
 		mShape->exportSequence((Stream *)outstream,seq,1);//1 = save in old format (v24) for show tool
 		outstream->close();
-		Con::printf("Exported sequence to file: %s",dsqPath.c_str());
+		Con::printf("Exported sequence to file: %s",sequencePath.c_str());
 		//HERE, maybe choose this moment to insert this sequence into the database.  Still need to strip
 		//the non-relative part of path off of it first.
 		//String relativePath(dsqPath);
@@ -2072,6 +2076,7 @@ void PhysicsShape::applyImpulseToPart(  S32 partIndex, const Point3F &pos, const
 		return;
 	}
 	//Else we are the client.
+	setDynamic(1);
 	if ( mPhysicsBodies[partIndex] && mPhysicsBodies[partIndex]->isDynamic() )
 	{
 		MatrixF partTransform;
@@ -2571,10 +2576,6 @@ void PhysicsShape::processTick( const Move *move )
 
    mCurrentTick++;
 
-   //Now, this also only makes sense on the client, for articulated shapes at least...
-   if (mIsRecording)
-	   recordTick();
-
 	 ////////////////////////////////////////////////////////////////////////////////////////////////////
    //GroundMove: really belongs in the ts directory, or somewhere else, not related to physics, but testing it here.
    if ((mIsGroundMoving) && (mCurrentSeq>=0) && !isServerObject() && (!mIsDynamic) && (!mUseDataSource))
@@ -2643,6 +2644,10 @@ void PhysicsShape::processTick( const Move *move )
 		}
 	}
 	///////////////////////////////////
+	
+   //Now, this also only makes sense on the client, for articulated shapes at least...
+   if (mIsRecording)
+	   recordTick();
 
 	//NOW, what the hell are we doing here? It would seem that whether we're dynamic or not, we will have returned before
 	//now, unless we're A) dynamic, and B) on the server.
@@ -3476,10 +3481,10 @@ bool PhysicsShape::loadSequence(const char *dsqPath)
 
 	//HMM, these used to work, but don't seem to work now. But they are apparently not needed.
 	const String myPath = mShapeInstance->getShapeResource()->getPath().getPath();
-	const String myFileName = mShapeInstance->getShapeResource()->getPath().getFileName();
-	const String myFullPath = mShapeInstance->getShapeResource()->getPath().getFullPath();
+	//const String myFileName = mShapeInstance->getShapeResource()->getPath().getFileName();
+	//const String myFullPath = mShapeInstance->getShapeResource()->getPath().getFullPath();
 	
-	Con::printf("shape adding sequence, myPath %s, myFileName %s fullPath %s",myPath.c_str(),myFileName.c_str(),myFullPath.c_str());
+	//Con::printf("shape adding sequence, myPath %s, myFileName %s fullPath %s",myPath.c_str(),myFileName.c_str(),myFullPath.c_str());
 
 	//S32 seqindex = mShape->findSequence(seq_name);
 	//if (seqindex>=0)
@@ -6158,6 +6163,13 @@ DefineEngineMethod( PhysicsShape, findGroundPosition, Point3F, (Point3F pos),,
 	return object->findGroundPosition(pos);
 }
 
+DefineEngineMethod( PhysicsShape, findSeq, S32, (const char *name),,
+   "@brief.\n\n")
+{  
+	S32 seqID = object->mShapeInstance->getShape()->findSequence(name);
+	return seqID;
+}
+
 DefineEngineMethod( PhysicsShape, playSeq, void, (const char *name),,
    "@brief.\n\n")
 {  
@@ -6558,6 +6570,23 @@ DefineEngineMethod( PhysicsShape, getNodeTrans, Point3F, (S32 seq,S32 frame),,
 }
 
 
+DefineEngineMethod( PhysicsShape, getNodeZeroTrans, Point3F, (S32 seq),,
+   "@brief \n\n")
+{ 
+	Point3F trans;
+	if ((seq>=0))
+	{
+		TSShape *kShape = object->mShape;
+		S32 frames = kShape->sequences[seq].numKeyframes;
+		for (S32 i=0;i<frames;i++)
+		{
+			trans = kShape->nodeTranslations[i+kShape->sequences[seq].baseTranslation];
+			Con::printf("%d: %f %f %f",i,trans.x,trans.y,trans.z);
+		}
+	}
+	return trans;
+}
+
 DefineEngineMethod( PhysicsShape, zeroGroundRots, void, (S32 seq),,
    "@brief \n\n")
 { 
@@ -6815,8 +6844,8 @@ DefineEngineMethod(PhysicsShape,setNavMesh,void, (const char *meshName),,"")
 	object->mNavMeshName = meshName;
 	if (!object->setNavMesh())
 		Con::printf("PhysicsShape failed to load navmesh: %s",meshName);
-	else
-		Con::printf("PhysicsShape successfully loaded navmesh %s!!!!!",meshName);
+	//else
+		//Con::printf("PhysicsShape successfully loaded navmesh %s!!!!!",meshName);
 }
 
 DefineEngineMethod(PhysicsShape,getNavPathSize,S32, (),,"")
@@ -6868,9 +6897,9 @@ bool PhysicsShape::setNavPathTo(Point3F toPos)
 		if (clientShape->mVehicle)
 			clientShape->mVehicle->mDetourNavPath = mNavPath;
 	} //
-	Con::printf("Navpath apparently successful! from %f %f %f, to %f %f %f, length %f  nodes %d",
-			mNavPath->mFrom.x,mNavPath->mFrom.y,mNavPath->mFrom.z,mNavPath->mTo.x,mNavPath->mTo.y,mNavPath->mTo.z,
-			mNavPath->getLength(),mNavPath->size());
+	//Con::printf("Navpath apparently successful! from %f %f %f, to %f %f %f, length %f  nodes %d",
+	//		mNavPath->mFrom.x,mNavPath->mFrom.y,mNavPath->mFrom.z,mNavPath->mTo.x,mNavPath->mTo.y,mNavPath->mTo.z,
+	//		mNavPath->getLength(),mNavPath->size());
 
 	return true;
 }
